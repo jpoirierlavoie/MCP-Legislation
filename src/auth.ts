@@ -168,9 +168,17 @@ export function gateMcp(request: Request, url: URL, env: Env): Request | null {
   // Normalisation : le point de montage exact, sans le jeton — McpAgent.serve("/mcp")
   // n'apparie que ce chemin, et le secret n'a rien à faire dans l'URL transmise ensuite.
   // La ligne suivante rend la requête ORIGINALE (chemin chaud : tout POST Bearer sur /mcp).
+  // Elle teste `url.pathname`, PAS `onMount` : `onMount` est calculé sur le chemin ROGNÉ, si
+  // bien que `/mcp/` nu le satisfaisait et repartait SANS normalisation — le transport ne
+  // reconnaissait alors pas le chemin et rendait 404. MESURÉ le 2026-08-27 : `/mcp/` + Bearer
+  // donnait 404, alors que `/mcp/<jeton>/` donnait 200 (lui passe par la normalisation).
+  // Le slash final DOIT être toléré PARTOUT : son 404 a déjà poussé un connecteur en
+  // découverte OAuth, où il est resté coincé irréversiblement (2026-07-23). Le connecteur
+  // claude.ai y échappait par chance — sa forme `?key=` force la branche de normalisation ;
+  // un client en Bearer, lui, tombait dedans.
   // Ne pas la « nettoyer » : reconstruire un Request autour d'un flux de corps pour rien
   // est un changement de comportement sur le trajet de TOUS les clients.
-  if (onMount && query === null) return request;
+  if (url.pathname === MOUNT && query === null) return request;
   const normalized = new URL(url);
   normalized.pathname = MOUNT;
   normalized.searchParams.delete(QUERY_KEY);
