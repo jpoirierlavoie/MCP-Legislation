@@ -6,7 +6,7 @@
 //
 // Sortie : une ligne par éval, code de sortie 1 si l'une échoue.
 
-import { createMcpClient, resolveMcpToken } from "../eval/mcp-client.mjs";
+import { createMcpClient, parseBody, resolveClientToken, resolveMcpToken } from "../eval/mcp-client.mjs";
 
 const MCP_URL = process.env.MCP_URL ?? "http://127.0.0.1:8787/mcp";
 
@@ -188,6 +188,10 @@ async function runEval(e) {
 async function smokeTests() {
   const checks = [];
   const add = (nom, ok, detail = "") => checks.push({ nom, ok, detail });
+  // Un contrôle SAUTÉ doit se VOIR. Le rendre vert serait exactement le « faux, servi,
+  // silencieux » que ce dépôt refuse ; le rendre rouge ferait crier un poste qui n'a
+  // légitimement pas le jeton d'un AUTRE client. D'où un troisième état, imprimé ⊘.
+  const skip = (nom, pourquoi) => checks.push({ nom, ok: true, saute: true, detail: pourquoi });
 
   const laws = await callTool("qclaw_list_laws", {});
   add("list_laws : 79 lois", laws.structuredContent?.count === 79,
@@ -494,31 +498,34 @@ async function smokeTests() {
     (lex.structuredContent?.results ?? [])[0]?.number !== undefined &&
     ["3111", "490", "622"].includes((lex.structuredContent?.results ?? [])[0]?.number));
 
-  // Contrôle d'accès (src/auth.ts) — ne s'exécute QUE si un jeton est configuré ; sans
-  // secret côté Worker l'endpoint est légitimement ouvert (R8 : rollback = retirer le secret).
+  // Contrôle d'accès (src/auth.ts). Depuis le défaut FERMÉ, il n'existe plus d'état où
+  // l'endpoint serait légitimement ouvert : un POST nu DOIT recevoir 404, toujours.
   // On vise le point de montage nu, jamais MCP_URL : celle-ci peut déjà porter /mcp/<jeton>.
   const jeton = resolveMcpToken();
+  const jetonAthena = resolveClientToken("athena");
   if (jeton) {
     const bare = new URL(MCP_URL);
     bare.pathname = "/mcp";
     bare.search = "";
-    const probe = async (u, auth) => {
+    const INIT = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "gate", version: "1" } },
+    };
+    const sonder = async (u, entetes) => {
       const res = await fetch(u, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/event-stream",
-          ...(auth ? { Authorization: `Bearer ${jeton}` } : {}),
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "gate", version: "1" } },
-        }),
+        headers: { "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream", ...entetes },
+        body: JSON.stringify(INIT),
       });
+      // Consommer le corps : une réponse SSE laissée ouverte retient le processus.
+      await res.text().catch(() => "");
       return res.status;
     };
+    const probe = (u, auth) => sonder(u, auth ? { Authorization: `Bearer ${jeton}` } : {});
+    const probeBearer = (u, porteur) => sonder(u, { Authorization: `Bearer ${porteur}` });
 
     // 404 et pas 401 : un 401 annoncerait un serveur MCP et lancerait la découverte OAuth.
     const refus = await probe(bare, false);
@@ -536,6 +543,124 @@ async function smokeTests() {
       const code = await probe(u, auth);
       add(`accès : ${nom} -> 200`, code === 200, `status=${code}`);
     }
+
+    // Le slash final sur le point de montage NU : la porte l'autorisait, mais la requête
+    // repartait sans normalisation et le transport rendait 404 (mesuré le 2026-08-27).
+    // C'est la forme qu'un client en Bearer produit s'il normalise son URL — et un 404
+    // est lu par un client MCP comme « ce serveur exige une authentification ».
+    {
+      const code = await probeBearer(`${bare}/`, jeton);
+      add("accès : /mcp/ nu + Bearer -> 200 (slash final toléré PARTOUT)",
+        code === 200, `status=${code}`);
+    }
+
+    // Jeton FAUX de MÊME LONGUEUR, DÉRIVÉ du vrai : il traverse la boucle d'octets de
+    // safeEqual au lieu de sortir au contrôle de longueur. Si quelqu'un remplaçait un jour
+    // la comparaison par un startsWith ou un préfixe, CE contrôle rougirait — et lui seul.
+    // Jamais écrit dans le dépôt : il est calculé.
+    {
+      const faux = jeton.slice(0, -1) + (jeton.endsWith("0") ? "1" : "0");
+      const code = await probe(`${bare}?key=${faux}`, false);
+      add("accès : jeton FAUX (même longueur, un octet près) -> 404", code === 404,
+        `status=${code}`);
+    }
+
+    // SECOND PORTEUR (Pallas Athéna). Ce qui est vérifié n'est pas un privilège mais une
+    // INDÉPENDANCE : il ouvre par les mêmes formes, aux mêmes droits. La révocation SÉPARÉE
+    // (retirer l'un laisse l'autre debout) ne s'éprouve qu'en faisant varier l'env du
+    // Worker : elle ne peut pas se tester ici, seulement par deux `wrangler dev --var`
+    // distincts — c'est écrit dans le plan, et ce n'est PAS couvert par la CI.
+    if (jetonAthena) {
+      for (const [nom, u, auth] of [
+        ["en-tête Bearer", `${bare}`, jetonAthena],
+        ["paramètre ?key=", `${bare}?key=${jetonAthena}`, null],
+      ]) {
+        const code = auth ? await probeBearer(u, auth) : await probe(u, false);
+        add(`accès : 2e jeton (athena) par ${nom} -> 200`, code === 200, `status=${code}`);
+      }
+    } else {
+      skip("accès : 2e jeton (athena) -> 200",
+        "aucun jeton de client secondaire ici (ni MCP_TOKEN_ATHENA, ni mcp-athena.token)");
+    }
+
+    // Le connecteur claude.ai émet des GET NUS (mesuré au wrangler tail) : refusés en 404,
+    // il retombe en POST seul, sans perte pour les 10 outils. Ne PAS « réparer » ça
+    // (CLAUDE.md) — donc l'épingler, sinon quelqu'un le réparera.
+    {
+      const code = await fetch(bare, { method: "GET", headers: { Accept: "text/event-stream" },
+        signal: AbortSignal.timeout(5000) })
+        .then((r) => { r.body?.cancel(); return r.status; })
+        .catch((e) => `abandon (${e.name})`);
+      add("accès : GET sans jeton -> 404 (comportement VOULU, cf. CLAUDE.md)",
+        code === 404, `status=${code}`);
+    }
+
+    // --- compatibilité « client à état » ------------------------------------------
+    // Vise le second consommateur : un backend qui ouvre LUI-MÊME sa session et parle donc
+    // le cycle de vie complet, FERMETURE COMPRISE — ce qu'aucun de nos clients ne faisait.
+    // UNE SEULE session supplémentaire pour tout le bloc (invariant 10), refermée à la fin.
+    // On éprouve le TRANSPORT et la PORTE, pas le corpus : le contenu est le rôle de la fumée.
+    {
+      const porteur = jetonAthena ?? jeton;
+      const quel = jetonAthena ? "jeton athena" : "jeton principal, faute de mieux";
+      const entetes = (sid) => ({
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${porteur}`,
+        ...(sid ? { "mcp-session-id": sid } : {}),
+      });
+      const post = (corps, sid) =>
+        fetch(bare, { method: "POST", headers: entetes(sid), body: JSON.stringify(corps) });
+
+      const ini = await post(INIT);
+      const sid = ini.headers.get("mcp-session-id");
+      const txtIni = await ini.text();
+      add(`état (${quel}) : initialize -> 200 + en-tête mcp-session-id`,
+        ini.status === 200 && !!sid,
+        `status=${ini.status} session=${sid ? "reçue" : "ABSENTE"}`);
+
+      const msgIni = ini.status === 200
+        ? parseBody(txtIni, ini.headers.get("content-type") ?? "") : null;
+      add("état : initialize rend un résultat JSON-RPC nommant le serveur",
+        !!msgIni?.result?.serverInfo?.name,
+        `serverInfo=${JSON.stringify(msgIni?.result?.serverInfo ?? null)}`);
+      // CE QU'ON N'AFFIRME PAS : la version de protocole négociée ni celle du serveur —
+      // elles bougeront, et un client tiers n'a pas à s'y accrocher.
+
+      const notif = await post({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }, sid);
+      await notif.text().catch(() => "");
+      add("état : notifications/initialized -> 2xx",
+        notif.status >= 200 && notif.status < 300, `status=${notif.status}`);
+      // 200 OU 202 : le transport a le droit d'accuser réception d'une notification par 202.
+      // Épingler « === 200 » ferait rougir une mise à jour du SDK sans qu'aucun client ne
+      // soit cassé — un faux échec, donc un test qu'on désapprend à lire.
+
+      // GET et DELETE PORTEURS, sur la session déjà ouverte (aucune session de plus).
+      // CE QU'ON AFFIRME : la PORTE ne refuse pas une requête pourtant porteuse.
+      // CE QU'ON N'AFFIRME PAS : que le paquet `agents` serve ces verbes. S'il ne les gère
+      // pas il répondra 405 ou 400 — une réponse du TRANSPORT, pas un refus d'accès, et le
+      // contrôle doit rester vert. Seuls 404 et 401 sont des échecs ici.
+      let getCode;
+      try {
+        const g = await fetch(bare, { method: "GET", headers: entetes(sid),
+          signal: AbortSignal.timeout(5000) });
+        getCode = g.status;
+        await g.body?.cancel();
+      } catch (e) {
+        getCode = `abandon (${e.name})`;
+      }
+      add("état : GET /mcp porteur n'est PAS refusé par la porte (ni 404 ni 401)",
+        getCode !== 404 && getCode !== 401 && typeof getCode === "number", `status=${getCode}`);
+
+      const del = await fetch(bare, { method: "DELETE", headers: entetes(sid) });
+      await del.text().catch(() => "");
+      add("état : DELETE /mcp (fermeture) n'est PAS refusé par la porte (ni 404 ni 401)",
+        del.status !== 404 && del.status !== 401, `status=${del.status}`);
+      console.log(`      (transport : GET -> ${getCode}, DELETE -> ${del.status} — mesure, `
+        + "pas exigence : c'est le paquet `agents` qui répond)");
+    }
+  } else {
+    skip("accès : bloc entier", "aucun jeton résolu ici (ni MCP_TOKEN, ni mcp.token)");
   }
 
   // --- page publique (R10) ---------------------------------------------------
@@ -604,7 +729,9 @@ async function main() {
 
   console.log("— Fumée des outils de découverte —");
   for (const c of await smokeTests()) {
-    console.log(`  ${c.ok ? "✓" : "✗"} ${c.nom}${c.ok || !c.detail ? "" : `  (${c.detail})`}`);
+    const marque = c.saute ? "⊘" : c.ok ? "✓" : "✗";
+    const detail = c.detail && (c.saute || !c.ok) ? `  (${c.detail})` : "";
+    console.log(`  ${marque} ${c.nom}${detail}`);
     if (!c.ok) failed++;
   }
 
@@ -628,6 +755,18 @@ async function main() {
 
 main().catch((e) => {
   console.error(`\n❌ ${e.message}`);
-  console.error("Le serveur est-il démarré ? (npx wrangler dev)");
+  // DEUX causes produisent le MÊME 404, et les confondre coûte du temps : le serveur
+  // absent, et le jeton absent. Depuis le défaut FERMÉ (2026-08-27), un harnais sans
+  // jeton reçoit 404 d'un serveur parfaitement vivant — et l'ancien message accusait
+  // alors le serveur. On dit laquelle des deux on peut écarter.
+  if (/HTTP 404/.test(e.message) && !resolveMcpToken()) {
+    console.error("Aucun jeton résolu (ni MCP_TOKEN, ni mcp.token) — et /mcp est FERMÉ");
+    console.error("par défaut : sans jeton, un serveur en parfait état répond 404.");
+    console.error("  local  : npx wrangler dev --var MCP_TOKEN:… --var MCP_TOKEN_ATHENA:…");
+    console.error("           puis MCP_TOKEN=… npm run evals");
+    console.error("  distant: poser mcp.token à la racine, ou exporter MCP_TOKEN.");
+  } else {
+    console.error("Le serveur est-il démarré ? (npx wrangler dev)");
+  }
   process.exit(1);
 });
