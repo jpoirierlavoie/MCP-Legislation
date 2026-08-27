@@ -341,7 +341,7 @@ test("les deux jeux de thème déclarent exactement les mêmes variables", () =>
   // Une variable présente dans un seul jeu hérite de l'autre thème : contraste cassé,
   // texte clair sur fond clair. Silencieux, et seulement dans UN des deux modes.
   const vars = (nom) => {
-    const m = SRC.match(new RegExp(`const ${nom} = ([\\s\\S]*?);\\n`));
+    const m = SRC.match(new RegExp(`const ${nom} = ([\\s\\S]*?);\\r?\\n`));
     assert.ok(m, `jeu ${nom} introuvable`);
     return [...m[1].matchAll(/(--[a-z-]+):/g)].map((x) => x[1]).sort();
   };
