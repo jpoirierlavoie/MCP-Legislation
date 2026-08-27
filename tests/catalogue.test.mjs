@@ -27,6 +27,36 @@ const taxonomy = json("taxonomy.json");
 const toolsTs = lire("src/tools.ts");
 const relevanceTs = lire("src/relevance.ts");
 const readme = lire("README.md");
+const authTs = lire("src/auth.ts");
+const siteTs = lire("src/site.ts");
+
+/**
+ * Un jeton écrit dans de la documentation DOIT être un MARQUEUR, jamais une valeur.
+ * Couvre `<jeton>`, `VOTRE_JETON`, `$MCP_TOKEN`, `${MCP_TOKEN}`, `…`.
+ */
+const MARQUEUR = /^(<[^>]+>|\$?\{?[A-Z][A-Z0-9_]{3,}\}?|…|\.\.\.)$/;
+
+/** Noms de secrets légitimes hors du contrôle d'accès MCP, cités ailleurs dans le dépôt. */
+const AUTRES_SECRETS = ['BACKFILL_TOKEN', 'CLOUDFLARE_API_TOKEN', 'GH_TOKEN'];
+
+/**
+ * Formes d'accès réellement servies, LUES dans src/auth.ts — rien n'est recopié ici :
+ * c'est le code qui décide, le test qui constate (même convention que les constantes de
+ * calibration, R10).
+ */
+function porteDAcces() {
+  const mount = (authTs.match(/const MOUNT = '([^']+)'|const MOUNT = "([^"]+)"/) ?? [])
+    .slice(1).find(Boolean);
+  const queryKey = (authTs.match(/const QUERY_KEY = '([^']+)'|const QUERY_KEY = "([^"]+)"/) ?? [])
+    .slice(1).find(Boolean);
+  const secrets = [...authTs.matchAll(/e\.(MCP_TOKEN[A-Z0-9_]*)/g)].map((m) => m[1]);
+  assert.ok(mount && queryKey && secrets.length >= 2,
+    `MOUNT / QUERY_KEY / la liste de secrets sont introuvables dans src/auth.ts. Ce test les LIT pour ne pas les recopier (R10) : si leur forme a changé, mettre à jour l'extraction ci-dessus — ne pas la contourner, elle est la SEULE source de ce contrôle.`);
+  return { mount, queryKey, secrets: new Set(secrets) };
+}
+
+/** Retire la ponctuation de fin de phrase et le chevron d'autolien Markdown. */
+const urlPropre = (b) => (b.includes('<') ? b : b.replace(/>$/, '')).replace(/[.,;:]$/, '');
 
 const RAPPEL =
   "Toute modification d'outil ou d'aide au repérage se fait à TROIS endroits : " +
@@ -181,4 +211,78 @@ test("README : aucun décompte qui ne vit qu'en D1", () => {
   assert.deepEqual(fautifs, [],
     `décompte d'articles écrit à la main dans README.md : « ${fautifs.join(" | ")} ». ` +
     "Ces chiffres ne vivent qu'en D1 : renvoyer à la page publique, qui les calcule (R10).");
+});
+
+test('doc : toute URL /mcp citée est une forme réellement servie par src/auth.ts', () => {
+  // MODE DE DÉFAUT VISÉ, DÉJÀ SURVENU : « le README publiait une configuration de connexion
+  // qui renvoyait 404 » (CLAUDE.md). Pour un client MCP un 404 n'est pas « pas trouvé » mais
+  // « ce serveur exige une authentification » : il part en découverte OAuth, échoue à
+  // l'enregistrement dynamique, et peut s'y coincer IRRÉVERSIBLEMENT (2026-07-25). Une recette
+  // fausse ne casse donc pas une tentative : elle casse un connecteur. Rien de tout cela
+  // n'exige le réseau — la forme servie est entièrement dérivable de src/auth.ts.
+  const { mount, queryKey } = porteDAcces();
+
+  const defaut = (u) => {
+    const chemin = u.pathname.replace(/\/+$/, '') || '/'; // slash final toléré (src/auth.ts)
+    if (chemin !== mount && !chemin.startsWith(`${mount}/`)) {
+      return `chemin « ${chemin} » : src/index.ts ne route que « ${mount} » et « ${mount}/… »`;
+    }
+    if (chemin !== mount && chemin.slice(mount.length + 1).includes('/')) {
+      return `chemin « ${chemin} » : src/auth.ts n'accepte QU'UN seul segment après « ${mount} »`;
+    }
+    for (const cle of u.searchParams.keys()) {
+      if (cle !== queryKey) {
+        return `paramètre « ${cle} » : le seul porteur en chaîne de requête est « ${queryKey} »`;
+      }
+    }
+    return null;
+  };
+
+  const fautifs = [];
+  for (const [ou, texte] of [['README.md', readme], ['src/site.ts', siteTs]]) {
+    for (const m of texte.matchAll(/https?:\/\/legislation\.poirierlavoie\.ca[^\s`)"']*/g)) {
+      const u = new URL(urlPropre(m[0]));
+      if (u.pathname !== mount && !u.pathname.startsWith(`${mount}/`)) continue;
+      const pb = defaut(u);
+      if (pb) fautifs.push(`${ou} : ${urlPropre(m[0])} — ${pb}`);
+    }
+  }
+  assert.deepEqual(fautifs, [],
+    `URL de connexion qui ne serait PAS servie : ${fautifs.join(' | ')}. ${RAPPEL}`);
+
+  assert.ok(readme.includes(`?${queryKey}=`),
+    `README.md ne montre plus la forme « ?${queryKey}= ». C'est la forme MESURÉE du connecteur claude.ai — le segment de chemin, lui, a ÉCHOUÉ dans son formulaire alors qu'une session complète y passe en curl. Une recette qui ne la cite pas envoie le lecteur vers une forme qui ne marche pas chez lui.`);
+});
+
+test('doc : aucune valeur de jeton en clair dans le README (marqueurs seulement)', () => {
+  assert.ok(!/[0-9a-f]{32,}/i.test(readme),
+    `chaîne hexadécimale de 32+ caractères dans README.md — une valeur de jeton s'y est-elle glissée en rédigeant la recette de connexion ?`);
+
+  const suspects = [
+    ...[...readme.matchAll(/\bBearer\s+(\S+)/g)].map((m) => ['Bearer ', m[1]]),
+    ...[...readme.matchAll(/[?&]key=([^\s`)"'&|]+)/g)].map((m) => ['key=', m[1]]),
+  ];
+  const fautifs = suspects
+    .filter(([, v]) => !MARQUEUR.test(v.replace(/[.,;:`|)\]]+$/, '')))
+    .map(([quoi, v]) => `${quoi}${v}`);
+  assert.deepEqual(fautifs, [],
+    `valeur écrite à la place d'un marqueur dans README.md : ${fautifs.join(' | ')}. Écrire « <jeton> » ou une VARIABLE — jamais une valeur : c'est aussi ce qui évite de laisser le jeton dans l'historique du shell du lecteur.`);
+});
+
+test('doc : les noms de secrets cités existent dans src/auth.ts', () => {
+  // Un nom hors liste se pose SANS ERREUR (`wrangler secret put ATHENA_MCP_TOKEN`) et n'ouvre
+  // RIEN : le client reçoit 404 et on cherche du côté du client. C'est le seul endroit du
+  // dépôt où ce défaut est attrapable sans réseau.
+  const { secrets } = porteDAcces();
+  const texte = readme.replace(/<[^>\s]+>/g, 'MARQUEUR');
+  const cites = new Set([
+    ...[...texte.matchAll(/wrangler secret (?:put|delete)\s+([A-Za-z0-9_]+)/g)].map((m) => m[1]),
+    ...[...texte.matchAll(/\b[A-Z][A-Z0-9_]*TOKEN[A-Z0-9_]*\b/g)].map((m) => m[0]),
+  ]);
+  assert.ok(cites.size > 0,
+    `aucun nom de secret cité dans README.md — la recette de connexion a-t-elle disparu ?`);
+  const attendus = [...secrets].join(', ');
+  const fautifs = [...cites].filter((n) => !secrets.has(n) && !AUTRES_SECRETS.includes(n));
+  assert.deepEqual(fautifs, [],
+    `nom(s) de secret hors contrat dans README.md : ${fautifs.join(', ')} — src/auth.ts n'accepte que ${attendus}. ${RAPPEL}`);
 });

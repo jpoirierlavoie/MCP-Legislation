@@ -412,9 +412,9 @@ function acces(): string {
   return `<section id="acces">
   ${h2("acces")}
   ${biP(
-    [`Ce serveur est une instance privée. L'endpoint MCP exige un jeton d'accès : une requête sans jeton n'obtient rien. Pour en demander l'accès, écrire à ${CONTACT}.`,
+    [`Ce serveur est une instance privée. L'endpoint MCP n'est ouvert qu'aux clients autorisés : chacun reçoit son propre jeton, révocable séparément, et une requête qui n'en porte pas de valide n'obtient rien — pas même la confirmation que l'endpoint existe. Pour en demander l'accès, écrire à ${CONTACT}.`,
       "Le code source est public et le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés."],
-    [`This server is a private instance. The MCP endpoint requires an access token: a request without one gets nothing. To request access, write to ${CONTACT}.`,
+    [`This server is a private instance. The MCP endpoint is open to authorized clients only: each one gets its own token, revocable on its own, and a request that does not carry a valid one gets nothing — not even confirmation that the endpoint exists. To request access, write to ${CONTACT}.`,
       "The source code is public and the corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled."],
   )}
   <p><a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>

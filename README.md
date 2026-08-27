@@ -10,7 +10,7 @@ articles) et recherche hybride lexicale + sémantique.
 corpus et matières, en français et en anglais, avec les décomptes lus en base.
 
 **Point d'accès MCP :** `https://legislation.poirierlavoie.ca/mcp` (HTTP streamable) —
-**instance privée, sous jeton** : une requête sans jeton reçoit 404.
+**instance privée, un jeton par client** : une requête sans jeton valide reçoit 404.
 
 Source des données : les EPUB officiels de [LégisQuébec](https://www.legisquebec.gouv.qc.ca)
 (Éditeur officiel du Québec). Le texte des articles est restitué **verbatim** — le serveur
@@ -18,13 +18,45 @@ n'altère jamais le contenu officiel.
 
 ## Accès
 
-Ce serveur est une **instance privée**. L'endpoint MCP exige un jeton d'accès ; une
-requête sans jeton reçoit 404 (jamais 401 — un 401 annoncerait un serveur MCP et
-déclencherait la découverte OAuth des clients, ce qui a déjà coincé un connecteur).
+Ce serveur est une **instance privée**. L'endpoint MCP n'est ouvert qu'aux clients
+autorisés, et **chacun reçoit son propre jeton, révocable seul** : renouveler ou révoquer
+l'un ne perturbe aucun autre. Une requête sans jeton valide reçoit 404 (jamais 401 — un
+401 annoncerait un serveur MCP et déclencherait la découverte OAuth des clients, ce qui a
+déjà coincé un connecteur de façon irréversible).
 
 Pour en demander l'accès : <jason@poirierlavoie.ca>. Le code source est public et le
 corpus reproductible — pipeline d'ingestion, taxonomie et données de configuration sont
 tous versionnés ici.
+
+### Se connecter
+
+Le jeton se présente au choix du client ; les trois formes sont équivalentes côté serveur,
+et le slash final est toléré partout.
+
+| Client | Forme | À écrire |
+|---|---|---|
+| Connecteur claude.ai | paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
+| Backend applicatif, Claude Code, CI | en-tête | `https://legislation.poirierlavoie.ca/mcp` + `Authorization: Bearer <jeton>` |
+
+**Pour le connecteur claude.ai, employer `?key=`** : c'est la forme mesurée en production.
+**Pour un backend qui ouvre lui-même sa session, employer l'en-tête** — c'est la seule des
+trois qui ne fait jamais voyager le jeton dans une URL, donc la seule qui ne le laisse
+jamais dans un journal de requêtes. La troisième forme, le segment de chemin
+`https://legislation.poirierlavoie.ca/mcp/<jeton>`, est acceptée et testée mais n'est la
+forme d'aucun client aujourd'hui : elle a échoué dans le formulaire de claude.ai alors
+qu'une session complète y passe en `curl`.
+
+Le transport est **HTTP streamable AVEC ÉTAT** : `initialize` d'abord, puis rejouer
+l'en-tête `mcp-session-id` reçu sur les appels suivants. Un `DELETE` referme proprement la
+session ; le flux `GET` est servi, mais ce serveur n'émet aucune notification
+serveur→client, donc un client qui s'en passe ne perd rien.
+
+Deux refus à ne pas confondre, et le second surprend :
+
+- **429** — cadence trop élevée (limiteur par IP, dans le Worker). Réessayer plus tard.
+- **404** — jeton absent, faux ou révoqué… **ou session inconnue** : le transport répond
+  le même code quand il ne détient plus la session. Un client à état qui purge sa session
+  sur 404 verra donc un jeton révoqué comme un battement de session. Trancher au `curl`.
 
 ## Le corpus
 
@@ -103,7 +135,9 @@ tests/, eval/   contrôles bout-en-bout + harnais d'évaluation (20 cas, recall@
 docs/           Notes d'architecture, rapports de phase, format EPUB ; archive des plans
 ```
 
-Démarrage : `npm install`, `npx wrangler dev`, puis `npm run evals` contre
+Démarrage : `npm install`, puis `npx wrangler dev --var MCP_TOKEN:local-a --var
+MCP_TOKEN_ATHENA:local-b` — **les `--var` sont requis** : l'endpoint est fermé par défaut,
+sans secret il refuse tout. Puis `MCP_TOKEN=local-a npm run evals` contre
 `http://127.0.0.1:8787/mcp`. **Avant toute modification, lire [CLAUDE.md](CLAUDE.md)** —
 les invariants critiques du dépôt y sont consignés (ordre de la config, miroirs de clés
 de tri, limites D1/Vectorize, échelle de recherche).
