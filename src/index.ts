@@ -85,8 +85,35 @@ async function servePage(request: Request, env: Env, ctx: ExecutionContext): Pro
     : res;
 }
 
+/**
+ * Limitation de débit, DANS le Worker (le WAF de zone n'est pas atteignable — même constat
+ * que le connecteur jumeau). Appliquée AVANT le contrôle d'accès, donc un flot non
+ * authentifié est coupé lui aussi.
+ *
+ * FAIL OPEN DÉLIBÉRÉ, et l'asymétrie est le point : l'AUTHENTIFICATION échoue FERMÉE
+ * (aucun secret configuré => tout est refusé), tandis que la limitation ne protège que le
+ * COÛT. Échouer fermé sur un compteur indisponible rendrait le serveur inutilisable pour
+ * préserver une facture : le mauvais arbitrage. Sans le binding (wrangler dev), on passe.
+ */
+async function debitAcceptable(request: Request, env: Env): Promise<boolean> {
+  // Typé par wrangler types depuis wrangler.jsonc. La garde de nullité reste : en local
+  // (wrangler dev) le binding n'est pas fourni, et le type ne le dit pas.
+  const limiteur = env.RATE_LIMITER;
+  if (!limiteur) return true;
+  // L'IP vue par Cloudflare. Clé imparfaite — deux clients derrière une même sortie NAT
+  // partagent le budget — mais c'est la seule disponible sans plan Business, et le jeton
+  // ne doit JAMAIS servir de clé : il finirait dans un compteur, donc dans des journaux.
+  const ip = request.headers.get("CF-Connecting-IP") ?? "sans-ip";
+  try {
+    const { success } = await limiteur.limit({ key: ip });
+    return success;
+  } catch {
+    return true;
+  }
+}
+
 export default {
-  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
     if (url.pathname === "/") {
       // Page publique (src/site.ts). Posture assumée : elle décrit le corpus, les outils
@@ -100,6 +127,15 @@ export default {
     // Accès sous jeton partagé (src/auth.ts). Vérifié ICI, donc avant toute instanciation
     // du Durable Object : un appel non autorisé ne coûte ni session DO, ni D1, ni Workers AI.
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      // Avant la porte : un flot non authentifié est coupé lui aussi. 429 et non 404 —
+      // ici on ne cache pas l'endpoint, on refuse une cadence, et un client doit pouvoir
+      // distinguer les deux (le client de Pallas Athéna en fait deux `reason` distincts).
+      if (!(await debitAcceptable(request, env))) {
+        return new Response("Too many requests", {
+          status: 429,
+          headers: { "Retry-After": "60" },
+        });
+      }
       const authorized = gateMcp(request, url, env);
       if (!authorized) return new Response("Not found", { status: 404 });
       return QclawMCP.serve("/mcp").fetch(authorized, env, ctx);

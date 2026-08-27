@@ -36,6 +36,22 @@
   // des vecteurs n'est pas validé ; bascule à "1" ensuite (séquence de déploiement §2).
   "vars": { "RELAX_SEARCH": "1", "HYBRID_SEARCH": "1" },
 
+  // Limitation de débit DANS le Worker, et non au WAF de la zone — même choix que le
+  // connecteur jumeau (jurisprudence), qui a constaté que la limitation de zone n'était pas
+  // accessible malgré l'abonnement Pro. Bénéfice second, décisif ici : une règle WAF vit au
+  // tableau de bord, hors du dépôt et hors CI ; ce binding est VERSIONNÉ et se relit.
+  //
+  // LE SEUIL EST MESURÉ, PAS RECOPIÉ. Le jumeau tient à 60/min parce que ses clients sont
+  // des humains. Ici, `npm run evals` a émis 61 requêtes en 3 s (mesuré le 2026-08-27 sur
+  // wrangler dev) et `npm run eval` en émet une soixantaine : à 60/min, les DEUX harnais
+  // déclencheraient leurs propres 429 et on lirait une régression là où il n'y a qu'un
+  // compteur. 300/min laisse 5x la rafale mesurée et coupe toujours un flot abusif.
+  // Le clavardage de Pallas Athéna, lui, est structurellement borné (2 instances App
+  // Engine, 2 dépêches concurrentes) : il n'approche pas ce seuil.
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } }
+  ],
+
   // Couche sémantique (plan v2, phase 2) : embeddings bge-m3 + index Vectorize.
   "ai": { "binding": "AI" },
   "vectorize": [{ "binding": "VECTORS", "index_name": "qclaw-articles" }],
