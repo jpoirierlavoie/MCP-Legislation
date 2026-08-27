@@ -56,6 +56,17 @@ en se déclarant « état réel » sans qu'aucun test n'échoue, précisément p
 prétendait au présent. Corollaire de rédaction : dans `docs/`, écrire au passé et dater ;
 ne jamais y recopier un décompte vivant en le présentant comme actuel.
 
+**EN REVANCHE, UNE SIXIÈME SURFACE EXISTE — et elle vit HORS de ce dépôt.** Le clavardage
+de Pallas Athéna offre les dix outils à son modèle depuis `athena/chat/worker_tools.py`,
+**engendré** depuis `tools/list` par `athena/scripts/sync_worker_tools.py`. Ce fichier est
+le préfixe du cache de prompt, donc stable octet pour octet — et un outil `qclaw_*` renommé
+ici y laisse une fiche qui appelle un nom mort, dont l'échec n'apparaît qu'au tour de
+clavardage suivant, sous la forme d'un outil qui « ne marche plus ». **Aucune commande
+d'ici ne la voit dériver**, et c'est pourquoi elle est nommée : après tout ajout, retrait
+ou renommage d'outil, relancer `sync_worker_tools.py` et commiter le fichier engendré.
+Les CINQ surfaces ci-dessus restent le contrat INTRA-dépôt ; celle-ci est un couplage
+inter-dépôts, non gardé.
+
 ## Architecture (3 morceaux)
 
 1. **Worker Cloudflare** (`src/`, TypeScript) — McpAgent (Durable Object) + 10 outils
@@ -82,7 +93,8 @@ fasse calculer au chargement, il est supprimé.
 ## Commandes
 
 ```bash
-npx wrangler dev                                   # dev local (D1 local ; PAS Vectorize)
+npx wrangler dev --var MCP_TOKEN:a --var MCP_TOKEN_ATHENA:b   # dev local (D1 local ; PAS Vectorize)
+#   ^ les --var sont REQUIS depuis le défaut fermé (2026-08-27) : sans secret, /mcp refuse TOUT
 npx tsc --noEmit                                   # type-check (toujours avant commit)
 npm run evals                                      # contrôles bout-en-bout (le harnais imprime son total ; MCP_URL=… pour cibler)
 npm run eval                                       # harnais d'éval : 20 cas, recall@10/MRR (production)
@@ -103,13 +115,26 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
   en contexte, ni le supprimer** (consigne de Jason). Chargement inline uniquement :
   `export CLOUDFLARE_API_TOKEN=$(tr -d ' \t\r\n' < cf.token)`.
 - `backfill.token` (racine, gitignoré) : Bearer de la route `/admin/backfill-vectors`.
-- `mcp.token` (racine, gitignoré) : jeton d'accès de l'endpoint MCP (`src/auth.ts`).
+- `mcp.token` (racine, gitignoré) : jeton du **connecteur claude.ai** (`src/auth.ts`).
   Miroir du secret Worker `MCP_TOKEN` (`wrangler secret put MCP_TOKEN`) et du secret
   GitHub du même nom (veille CI). Les clients Node le résolvent tout seuls
   (`eval/mcp-client.mjs` : `MCP_TOKEN` puis `mcp.token`) — rien à exporter à la main.
   N'ouvre QUE la lecture MCP : aucun droit sur le compte Cloudflare ni sur la base.
   **Rotation = poser le nouveau secret, puis mettre à jour les 3 copies** (fichier local,
   secret GitHub, URL du connecteur claude.ai — forme `…/mcp?key=<jeton>`).
+  À savoir : `?key=` voyage dans l'URL, donc dans le journal de requêtes de
+  l'observabilité — traiter `MCP_TOKEN` comme **déjà vu** par le pipeline de logs du
+  compte. Un jeton employé uniquement en `Authorization: Bearer` n'y apparaît jamais.
+- `mcp-athena.token` (racine, gitignoré) : jeton du **clavardage de Pallas Athéna**,
+  miroir du secret Worker `MCP_TOKEN_ATHENA`. Droits IDENTIQUES au premier — il n'ouvre
+  aucun outil de plus ; il n'existe QUE pour que les deux clients se révoquent
+  SÉPARÉMENT (même modèle que le connecteur jumeau `jurisprudence`, §19 de sa spec).
+  **DEUX copies seulement** (fichier local, Secret Manager de Pallas Athéna sous
+  `legislation-worker-token`) — **jamais de secret GitHub** : un jeton détenu à trois
+  endroits n'est plus révocable seul. **Ne jamais réutiliser la valeur de `MCP_TOKEN`** :
+  deux secrets de même valeur ne sont plus révocables séparément, ce qui annule tout
+  l'objet du découpage. Révocation = `wrangler secret delete MCP_TOKEN_ATHENA`, une
+  commande, sans effet sur le connecteur claude.ai.
 - Commits **signés** (gpgsign actif), footer `Co-Authored-By: Claude <noreply@anthropic.com>`
   adapté au modèle courant. Un commit par sous-tâche ; arrêt pour revue humaine à chaque
   fin de phase.
@@ -229,7 +254,14 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
 ~30–60 s à recycler l'ancien code) → `npm run eval` si le comportement de recherche a
 changé — **porte : aucune régression sur les 20 cas**.
 
-**Contrôle d'accès de `/mcp`** (`src/auth.ts`) : jeton partagé accepté sous TROIS formes.
+**Contrôle d'accès de `/mcp`** (`src/auth.ts`) : **DEUX jetons** (`MCP_TOKEN` pour le
+connecteur claude.ai, `MCP_TOKEN_ATHENA` pour le clavardage de Pallas Athéna), aux droits
+IDENTIQUES, chacun accepté sous les TROIS mêmes formes. Tableau LITTÉRAL dans `secretsOf`,
+pas de convention de nom balayée sur `env` : un nom mal orthographié se poserait sans
+erreur et n'ouvrirait rien. Appariement SANS COURT-CIRCUIT (un `.some()` dirait par le
+temps de réponse QUEL jeton a été présenté, donc quel client on est) et **on ne journalise
+ni ne renvoie jamais lequel a servi** — les deux refus sont le même 404. `search_log` reste
+ANONYME par décision : il n'existe aucune attribution par appelant, ni en base ni en log.
 **La forme du connecteur claude.ai est `?key=<jeton>`** — mesurée, pas supposée : le
 segment de chemin `/mcp/<jeton>` a ÉCHOUÉ en pratique (« Impossible de joindre ») alors
 qu'une session complète y passe en curl, tandis que `?key=` a fonctionné du premier coup.
@@ -252,9 +284,14 @@ Deux constats de production à ne pas réapprendre à la dure (2026-07-23) :
 Trois points à ne pas défaire :
 (1) la vérification est dans le handler de module, donc AVANT le Durable Object — c'est ce
 qui fait qu'un appel non autorisé ne coûte rien ; (2) un refus répond **404, jamais 401** —
-un 401 annonce un serveur MCP et déclenche la découverte OAuth des clients ; (3) **sans
-`MCP_TOKEN`, l'endpoint reste ouvert** (R8 : rollback = `wrangler secret delete MCP_TOKEN`,
-pas un revert ; c'est aussi ce qui garde `wrangler dev` utilisable). Ordre de bascule :
+un 401 annonce un serveur MCP et déclenche la découverte OAuth des clients ; (3) **l'endpoint
+est FERMÉ PAR DÉFAUT** (2026-08-27, aligné sur le jumeau) — aucun secret configuré ⇒ tout
+est refusé. **Rouvrir n'est donc PLUS une seule commande** : c'est `npx wrangler secret list`
+PUIS supprimer TOUS les `MCP_TOKEN*`. En oublier un laisse l'endpoint FERMÉ pendant qu'on
+croit l'avoir rouvert — et le connecteur continue de creuser son trou OAuth pendant qu'on
+cherche ailleurs. Remède de niveau code, souvent plus rapide : `npx wrangler rollback`.
+Corollaire : `wrangler dev` exige désormais `--var MCP_TOKEN:… --var MCP_TOKEN_ATHENA:…`.
+Ordre de bascule :
 **mettre le connecteur claude.ai sur son URL FINALE (`…/mcp?key=<jeton>`) AVANT de poser le
 secret**, puis déployer, puis `wrangler secret put`. Cet ordre est contre-intuitif mais
 c'est le seul sûr : `?key=` répond 200 AVEC ET SANS secret (vérifié), donc l'URL finale
@@ -270,6 +307,17 @@ n'en venait à bout. Le SEUL déblocage a été `wrangler secret delete MCP_TOKE
 rouvert, le connecteur s'est réparé tout seul au retry suivant. Retenir : une fenêtre de
 404, même de quelques minutes, peut détruire un connecteur de façon irréversible côté
 client.
+
+**Amendement du 2026-08-27 — ce remède n'est plus une seule commande.** Depuis l'ajout de
+`MCP_TOKEN_ATHENA` et le passage au défaut fermé, l'endpoint ne se rouvre qu'en supprimant
+**TOUS** les secrets `MCP_TOKEN*` ; les lister d'abord (`npx wrangler secret list`).
+Supprimer `MCP_TOKEN` seul laisse la porte close. C'est le coût assumé du découpage par
+client : écrit ici précisément parce que c'est sous pression qu'on viendra le lire.
+
+**Un 404 de ce serveur est AMBIGU pour un client à état** : le transport rend lui aussi 404
+sur une session qu'il ne détient plus. Le client de Pallas Athéna purge sa session sur 404,
+donc un jeton révoqué s'y présente comme un battement de session — visible (refus en
+français à chaque tour), jamais silencieux, mais mal diagnostiqué. Trancher au curl.
 
 **Reconstruire une base à partir de rien** (nouvel environnement, D1 de CI, dev local
 vierge). `schema.sql` décrit l'ÉTAT INITIAL et les migrations s'appliquent PAR-DESSUS :
