@@ -2,7 +2,7 @@
 --
 -- SAUVEGARDE PRÉALABLE — bookmark Time Travel relevé AVANT tout `--remote` (invariant 6,
 -- l'export D1 étant bloqué par la table virtuelle articles_fts) :
---   00000198-00000000-000050e3-00b7ba3f113b5f0ec61f60deccfa674b
+--   0000019b-00000000-000050e3-804205320c416c64fc1620f49c080bb0
 --
 -- ⚠️ C'est la SEULE migration destructive de ce dépôt : elle DÉTRUIT et RECONSTRUIT
 -- `articles_fts`. L'en-tête de 0003 s'était explicitement interdit cette opération, et sa
