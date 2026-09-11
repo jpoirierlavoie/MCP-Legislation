@@ -17,7 +17,7 @@
 
 import catalogue from "../catalogue.json";
 import config from "../laws.config.json";
-import { LawSummary, SubjectSummary, listLaws, listSubjects } from "./lib";
+import { LawSummary, SubjectSummary, citeOf, listLaws, listSubjects } from "./lib";
 import {
   MAX_PER_SUBJECT, MAX_SUFFIX, RRF_K, SEMANTIC_MIN_SCORE, SPECIFIC_TOKEN_FACTOR,
   SPECIFIC_TOKEN_MAX_REACH, VECTOR_TOP_K, WEIGHTS,
@@ -248,12 +248,12 @@ function corpus(laws: LawSummary[]): string {
   const lignes = laws.map((l) => {
     const [ffr, fen] = FONCTION[l.fonction ?? ""] ?? [l.fonction ?? "", l.fonction ?? ""];
     const src = SOURCES.get(l.id);
-    const hay = `${l.rlrq_cite} ${l.name_fr} ${l.name_en} ${ffr} ${fen}`.toLowerCase();
+    const hay = `${citeOf(l)} ${l.name_fr} ${l.name_en} ${ffr} ${fen}`.toLowerCase();
     const lien = (u: string | undefined, t: string, lg: string) => u
       ? `<a data-l="${lg}" href="${esc(u)}" rel="noopener">${esc(t)}</a>`
       : `<span data-l="${lg}">${esc(t)}</span>`;
     return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}" data-h="${esc(hay)}">
-      <td class="cite">${esc(l.rlrq_cite)}</td>
+      <td class="cite">${esc(citeOf(l))}</td>
       <td>${lien(src?.fr, l.name_fr, "fr")}${lien(src?.en, l.name_en, "en")}</td>
       <td>${bi(ffr, fen)}</td>
       <td class="n">${nb(l.article_count ?? 0)}</td>
@@ -311,7 +311,7 @@ function matieres(
       const ids = parMatiere.get(s.id) ?? [];
       const lois = ids.map((id) => parId.get(id)).filter(Boolean).map((x) => {
         const l = x as LawSummary;
-        return `<li>${bi(l.name_fr, l.name_en)} <span class="m">${esc(l.rlrq_cite)} · ${
+        return `<li>${bi(l.name_fr, l.name_en)} <span class="m">${esc(citeOf(l))} · ${
           nb(l.article_count ?? 0)}&nbsp;art.</span></li>`;
       }).join("");
       return `<details>

@@ -2,6 +2,9 @@
 // Le schéma est décrit dans schema.sql / PLAN.md §2 et schema-decouverte.sql.
 
 import {
+  SEG_SPLIT, depthOf, isFederalPath, segmentsOf, subtreeBinds, subtreeClause, truncatePath,
+} from "./paths";
+import {
   DIVISION_MATCH_MAX, DIVISION_MATCH_MIN_SCORE, RRF_K, SEMANTIC_MIN_SCORE, VECTOR_TOP_K,
   normalize,
 } from "./relevance";
@@ -13,7 +16,30 @@ export interface LawRow {
   id: string;
   name_fr: string;
   name_en: string;
-  rlrq_cite: string;
+  /**
+   * TOLÉRANCE DÉLIBÉRÉE ET TEMPORAIRE, le temps d'une migration.
+   *
+   * `laws.rlrq_cite` devient `official_cite` (le nom mentait dès qu'une citation fédérale
+   * y entre). Or `getLaw` et `listLaws` lisent en `SELECT *` / `SELECT l.*` : la FORME de
+   * l'objet JS suit la base, donc après la migration la propriété change de nom toute
+   * seule — sans une ligne de SQL à corriger, et `tsc` ne peut rien y voir puisqu'il ne lit
+   * pas le SQL (cf. l'avertissement au-dessus d'ARTICLE_COLS : `all<T>()` est une
+   * ASSERTION, pas une vérification).
+   *
+   * Conséquences mesurées du demi-renommage, si le Worker n'était pas tolérant :
+   * `get_article` et `resolve_reference` échouent BRUYAMMENT, mais `list_laws` échoue en
+   * SILENCE — `JSON.stringify` efface une clé `undefined` — et la page publique rend une
+   * colonne « citation » vide sur tout le corpus. Un `citationOf(undefined, '1457')`
+   * rendrait « undefined, art. 1457 » comme citation officielle d'un article de droit.
+   *
+   * Les DEUX noms sont donc optionnels ici, et TOUT lecteur passe par `citeOf()`. Le
+   * resserrement (`official_cite: string` obligatoire, `rlrq_cite` et `citeOf` supprimés)
+   * est un commit SÉPARÉ, postérieur à la migration : `tsc` sert alors de liste de courses.
+   */
+  rlrq_cite?: string;
+  official_cite?: string;
+  /** Forme anglaise de la citation (« CQLR, c. … », « R.S.C. 1985, c. … »). */
+  official_cite_en?: string | null;
   consol_date_fr: string | null;
   consol_date_en: string | null;
   // colonnes de la couche découverte (schema-decouverte.sql)
@@ -88,10 +114,68 @@ export function sortKeyOf(article: string): number {
   return key;
 }
 
-export function citationOf(rlrqCite: string, article: string): string {
-  if (article === "préliminaire") return `${rlrqCite}, disposition préliminaire`;
-  if (article === "finales") return `${rlrqCite}, dispositions finales`;
-  return `${rlrqCite}, art. ${article}`;
+/**
+ * Citation officielle d'une loi, tolérante aux DEUX noms de colonne.
+ *
+ * Point de passage UNIQUE : aucun appelant ne doit lire `official_cite` ni `rlrq_cite`
+ * directement, sinon la fenêtre entre la migration et le recyclage des Durable Objects
+ * (30-60 s) rend « undefined » dans une citation. Le repli sur la chaîne vide est
+ * volontairement le dernier recours — une citation vide est visible, « undefined » se
+ * lit comme une valeur.
+ */
+export function citeOf(l: Pick<LawRow, "rlrq_cite" | "official_cite">): string {
+  return l.official_cite ?? l.rlrq_cite ?? "";
+}
+
+/**
+ * Unité de numérotation d'un texte. Les *Règles des Cours fédérales* se citent par
+ * RÈGLE, non par article — « règle 400 R.C.F. », et `rule 400` en anglais.
+ */
+export type Unit = "article" | "regle";
+
+/** Le mot d'unité, par langue. Table EXPLICITE : une règle de dérivation mentirait. */
+const MOT_UNITE: Record<Unit, Record<Lang, string>> = {
+  article: { fr: "art.", en: "s." },
+  regle: { fr: "règle", en: "rule" },
+};
+
+/** Pseudo-articles, par langue. Table explicite pour la même raison. */
+const MOT_PSEUDO: Record<string, Record<Lang, string>> = {
+  préliminaire: { fr: "disposition préliminaire", en: "preliminary provision" },
+  finales: { fr: "dispositions finales", en: "final provisions" },
+  preambule: { fr: "préambule", en: "preamble" },
+  preamble: { fr: "préambule", en: "preamble" },
+};
+
+/**
+ * Citation d'un article : « <citation officielle>, art. N » — ou « règle N », ou « s. N ».
+ *
+ * Prend la LOI et non une chaîne, pour pouvoir choisir la forme anglaise (`official_cite_en`)
+ * et l'unité (`laws.unit`). L'ancienne signature à deux chaînes ne pouvait faire ni l'un ni
+ * l'autre : elle rendait « RLRQ, c. CCQ-1991, art. 1457 » MÊME en anglais, alors que la
+ * compilation s'appelle « CQLR » en anglais et que « art. » s'y écrit « s. ».
+ *
+ * `official_cite_en` absente ⇒ repli sur la forme française. Elle est NULL sur les lignes
+ * québécoises jusqu'à la passe qui les remplit : le repli est donc le comportement
+ * d'origine, et non une régression.
+ */
+export function citationOf(
+  law: Pick<LawRow, "rlrq_cite" | "official_cite" | "official_cite_en"> & { unit?: string | null },
+  article: string,
+  lang: Lang = "fr",
+): string {
+  // La forme anglaise est TOUT OU RIEN, et c'est délibéré. Sans `official_cite_en`, rendre
+  // « RLRQ, c. CCQ-1991, s. 1457 » mêlerait le nom FRANÇAIS de la compilation au marqueur
+  // ANGLAIS d'article — pire que l'un ou l'autre. Tant que la colonne n'est pas remplie, on
+  // reste donc intégralement en français : comportement IDENTIQUE à l'actuel, ce qui est la
+  // promesse de cette étape. La correction québécoise (« CQLR ») arrive avec la donnée.
+  const citeEn = lang === "en" ? law.official_cite_en : null;
+  const langueDeSortie: Lang = citeEn ? "en" : "fr";
+  const cite = citeEn || citeOf(law);
+  const pseudo = MOT_PSEUDO[article];
+  if (pseudo) return `${cite}, ${pseudo[langueDeSortie]}`;
+  const unite: Unit = law.unit === "regle" ? "regle" : "article";
+  return `${cite}, ${MOT_UNITE[unite][langueDeSortie]} ${article}`;
 }
 
 export function consolOf(law: LawRow | null, lang: Lang): string | null {
@@ -112,22 +196,12 @@ export function paginate(limit?: number, offset?: number, def = 50, max = 200): 
   return { limit: l, offset: o };
 }
 
-// --- correspondance « ce chemin ou tout son sous-arbre » ----------------------
+// --- chemins de divisions ------------------------------------------------------
 //
-// Ni LIKE (où `_` est un joker, présent dans nos chemins) ni GLOB : D1 plafonne la
-// COMPLEXITÉ des motifs LIKE/GLOB (« LIKE or GLOB pattern too complex »), seuil qu'un
-// chemin profond du C.c.Q. dépasse (ex. `ga:l_cinquieme-gb:l_premier-gc:l_troisieme-gd:l_i-ge:l_1`).
-// On passe donc par un INTERVALLE LEXICOGRAPHIQUE, sans motif, et indexable :
-// les descendants d'un chemin sont exactement ceux de [path+'-', path+'.'),
-// car '.' (0x2E) suit immédiatement '-' (0x2D).
-function subtreeClause(col: string): string {
-  return `(${col} = ? OR (${col} >= ? || '-' AND ${col} < ? || '.'))`;
-}
-
-/** Les 3 liaisons attendues par subtreeClause (le chemin, trois fois). */
-function subtreeBinds(path: string): [string, string, string] {
-  return [path, path, path];
-}
+// Le découpage, l'intervalle de sous-arbre et la reconnaissance de famille vivent dans
+// `src/paths.ts`, module PUR et POINT DE VÉRITÉ UNIQUE. Ils étaient auparavant en TROIS
+// copies incompatibles ici même — dont deux bornées à `/-(?=g[a-z]:)/`, qui voient un
+// chemin fédéral `fh1:3-fh2:5` comme UN SEUL segment.
 
 // --- requêtes -----------------------------------------------------------------
 
@@ -240,9 +314,6 @@ export async function listLaws(
 
 // --- pont entre les chemins de divisions FR et EN -----------------------------
 
-/** Profondeur d'un chemin Irosoft (`ga:l_cinquieme-gb:l_deuxieme` -> 2). */
-const depthOf = (path: string) => path.split("-").length;
-const truncate = (path: string, d: number) => path.split("-").slice(0, d).join("-");
 
 export interface TranslatedPath {
   path: string;
@@ -281,7 +352,7 @@ export async function translatePaths(
   for (const p of frPaths) {
     const hit = pairs.find((x) => x.fr_path === p || x.fr_path.startsWith(`${p}-`));
     if (!hit?.other_path) continue;
-    const translated = truncate(hit.other_path, depthOf(p));
+    const translated = truncatePath(hit.other_path, depthOf(p));
     if (translated) wanted.set(translated, p);
   }
   if (wanted.size === 0) return out;
@@ -315,8 +386,18 @@ export async function translatePaths(
 export async function translateDivisionPath(
   db: D1Database, lawId: string, path: string, toLang: Lang,
 ): Promise<{ path: string; heading: string | null } | null> {
+  // Un chemin fédéral est POSITIONNEL, donc identique dans les deux langues (mesuré sur
+  // les 19 textes : docs/phase0-structure-lims.md §3.1). Il n'y a RIEN à traduire, et le
+  // pont par les numéros d'articles rendrait ici une division DESCENDANTE — une réponse
+  // fausse, pas vide. Le no-op est donc EXPLICITE, au lieu d'être espéré d'une
+  // segmentation juste.
+  if (isFederalPath(path)) {
+    return (await db
+      .prepare("SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND path = ?")
+      .bind(lawId, toLang, path)
+      .first<{ path: string; heading: string | null }>()) ?? null;
+  }
   const fromLang: Lang = toLang === "fr" ? "en" : "fr";
-  const seg = /-(?=g[a-z]:)/;
   const bridge = await db
     .prepare(
       `SELECT a2.division_path AS p FROM articles a1
@@ -328,8 +409,7 @@ export async function translateDivisionPath(
     .bind(toLang, lawId, fromLang, path, path, path)
     .first<{ p: string }>();
   if (!bridge?.p) return null;
-  const depth = path.split(seg).length;
-  const target = bridge.p.split(seg).slice(0, depth).join("-");
+  const target = truncatePath(bridge.p, depthOf(path));
   const div = await db
     .prepare("SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND path = ?")
     .bind(lawId, toLang, target)
@@ -495,7 +575,6 @@ export interface ArticleJoined extends ArticleRow {
   d_kind: string | null;
   d_number: string | null;
   d_heading: string | null;
-  rlrq_cite: string;
 }
 
 export async function getArticle(
@@ -506,11 +585,15 @@ export async function getArticle(
       // Colonnes NOMMÉES, pas `a.*` : ce dernier ramenait `articles.html` — 651 o par
       // article en moyenne, 56 % du poids de la table — que le Worker ne lit nulle part.
       // Voir ARTICLE_COLS pour la liste et le piège.
+      // La citation NE vient plus d'ici. C'était la SEULE occurrence littérale de la
+      // colonne dans tout le SQL du Worker, donc la seule que la migration aurait cassée
+      // bruyamment — et la jointure `laws` doublonnait un `getLaw` que les deux appelants
+      // font déjà (src/tools.ts, get_article et resolve_reference). Ils passent désormais
+      // la loi à `citationOf`, ce qui rend aussi la forme anglaise et l'unité accessibles.
       `SELECT ${ARTICLE_COLS.split(", ").map((c) => `a.${c}`).join(", ")},
-              d.kind AS d_kind, d.number AS d_number, d.heading AS d_heading, l.rlrq_cite
+              d.kind AS d_kind, d.number AS d_number, d.heading AS d_heading
        FROM articles a
        LEFT JOIN divisions d ON a.division_id = d.id
-       JOIN laws l ON a.law_id = l.id
        WHERE a.law_id = ? AND a.lang = ? AND a.number = ?`,
     )
     .bind(lawId, lang, article)
@@ -816,14 +899,14 @@ const MARQUEUR_ARTICLE = /(?:\barticles?\b|\barts?\.|\ba\.|\bs\.)\s*(\d+(?:\.\d+
  *     d'abord le chapitre reconnu, puis on privilégie un numéro introduit par « art. » ;
  *  2. toute citation non reconnue retombait sur le C.c.Q. : on préfère ne rien affirmer.
  */
-export function parseCitation(citation: string, laws: { id: string; rlrq_cite: string }[]): ParsedCitation {
+export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation {
   // chapitre RLRQ le PLUS LONG présent comme unité complète (« C-25.01, r. 9 » avant « C-25.01 »)
   let law: string | null = null;
   let lawSource: ParsedCitation["law_source"] = null;
   let bestLen = 0;
   let motif: RegExp | null = null;
   for (const l of laws) {
-    const chap = l.rlrq_cite.replace(/^RLRQ,\s*c\.\s*/i, "").trim();
+    const chap = citeOf(l).replace(/^RLRQ,\s*c\.\s*/i, "").trim();
     if (!chap || chap.length <= bestLen) continue;
     const re = chapterRegex(chap);
     if (re.test(citation)) {
@@ -960,11 +1043,6 @@ export async function loadRelevanceData(
 
 // --- fils d'Ariane (plan v2, 1.3) ---------------------------------------------
 
-/**
- * Frontières de segments d'un chemin Irosoft : on ne coupe qu'AVANT un marqueur `gX:`.
- * (Un simple split('-') casserait les chemins spéciaux comme 'disposition-preliminaire'.)
- */
-const PATH_SEG = /-(?=g[a-z]:)/;
 
 export interface CrumbNode {
   path: string;
@@ -985,7 +1063,7 @@ export async function breadcrumbChains(
   const byLaw = new Map<string, Set<string>>();
   for (const r of refs) {
     if (!r.division_path) continue;
-    const segs = r.division_path.split(PATH_SEG);
+    const segs = segmentsOf(r.division_path);
     let set = byLaw.get(r.law_id);
     if (!set) { set = new Set(); byLaw.set(r.law_id, set); }
     for (let i = 1; i <= segs.length; i++) set.add(segs.slice(0, i).join("-"));
@@ -1007,7 +1085,7 @@ export async function breadcrumbChains(
   }
   const out = new Map<string, CrumbNode[]>();
   for (const r of refs) {
-    const segs = (r.division_path ?? "").split(PATH_SEG);
+    const segs = segmentsOf(r.division_path ?? "");
     const chain: CrumbNode[] = [];
     for (let i = 1; i <= segs.length; i++) {
       const n = nodes.get(`${r.law_id}|${segs.slice(0, i).join("-")}`);

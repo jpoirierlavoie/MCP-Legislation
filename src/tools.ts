@@ -3,9 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import {
-  ArticleJoined, ArticleRow, Lang, LawSummary, StructureNode,
+  ArticleJoined, ArticleRow, Lang, LawRow, LawSummary, StructureNode,
   articlesByNumbers, articlesByRange, articlesInDivision, childDivisions,
-  citationOf, consolOf, getArticle, getDivision, getLaw, getStructure,
+  citationOf, citeOf, consolOf, getArticle, getDivision, getLaw, getStructure,
   boundRef, breadcrumbChains, headingInOtherLang, lawNames, lawOutlines, listLaws,
   listSubjects, loadRelevanceData, logSearch, nearestArticles, paginate, parseCitation,
   relatedLaws, searchText, sortKeyOf, translateDivisionPath,
@@ -102,8 +102,8 @@ function divisionLabel(kind: string, number: string | null, heading: string | nu
   return heading ? `${parts} — ${heading}` : parts || (heading ?? "");
 }
 
-function renderArticle(a: ArticleJoined, consol: string | null, lang: Lang): string {
-  const cite = citationOf(a.rlrq_cite, a.number);
+function renderArticle(a: ArticleJoined, loi: LawRow, consol: string | null, lang: Lang): string {
+  const cite = citationOf(loi, a.number, lang);
   const loc = a.d_kind ? `\n${divisionLabel(a.d_kind, a.d_number, a.d_heading, lang)} [${a.division_path}]` : "";
   const head = `${cite}${consol ? ` (à jour au ${consol})` : ""}${a.repealed ? " — ABROGÉ" : ""}${loc}`;
   const hist = a.history ? `\n\nHistorique : ${a.history}` : "";
@@ -141,7 +141,7 @@ export function registerTools(server: McpServer, env: Env): void {
       l.subjects.length ? `matières: ${l.subjects.join(", ")}` : null,
     ].filter(Boolean).join(" ; ");
     const head =
-      `• ${l.id} — ${l.name_fr} / ${l.name_en} (${l.rlrq_cite}) ; ` +
+      `• ${l.id} — ${l.name_fr} / ${l.name_en} (${citeOf(l)}) ; ` +
       `langues: ${l.langs.join(", ") || "aucune"} ; ` +
       `à jour au ${l.consol_date_fr ?? "?"}${l.consol_date_en ? ` (en: ${l.consol_date_en})` : ""} ; ` +
       `${l.article_count} articles`;
@@ -209,7 +209,11 @@ export function registerTools(server: McpServer, env: Env): void {
         filters: { fonction: fonction ?? null, forum: forum ?? null, subject: subject ?? null },
         count: laws.length,
         laws: laws.map((l) => ({
-          id: l.id, name_fr: l.name_fr, name_en: l.name_en, rlrq_cite: l.rlrq_cite,
+          id: l.id, name_fr: l.name_fr, name_en: l.name_en,
+          // Clé HISTORIQUE conservée le temps de la migration : la retirer ici serait
+          // une rupture de contrat pour tout consommateur du champ typé. Le passage à
+          // `official_cite` seul est un commit séparé, annoncé.
+          rlrq_cite: citeOf(l), official_cite: citeOf(l),
           langs: l.langs, consol_date_fr: l.consol_date_fr, consol_date_en: l.consol_date_en,
           article_count: l.article_count,
           fonction: l.fonction, forum: l.forum,
@@ -429,9 +433,9 @@ export function registerTools(server: McpServer, env: Env): void {
         );
       }
       const consol = consolOf(lawRow, lang as Lang);
-      return ok(renderArticle(row, consol, lang as Lang), {
+      return ok(renderArticle(row, lawRow, consol, lang as Lang), {
         law, number: row.number, lang,
-        citation: citationOf(row.rlrq_cite, row.number),
+        citation: citationOf(lawRow, row.number, lang as Lang),
         division_path: row.division_path,
         division: row.d_kind ? { kind: row.d_kind, number: row.d_number, heading: row.d_heading } : null,
         consolidation: consol, history: row.history, repealed: !!row.repealed,
@@ -791,10 +795,13 @@ export function registerTools(server: McpServer, env: Env): void {
         return err(`Référence « ${citation} » non résolue (loi ${law}, art. ${article}). Proches : ${near.join(", ")}.`);
       }
       const lawRow = await getLaw(db, law);
+      // `parseCitation` n'a reconnu `law` que parmi les lois LUES en base, donc lawRow
+      // existe ; le garde est là pour le type, pas pour un cas réel.
+      if (!lawRow) return err(`Loi '${law}' inconnue.`);
       const consol = consolOf(lawRow, lang as Lang);
-      return ok(renderArticle(row, consol, lang as Lang), {
+      return ok(renderArticle(row, lawRow, consol, lang as Lang), {
         resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
-        citation: citationOf(row.rlrq_cite, row.number),
+        citation: citationOf(lawRow, row.number, lang as Lang),
         division_path: row.division_path, consolidation: consol,
         history: row.history, repealed: !!row.repealed, text: row.text,
       });

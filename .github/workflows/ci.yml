@@ -34,6 +34,7 @@ jobs:
       - run: node --test tests/catalogue.test.mjs # garde anti-dérive de la documentation (R10)
       - run: node --test tests/page-client.test.mjs # comportement du JS client de la page
       - run: node --test tests/ranges.test.mjs # mode plage : sort_key n'est pas un ordre total
+      - run: node --test tests/paths.test.mjs # deux familles de chemins, un seul decoupeur
 
       # INVARIANT 1 : l'ordre de laws.config.json porte les plages d'id. Le réordonner
       # fait écraser les articles d'autres lois à la prochaine ingestion, EN SILENCE.
@@ -60,6 +61,10 @@ jobs:
       # la correspondance avec les fichiers réels exige le clone, donc du réseau, et
       # reste la porte manuelle (pipeline.discovery.recon_lims).
       - run: python -m unittest pipeline.tests.test_lims_tags -v
+      # Miroir du decoupeur de chemins : meme colonne `divisions.path` des deux cotes.
+      # Une divergence est du meme ordre que celle de sort_key <-> sortKeyOf (invariant 2),
+      # qui avait vide silencieusement le mode plage de 36 lois sur 38.
+      - run: python -m unittest pipeline.tests.test_paths -v
 
       # Reconstructibilité : schema.sql décrit l'ÉTAT INITIAL, les migrations s'appliquent
       # PAR-DESSUS. Sans ce garde, un DROP COLUMN sans garde dans une migration casse le
