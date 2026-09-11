@@ -55,15 +55,41 @@ class ConfigTest(unittest.TestCase):
                 vus[base] = (law["id"], lang)
 
     def test_champs_obligatoires(self):
+        """Champs requis, BRANCHÉS SUR LA SOURCE.
+
+        Les entrées québécoises arrivent en EPUB depuis LégisQuébec : `epub`,
+        `consolidation` et `consolidation_source` y sont indispensables. Les entrées
+        fédérales arrivent en XML depuis un dépôt git et n'ont AUCUN de ces trois champs —
+        leur date de consolidation est DÉRIVÉE du fichier (`lims:current-date`), ce qui est
+        strictement mieux qu'une date recopiée en config (R10).
+
+        On BRANCHE donc, on n'assouplit pas : le test reste aussi strict pour chaque source.
+        Le laisser exiger `epub` de tout le monde rendrait la CI rouge sur 18 entrées ; le
+        réduire au tronc commun laisserait passer une entrée québécoise sans EPUB.
+        """
         for law in config.load_all_laws():
-            for champ in ("id", "name_fr", "rlrq_cite", "epub", "consolidation",
-                          "consolidation_source", "fonction"):
+            for champ in ("id", "name_fr", "official_cite", "fonction"):
                 self.assertIn(champ, law, f"{law.get('id')} : champ '{champ}' manquant")
-            for lang in ("fr", "en"):
-                self.assertIn(lang, law["epub"], f"{law['id']} : URL EPUB {lang} manquante")
-                # une source juridique sans date de consolidation n'est pas citable
-                self.assertTrue(law["consolidation"].get(lang),
-                                f"{law['id']} : date de consolidation {lang} manquante")
+
+            if law.get("source") == "lims":
+                # Fédéral : les chemins XML des deux langues, et le chapitre — c'est sur LUI
+                # que `parseCitation` apparie, jamais sur la citation entière.
+                for champ in ("xml", "chapter", "jurisdiction"):
+                    self.assertIn(champ, law, f"{law['id']} : champ '{champ}' manquant (source lims)")
+                for lang in ("fr", "en"):
+                    self.assertTrue(law["xml"].get(lang),
+                                    f"{law['id']} : chemin XML {lang} manquant")
+                self.assertEqual(law["jurisdiction"], "ca")
+                self.assertNotIn("epub", law,
+                                 f"{law['id']} : un texte LIMS n'a pas d'EPUB")
+            else:
+                for champ in ("epub", "consolidation", "consolidation_source"):
+                    self.assertIn(champ, law, f"{law.get('id')} : champ '{champ}' manquant")
+                for lang in ("fr", "en"):
+                    self.assertIn(lang, law["epub"], f"{law['id']} : URL EPUB {lang} manquante")
+                    # une source juridique sans date de consolidation n'est pas citable
+                    self.assertTrue(law["consolidation"].get(lang),
+                                    f"{law['id']} : date de consolidation {lang} manquante")
 
     def test_ids_uniques(self):
         ids = [l["id"] for l in config.load_all_laws()]

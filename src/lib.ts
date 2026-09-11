@@ -228,17 +228,47 @@ export interface LawFilters {
   fonction?: string;
   forum?: string;
   subject?: string;
+  /** Ordre de gouvernement : 'qc' | 'ca'. */
+  jurisdiction?: string;
 }
 
 /**
  * Carte du corpus (§4.1) : lois enrichies (fonction, forum, sujets, portée, loi habilitante).
  * Trois requêtes agrégées au total — pas de N+1.
  */
+/**
+ * L'INTERRUPTEUR DU CORPUS FÉDÉRAL (R8 : « rollback = flip de variable, pas revert »).
+ *
+ * À « 0 » — ou non défini —, les textes `jurisdiction = 'ca'` sont INVISIBLES à tous les
+ * outils, même chargés en base. On peut donc ingérer les 18 textes, les vérifier et
+ * mesurer le repérage en production sans rien servir, puis ouvrir d'un flip — et refermer
+ * de même si la qualité se dégrade. Le filet le plus utile du chantier, pour le coût d'une
+ * clause WHERE.
+ *
+ * Fermé par défaut à dessein : un déploiement qui oublierait la variable ne sert rien de
+ * neuf, au lieu de tout servir d'un coup.
+ */
+export function federalOuvert(env: { FEDERAL_CORPUS?: string }): boolean {
+  return env.FEDERAL_CORPUS === "1";
+}
+
+/** Clause SQL de masquage, à coller dans un WHERE. Vide quand l'interrupteur est ouvert. */
+export function clauseJuridiction(env: { FEDERAL_CORPUS?: string }, alias = "l"): string {
+  return federalOuvert(env) ? "" : `${alias}.jurisdiction = 'qc'`;
+}
+
 export async function listLaws(
   db: D1Database, filters: LawFilters = {}, lang: Lang = "fr",
+  env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<LawSummary[]> {
   const where: string[] = [];
   const binds: unknown[] = [];
+  const masque = clauseJuridiction(env);
+  if (masque) where.push(masque);
+  if (filters.jurisdiction) {
+    where.push("l.jurisdiction = ?");
+    binds.push(filters.jurisdiction);
+  }
   if (filters.fonction) {
     where.push("l.fonction = ?");
     binds.push(filters.fonction);
@@ -1234,7 +1264,20 @@ async function runMatch(
   withScore = false,
 ): Promise<{ hits: SearchHit[]; total: number }> {
   const clauses: string[] = [];
-  const binds: unknown[] = [match, lang];
+  // MATCH BORNÉ À LA COLONNE `text`, et c'est une décision de calibration, pas un détail.
+  //
+  // Depuis la migration 0004, `articles_fts` indexe AUSSI `marginal_note`. Or
+  // `bm25(articles_fts)` est appelé sans poids de colonne (plus bas), donc une colonne
+  // indexée de plus repondère TOUTE la recherche des 79 lois québécoises — et
+  // `src/lib.ts` SOMME ces scores pour choisir quel terme le leave-one-out omet, ce qui
+  // déplacerait jusqu'à l'étiquette `fallback` (R7) et le jeu rendu.
+  //
+  // Mesuré : à poids par défaut, une note marginale de trois mots est un « document » très
+  // court, donc un signal disproportionné — une ligne fédérale a pris la 1re place devant
+  // l'ancien 1er. On BORNE donc, ce qui préserve jeu et ordre à l'identique, et l'ouverture
+  // de `marginal_note` en canal SÉPARÉ ET ÉTIQUETÉ reste à faire, avec des poids explicites
+  // importés de src/relevance.ts et une mesure des 20 cas.
+  const binds: unknown[] = [`{text} : (${match})`, lang];
   if (scope.law) { clauses.push("AND articles_fts.law_id = ?"); binds.push(scope.law); }
   if (scope.notLaw) { clauses.push("AND articles_fts.law_id <> ?"); binds.push(scope.notLaw); }
   const where = `articles_fts MATCH ? AND articles_fts.lang = ? ${clauses.join(" ")}`;

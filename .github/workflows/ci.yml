@@ -72,6 +72,10 @@ jobs:
       # est l'art. 2 de la L.F.I. et ses 51 blocs Definition — 99,6 % de l'article
       # serait perdu si le walker ne les descendait pas.
       - run: python -m unittest pipeline.tests.test_parser_lims -v
+      # Le SQL genere par load.py, lu comme du texte : colonnes de 0004, couple
+      # staging/bascule d'article_numbers, et l'invariant 3 sur la PAIRE de citations
+      # (une passe EN ecrasait official_cite, la forme francaise).
+      - run: python -m unittest pipeline.tests.test_load_federal -v
 
       # Reconstructibilité : schema.sql décrit l'ÉTAT INITIAL, les migrations s'appliquent
       # PAR-DESSUS. Sans ce garde, un DROP COLUMN sans garde dans une migration casse le
@@ -97,4 +101,24 @@ jobs:
               --command "SELECT COUNT(*) AS n FROM pragma_table_info('$t') WHERE name='validated'" \
               | grep -q '"n": *1' || { echo "$t sans colonne validated"; exit 1; }
           done
+          # 0004 : le RENOMMAGE doit avoir pris effet, DANS LES DEUX SENS. Le garde du
+          # bootstrap attrape le cas naif — schema.sql declarant deja official_cite ferait
+          # echouer le RENAME. Il laisserait passer l'INVERSE, qui est le vrai danger :
+          # renommer dans schema.sql ET retirer l'ALTER de 0004 laisse cette CI VERTE et la
+          # production avec l'ancienne colonne. L'assertion NEGATIVE est celle qui compte.
+          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='official_cite'" \
+            | grep -q '"n": *1' || { echo "laws.official_cite absente apres 0004"; exit 1; }
+          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='rlrq_cite'" \
+            | grep -q '"n": *0' || { echo "laws.rlrq_cite SUBSISTE : 0004 n a pas renomme"; exit 1; }
+          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('article_numbers')" \
+            | grep -q '"n": *4' || { echo "article_numbers absente ou incomplete"; exit 1; }
+          # `text` EN POSITION 0 : src/lib.ts code en dur snippet(articles_fts, 0, ...), donc
+          # une inversion ferait rendre une NOTE MARGINALE comme extrait du texte officiel —
+          # or l art. 14 de la Loi d interpretation dit qu elle n en fait pas partie (R4).
+          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+            --command "SELECT name AS n FROM pragma_table_info('articles_fts') WHERE cid=0" \
+            | grep -q '"n": *"text"' || { echo "articles_fts : text pas en position 0"; exit 1; }
           rm -rf "$T"

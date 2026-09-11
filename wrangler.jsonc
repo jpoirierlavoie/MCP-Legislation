@@ -34,7 +34,13 @@
   // RELAX_SEARCH : échelle de relaxation de qclaw_search_text (1.2). "0" pour désactiver.
   // HYBRID_SEARCH : recherche hybride FTS + vecteurs (2.3). "0" tant que le rattrapage
   // des vecteurs n'est pas validé ; bascule à "1" ensuite (séquence de déploiement §2).
-  "vars": { "RELAX_SEARCH": "1", "HYBRID_SEARCH": "1" },
+  // FEDERAL_CORPUS : l'interrupteur du corpus fédéral (R8). À "0", les textes
+  // `jurisdiction = 'ca'` sont INVISIBLES à tous les outils, même chargés en base. On peut
+  // donc ingérer les 18 textes, les vérifier et mesurer le repérage EN PRODUCTION sans rien
+  // servir, puis ouvrir d'un flip — et refermer de même si la qualité se dégrade. Fermé par
+  // défaut à dessein : un déploiement qui oublierait la variable ne sert rien de neuf, au
+  // lieu de tout servir d'un coup.
+  "vars": { "RELAX_SEARCH": "1", "HYBRID_SEARCH": "1", "FEDERAL_CORPUS": "0" },
 
   // Limitation de débit DANS le Worker, et non au WAF de la zone — même choix que le
   // connecteur jumeau (jurisprudence), qui a constaté que la limitation de zone n'était pas

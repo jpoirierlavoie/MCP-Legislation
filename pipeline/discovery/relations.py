@@ -47,17 +47,17 @@ def _is_regulation(rlrq_cite: str) -> bool:
 def build(db) -> dict:
     laws = config.load_all_laws()
     # cartes chapitre -> id : complète (toutes lois) et racine (lois habilitantes seulement)
-    by_full = {_key(_chapter(l["rlrq_cite"])): l["id"] for l in laws}
-    by_root = {_key(_chapter(l["rlrq_cite"], root=True)): l["id"]
-               for l in laws if not _is_regulation(l["rlrq_cite"])}
+    by_full = {_key(_chapter(l["official_cite"])): l["id"] for l in laws}
+    by_root = {_key(_chapter(l["official_cite"], root=True)): l["id"]
+               for l in laws if not _is_regulation(l["official_cite"])}
 
     edges: dict[tuple, list] = {}   # (from, to, rel_type) -> [weight, in_corpus, note]
     parents: dict[str, str] = {}
 
     # 1) reglement-de (+ parent_law_id)
     for l in laws:
-        if _is_regulation(l["rlrq_cite"]):
-            parent = by_root.get(_key(_chapter(l["rlrq_cite"], root=True)))
+        if _is_regulation(l["official_cite"]):
+            parent = by_root.get(_key(_chapter(l["official_cite"], root=True)))
             if parent and parent != l["id"]:
                 edges[(l["id"], parent, "reglement-de")] = [1, 1, "chapitre racine RLRQ"]
                 parents[l["id"]] = parent
@@ -70,7 +70,7 @@ def build(db) -> dict:
         with zipfile.ZipFile(epub) as zf:
             htmls = [zf.read(n).decode("utf-8", "replace")
                      for n in zf.namelist() if re.search(r"page\d+\.xhtml$", n)]
-        self_key = _key(_chapter(l["rlrq_cite"]))
+        self_key = _key(_chapter(l["official_cite"]))
         for chapter, count in harvest_renvois(htmls).items():
             if _key(chapter) == self_key:
                 continue  # renvoi interne

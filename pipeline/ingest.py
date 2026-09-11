@@ -61,7 +61,9 @@ def _law_from_config(cfg_law: dict) -> Law:
         # (name_en NOT NULL) ; le vrai name_en est posé au chargement EN depuis l'OPF.
         id=cfg_law["id"], name_fr=cfg_law["name_fr"],
         name_en=cfg_law.get("name_en") or cfg_law["name_fr"],
-        rlrq_cite=cfg_law["rlrq_cite"],
+        # La CLÉ de config est `official_cite` depuis 0004 ; le CHAMP du dataclass garde
+        # `rlrq_cite` le temps de la migration (cf. `pipeline/load.py::_CHAMP`).
+        rlrq_cite=cfg_law["official_cite"],
         consol_date_fr=consol.get("fr"), consol_date_en=consol.get("en"),
     )
 

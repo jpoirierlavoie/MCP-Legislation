@@ -182,9 +182,9 @@ def process(law: dict, parents: dict) -> dict:
         out["fatal"] = "téléchargement FR échoué"
         return out
     out["scan"] = scan(data_fr)
-    out["parse"] = parse_test(data_fr, lid, law["name_fr"], law["rlrq_cite"], "fr")
+    out["parse"] = parse_test(data_fr, lid, law["name_fr"], law["official_cite"], "fr")
     out["name_en"] = opf_metadata(zipfile.ZipFile(io.BytesIO(data_en)))["title"] if data_en else None
-    out["parent"] = parents.get(base_chapter(law["rlrq_cite"]))
+    out["parent"] = parents.get(base_chapter(law["official_cite"]))
     out["anomalies"] = anomalies(law, out["scan"], out["parse"], out["name_en"])
     return out
 
@@ -247,7 +247,7 @@ def build_report(results: list[dict]) -> str:
     for r in results:
         law = r["law"]
         L.append(f"### {law['id']} — {law['name_fr']}")
-        L.append(f"*{law['rlrq_cite']} · fonction={law.get('fonction','?')} · kind_epub={law.get('kind_epub','?')}*")
+        L.append(f"*{law['official_cite']} · fonction={law.get('fonction','?')} · kind_epub={law.get('kind_epub','?')}*")
         if r.get("fatal"):
             L += [f"- ❌ {r['fatal']}", ""]
             continue
@@ -282,8 +282,8 @@ def build_report(results: list[dict]) -> str:
 def main() -> int:
     laws = [l for l in config.load_all_laws() if l["id"] not in ("ccq", "cpc")]
     # carte chapitre -> id des lois habilitantes (non-règlements) pour parent_law_id (§3.3)
-    parents = {base_chapter(l["rlrq_cite"]): l["id"]
-               for l in config.load_all_laws() if ", r." not in l["rlrq_cite"]}
+    parents = {base_chapter(l["official_cite"]): l["id"]
+               for l in config.load_all_laws() if ", r." not in l["official_cite"]}
     config.SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Dry-run sur {len(laws)} textes (téléchargement FR+EN, parse, SANS chargement)…")
     with ThreadPoolExecutor(max_workers=6) as ex:

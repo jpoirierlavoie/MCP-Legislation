@@ -42,9 +42,9 @@ def seed_laws(db) -> int:
     découverte sur TOUTES — pas seulement sur les textes ajoutés, sans quoi ccq/cpc restaient
     sans `fonction` et échappaient au filtre correspondant."""
     laws = config.load_all_laws()
-    rows = [[l["id"], l["name_fr"], l.get("name_en") or l["name_fr"], l["rlrq_cite"]]
+    rows = [[l["id"], l["name_fr"], l.get("name_en") or l["name_fr"], l["official_cite"]]
             for l in laws]
-    _insert_rows(db, "laws", ["id", "name_fr", "name_en", "rlrq_cite"], rows, or_ignore=True)
+    _insert_rows(db, "laws", ["id", "name_fr", "name_en", "official_cite"], rows, or_ignore=True)
     for l in laws:
         forum = " ; ".join(l.get("forum") or []) or None
         consol = l.get("consolidation") or {}

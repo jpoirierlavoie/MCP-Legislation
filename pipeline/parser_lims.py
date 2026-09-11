@@ -546,6 +546,9 @@ def parse_lims(
             marginal_note=_plat(mn) if mn is not None else None,
             footnotes=_notes(el),
             sort_key=cle,
+            # Les numeros couverts par un label de plage. Le parseur decide, parce que la
+            # forme est PROPRE A LA LANGUE ; load.py ecrit les lignes d article_numbers.
+            alias_numbers=expand_plage(numero),
         ))
 
     def cle_de(numero: str) -> int | None:

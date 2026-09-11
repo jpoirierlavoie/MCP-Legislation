@@ -1,7 +1,7 @@
 """Modèle de données du pipeline — reflète le schéma D1 (PLAN.md §2 révisé)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -65,6 +65,13 @@ class Article:
     # FIN de l'article et ÉTIQUETÉES — l'art. 14 n'exclut que les notes marginales et les
     # mentions de textes antérieurs, pas celles-ci.
     footnotes: str | None = None
+    # Numéros COUVERTS par un label de plage (« 11 à 14 » -> ['11','12','13','14']).
+    # C'est le PARSEUR qui décide ce qu'est une plage — il connaît la langue du `Label`
+    # (`à`/`to`, `et`/`and`) —, et `load.py` se contente d'en écrire les lignes dans
+    # `article_numbers`. Sans quoi `get_article(law='ca-i-15', article='12')` répondrait
+    # « introuvable » là où la vraie réponse est « abrogé, art. 11 à 14 » : un faux
+    # silencieux sur une question d'abrogation.
+    alias_numbers: list[str] = field(default_factory=list)
     # rempli au chargement :
     id: int | None = None
     # None (et non 0) pour distinguer « pas encore calculée » de « calculée à 0 ». Le

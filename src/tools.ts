@@ -181,7 +181,7 @@ export function registerTools(server: McpServer, env: Env): void {
       annotations: READONLY,
     },
     async ({ fonction, forum, subject, structure, lang }) => {
-      const laws = await listLaws(db, { fonction, forum, subject }, lang as Lang);
+      const laws = await listLaws(db, { fonction, forum, subject }, lang as Lang, env);
       // 1.4 : le signal de repérage est souvent au Titre, pas au Livre (post-mortem :
       // Livre V C.p.c. muet, Titre IV parlant) — plan profondeur 2 des lois à Livres.
       const outlines = structure === false
@@ -298,7 +298,7 @@ export function registerTools(server: McpServer, env: Env): void {
     async ({ law, rel_type, direction, limit, lang }) => {
       const L = REL_LABEL[lang as Lang] ?? REL_LABEL.fr;
       if (!(await getLaw(db, law))) {
-        const all = (await listLaws(db)).map((l) => l.id).join(", ");
+        const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
         return err(`${L.inconnue(law)} ${L.dispo} ${all || L.aucune}.`);
       }
       const all = await relatedLaws(db, law, rel_type, direction, lang as Lang);
@@ -421,7 +421,7 @@ export function registerTools(server: McpServer, env: Env): void {
     async ({ law, article, lang }) => {
       const lawRow = await getLaw(db, law);
       if (!lawRow) {
-        const all = (await listLaws(db)).map((l) => l.id).join(", ");
+        const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
         return err(`Loi '${law}' inconnue. Lois disponibles : ${all || "aucune"}.`);
       }
       const row = await getArticle(db, law, lang as Lang, article);
@@ -772,7 +772,7 @@ export function registerTools(server: McpServer, env: Env): void {
       annotations: READONLY,
     },
     async ({ citation, lang }) => {
-      const all = await listLaws(db);
+      const all = await listLaws(db, {}, "fr", env);
       const parsed = parseCitation(citation, all);
       if (!parsed.article) return err(`Aucun numéro d'article détecté dans « ${citation} ».`);
       if (!parsed.law) {

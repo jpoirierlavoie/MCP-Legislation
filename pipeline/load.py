@@ -54,11 +54,61 @@ def _q(v) -> str:
 
 
 _DIV_COLS = ["id", "law_id", "lang", "kind", "number", "heading", "history", "path", "repealed", "parent_id", "sort_order", "heading_norm"]
-_ART_COLS = ["id", "law_id", "lang", "number", "sort_key", "division_id", "division_path", "text", "html", "history", "repealed"]
+_ART_COLS = ["id", "law_id", "lang", "number", "sort_key", "division_id",
+             "division_path", "text", "html", "history", "repealed",
+             # 0004 : intitulé officiel d'article (hors du texte, art. 14 L.i.) et notes
+             # en bas de page (rendues À LA FIN de l'article, étiquetées).
+             "marginal_note", "footnotes"]
 # name_norm est recalculé ici ; fonction/forum/scope_fr/parent_law_id restent préservés par l'UPSERT.
-_LAW_COLS = ["id", "name_fr", "name_en", "rlrq_cite", "consol_date_fr", "consol_date_en", "name_norm"]
+#
+# ⚠️ UNE COLONNE ABSENTE DE CES LISTES N'ARRIVE JAMAIS EN BASE, ET EN SILENCE. Les colonnes
+# de 0004 portent des DEFAULT (`jurisdiction='qc'`, `in_force=1`, `unit='article'`) : les
+# omettre chargerait les 18 textes fédéraux COMME QUÉBÉCOIS, en vigueur, unité « article ».
+# `qclaw_list_laws(jurisdiction='ca')` rendrait alors ZÉRO résultat, et l'`in_force` que le
+# SPEC §3.7 veut mesuré deviendrait un défaut affirmé. Trou trouvé par l'audit de complétude.
+_LAW_COLS = ["id", "name_fr", "name_en", "official_cite", "consol_date_fr",
+             "consol_date_en", "name_norm",
+             # 0004
+             "official_cite_en", "chapter", "jurisdiction", "in_force", "last_amended", "unit"]
+_NUM_COLS = ["law_id", "lang", "number", "article_id"]
+
+# PONT nom de COLONNE -> nom de CHAMP, pour les cas où les deux diffèrent.
+#
+# `laws.rlrq_cite` est devenue `official_cite` (migration 0004), mais le dataclass `Law`
+# garde `rlrq_cite` : renommer le champ ferait divergir le modèle de la colonne pendant la
+# fenêtre de migration, et il faudrait le renommer dans les deux sens. Le pont est donc ici,
+# en UN seul endroit, plutôt qu'en trois relectures du dataclass.
+_CHAMP = {"official_cite": "rlrq_cite"}
+
+
+def _valeur(obj, col: str):
+    return getattr(obj, _CHAMP.get(col, col))
+
+
 # langue « opposée », pour préserver ses colonnes lors d'un chargement monolingue
 _OTHER = {"fr": "en", "en": "fr"}
+
+# La CITATION est, elle aussi, une paire de langues : `official_cite` porte la forme
+# française, `official_cite_en` l'anglaise. Elles ne suivent pas la convention de nommage
+# `..._fr`/`..._en`, donc la règle générale ne les attrape pas.
+_CITE_PAR_LANGUE = {"fr": "official_cite", "en": "official_cite_en"}
+
+
+def _COLS_AUTRE_LANGUE(lang: str) -> set[str]:
+    """Colonnes qu'un chargement MONOLINGUE ne doit pas écraser (invariant 3).
+
+    L'incident d'origine : une passe FR écrasait le titre ANGLAIS de la loi, capté depuis
+    l'OPF anglais, parce que la passe FR ne connaît `name_en` que comme repli (= `name_fr`).
+    D'où l'exclusion de `name_<autre>` et `consol_date_<autre>`.
+
+    ⚠️ MÊME DÉFAUT TROUVÉ SUR LA CITATION, le 2026-09-11, en chargeant I-15 dans les deux
+    langues sur une base locale : la passe EN a écrasé `official_cite` (la forme française)
+    parce que la règle générale ne voit que le suffixe `_fr`/`_en`, et que la paire
+    `official_cite` / `official_cite_en` ne le porte pas. Symétriquement, une passe FR
+    aurait remis `official_cite_en` à NULL. Exactement l'invariant 3, sur une colonne neuve.
+    """
+    return {"id", f"name_{_OTHER[lang]}", f"consol_date_{_OTHER[lang]}",
+            _CITE_PAR_LANGUE[_OTHER[lang]]}
 
 
 # D1 refuse toute instruction > 100 Ko (SQLITE_TOOBIG). On plafonne en OCTETS UTF-8 (le
@@ -145,25 +195,39 @@ def _rows_sql(table: str, cols: list[str], rows: list[list], budget: int = _STMT
 
 
 def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: str) -> str:
-    div_rows = [[getattr(d, c) for c in _DIV_COLS] for d in divisions]
-    art_rows = [[getattr(a, c) for c in _ART_COLS] for a in articles]
-    law_vals = ", ".join(_q(getattr(law, c)) for c in _LAW_COLS)
+    div_rows = [[_valeur(d, c) for c in _DIV_COLS] for d in divisions]
+    art_rows = [[_valeur(a, c) for c in _ART_COLS] for a in articles]
+    law_vals = ", ".join(_q(_valeur(law, c)) for c in _LAW_COLS)
+    # Un alias par numéro COUVERT par un label de plage. La clé primaire
+    # (law_id, lang, number) garantit qu'aucune plage n'en recouvre une autre ; un conflit
+    # d'insertion est un ÉCHEC de chargement, jamais un `INSERT OR IGNORE` — c'est la
+    # différence entre « on ne sait pas » et « on a choisi au hasard ».
+    num_rows = [[a.law_id, a.lang, n, a.id]
+                for a in articles for n in a.alias_numbers]
 
     stmts: list[str] = [
         "-- Généré par pipeline.ingest — NE PAS éditer à la main.",
         "PRAGMA defer_foreign_keys = TRUE;",
         "DROP TABLE IF EXISTS _stg_divisions;",
         "DROP TABLE IF EXISTS _stg_articles;",
+        "DROP TABLE IF EXISTS _stg_article_numbers;",
         "CREATE TABLE _stg_divisions AS SELECT * FROM divisions WHERE 0;",
         "CREATE TABLE _stg_articles  AS SELECT * FROM articles  WHERE 0;",
+        "CREATE TABLE _stg_article_numbers AS SELECT * FROM article_numbers WHERE 0;",
     ]
     stmts += _rows_sql("_stg_divisions", _DIV_COLS, div_rows)
     # text/html peuvent à eux seuls dépasser 100 Ko (ex. le bloc préliminaire d'un tarif) :
     # ces colonnes sont ré-appendables par morceaux si le tuple est trop gros.
     stmts += _rows_sql("_stg_articles", _ART_COLS, art_rows, big_cols=("text", "html"))
+    if num_rows:
+        stmts += _rows_sql("_stg_article_numbers", _NUM_COLS, num_rows)
     # --- bascule (production intouchée tant que le staging n'est pas complet) ---
     # Portée (law_id, lang) : recharger une langue ne touche pas l'autre langue de la loi.
     stmts += [
+        # article_numbers AVANT articles : sa clé étrangère pointe article_id, et une
+        # ligne d'alias survivante désignerait un article supprimé. Sans cette purge,
+        # une réingestion rendrait le MAUVAIS article en silence.
+        f"DELETE FROM article_numbers WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
         f"DELETE FROM articles  WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
         f"DELETE FROM divisions WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
         # UPSERT : met à jour les colonnes de base sans écraser fonction/forum/name_norm/
@@ -176,11 +240,13 @@ def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: s
         # anglais de la loi.
         f"INSERT INTO laws ({', '.join(_LAW_COLS)}) VALUES ({law_vals}) ON CONFLICT(id) DO UPDATE SET "
         + ", ".join(f"{c}=excluded.{c}" for c in _LAW_COLS
-                    if c not in {"id", f"name_{_OTHER[lang]}", f"consol_date_{_OTHER[lang]}"}) + ";",
+                    if c not in _COLS_AUTRE_LANGUE(lang)) + ";",
         "INSERT INTO divisions SELECT * FROM _stg_divisions;",
         "INSERT INTO articles  SELECT * FROM _stg_articles;",
+        "INSERT INTO article_numbers SELECT * FROM _stg_article_numbers;",
         "DROP TABLE _stg_divisions;",
         "DROP TABLE _stg_articles;",
+        "DROP TABLE _stg_article_numbers;",
         "-- FTS5 à contenu externe : reconstruire l'index depuis articles",
         "INSERT INTO articles_fts(articles_fts) VALUES('rebuild');",
     ]
