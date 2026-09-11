@@ -280,10 +280,27 @@ def build_report(results: list[dict]) -> str:
 
 
 def main() -> int:
-    laws = [l for l in config.load_all_laws() if l["id"] not in ("ccq", "cpc")]
+    # BORNÉ AUX TEXTES QUÉBÉCOIS. Ce module est la reconnaissance des EPUB Irosoft : il
+    # télécharge un zip et le parse. Les textes fédéraux arrivent en XML LIMS et ont leur
+    # propre reconnaissance (`recon_lims.py`) — les laisser ici produisait DEUX faussetés
+    # mesurées le 2026-09-11 :
+    #
+    #   · un téléchargement d'EPUB voué à l'échec pour 18 textes, donc 18 « fatal » qui ne
+    #     disent rien de leur balisage réel ;
+    #   · `base_chapter` renifle `official_cite` avec une regex `c\.` SENSIBLE À LA CASSE, or
+    #     le fédéral s'écrit « ch. B-3 » : elle rendait None pour les 18, tous réduits à la
+    #     MÊME clé None dans `parents`, le dernier l'emportant. Chaque texte fédéral se voyait
+    #     donc attribuer `ca-crc-368` comme loi habilitante, dans un rapport destiné à la
+    #     revue humaine. Une porte de revue qui AFFIRME DU FAUX est pire qu'une porte absente.
+    laws = [l for l in config.load_all_laws()
+            if l["id"] not in ("ccq", "cpc") and (l.get("jurisdiction") or "qc") == "qc"]
     # carte chapitre -> id des lois habilitantes (non-règlements) pour parent_law_id (§3.3)
+    # Les clés None sont ÉCARTÉES : une clé None les fait toutes collisionner entre elles.
     parents = {base_chapter(l["official_cite"]): l["id"]
-               for l in config.load_all_laws() if ", r." not in l["official_cite"]}
+               for l in config.load_all_laws()
+               if (l.get("jurisdiction") or "qc") == "qc"
+               and ", r." not in l["official_cite"]
+               and base_chapter(l["official_cite"]) is not None}
     config.SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Dry-run sur {len(laws)} textes (téléchargement FR+EN, parse, SANS chargement)…")
     with ThreadPoolExecutor(max_workers=6) as ex:

@@ -56,6 +56,13 @@ jobs:
       # mémoire : ni réseau, ni wrangler, ni D1.
       - run: python -m unittest pipeline.tests.test_curation -v
 
+      # Resolution des chapitres dans discovery/relations.py. Mesure du 2026-09-11 : la
+      # regex RLRQ `c\.` est SENSIBLE A LA CASSE, or le federal s'ecrit « ch. B-3 » —
+      # les 18 textes se reduisaient a la MEME cle vide, le dernier l'emportant. Et le
+      # RLRQ et les L.R.C. partagent le schema lettre-chiffre : sans juridiction dans la
+      # cle, un renvoi quebecois resoudrait un jour vers une loi FEDERALE. Aucun reseau.
+      - run: python -m unittest pipeline.tests.test_relations -v
+
       # PORTE DE LA PHASE 0 du corpus fédéral : le classement des balises LIMS est une
       # liste BLANCHE. Une balise absente du classement doit ARRÊTER l'ingestion, pas
       # être traversée en silence. Ce test verrouille les propriétés du classement ;
