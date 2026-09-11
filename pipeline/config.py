@@ -12,6 +12,7 @@ liste, on ne réordonne pas.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -21,6 +22,26 @@ SAMPLES_DIR = REPO_ROOT / "pipeline" / "samples"
 # En-tête navigateur : LégisQuébec renvoie 403 aux clients de centre de données
 # (constaté en phase 0). À utiliser pour tout téléchargement.
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+# --- corpus fédéral : dépôt XML de Justice Canada -----------------------------
+#
+# Source UNIQUE des textes fédéraux : le dépôt git justicecanada/laws-lois-xml
+# (Licence du gouvernement ouvert – Canada). On ne parse NI le HTML de
+# lois.justice.gc.ca, NI les ZIP du portail des données ouvertes : le dépôt git est le
+# seul canal qui donne, au fichier près, ce qui a bougé entre deux consolidations.
+#
+# Le clone vit HORS de l'arbre de ce dépôt (un sous-dépôt git dans l'arbre d'un autre
+# dépôt git est une confusion connue) et se fait en clone partiel :
+#   git clone --filter=blob:none --no-checkout https://github.com/justicecanada/laws-lois-xml.git
+# Les blobs sont tirés à la demande par `git show <ref>:<chemin>` — le clone ne pèse
+# que ~2 Mo.
+#
+# LIMS_REF est délibérément un POINT FIXE et non une branche : c'est le SHA consigné au
+# rapport d'ingestion qui rend une ingestion reproductible, et la veille s'en sert pour
+# détecter qu'une loi a bougé. Employer "HEAD" pour une reconnaissance, un SHA pour une
+# ingestion que l'on veut pouvoir rejouer à l'identique.
+LIMS_REPO = Path(os.environ.get("LIMS_REPO", REPO_ROOT.parent / "laws-lois-xml"))
+LIMS_REF = os.environ.get("LIMS_REF", "HEAD")
 
 
 def load_config(path: Path | None = None) -> dict:

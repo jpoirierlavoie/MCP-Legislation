@@ -31,3 +31,8 @@ worker-configuration.d.ts
 .env
 .env.*
 scripts/.backfill-progress.json
+
+# Vidage reproductible du recensement LIMS (pipeline/discovery/recon_lims.py).
+# Meme raison que docs/reconnaissance-courante.md : le document de reference versionne
+# est docs/phase0-structure-lims.md, redige a la main a partir de ce vidage.
+docs/reconnaissance-lims-courante.md
