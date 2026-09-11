@@ -1,6 +1,5 @@
 {
   "_comment": "PROPOSITION ⛔ — classement des balises LIMS, relevé au SHA 9c40b2a03bc38be8250ef7f86b1d5699afd08cbe (HEAD du 2026-09-11) sur les 36 fichiers du corpus arrêté. C'est la PORTE de la phase 0 : `parser_lims.py` doit refuser d'ingérer un fichier portant une balise absente de ce classement, au lieu de la traverser en silence. Les décisions marquées `justification_juridique` relèvent de la relecture de Jason — le code les applique, il ne les tranche pas. Régénérer le relevé : `python -m pipeline.discovery.recon_lims`.",
-
   "_traitements": {
     "texte": "Le contenu fait partie du TEXTE de l'article et doit être sérialisé. Une balise de cette classe que le walker ne descend pas produit un article amputé — servi, plausible, faux.",
     "structure": "Conteneur : on le traverse sans rien émettre soi-même.",
@@ -10,84 +9,275 @@
     "refuse": "Sa présence dans la chaîne d'ancêtres d'une `Section` DISQUALIFIE cette section : ce n'est pas du droit en vigueur.",
     "ignore": "Ni texte, ni métadonnée, ni refus : sans effet sur l'ingestion."
   },
-
   "ref": "9c40b2a03bc38be8250ef7f86b1d5699afd08cbe",
   "fichiers_releves": 36,
-
   "chaines_ingerables": [
     "Statute < Body",
     "Regulation < Body",
     "Regulation < Schedule < RegulationPiece"
   ],
   "_chaines_comment": "Liste BLANCHE close, mesurée : 6 898 des 7 622 `Section` du corpus. Les 724 autres passent toutes par `BillPiece` ou `RelatedOrNotInForce`. Toute chaîne inédite ARRÊTE l'ingestion.",
-
   "balises": {
     "Definition": {
-      "traitement": "texte", "occurrences": 1606,
+      "traitement": "texte",
+      "occurrences": 1606,
       "note": "⚠️ LA PLUS IMPORTANTE DU CLASSEMENT. Le SPEC §3.5 ne la nomme PAS. Mesuré sur l'art. 2 de la L.F.I. : 51 blocs `Definition`, 13 736 caractères ; un walker qui ne les descend pas rend « Les définitions qui suivent s'appliquent à la présente loi. » — 59 caractères, soit 99,6 % de l'article perdu, sur la disposition la plus citée de toute loi.",
       "justification_juridique": "Une définition est du texte normatif : elle fixe le sens des termes employés par la loi."
     },
-    "DefinitionEnOnly": { "traitement": "texte", "occurrences": 13, "note": "Terme défini n'existant QUE dans la version anglaise. Asymétrie voulue par le législateur, pas un défaut d'extraction.", "justification_juridique": "Les deux versions font également foi ; un terme propre à l'une ne s'efface pas." },
-    "DefinitionFrOnly": { "traitement": "texte", "occurrences": 5, "note": "Miroir du précédent." },
-    "ContinuedSubparagraph": { "traitement": "texte", "occurrences": 2, "note": "Le SPEC §3.5 nomme `ContinuedSectionSubsection`, `ContinuedParagraph` et `ContinuedDefinition` mais OUBLIE celle-ci. Même famille, même règle : rattacher APRÈS l'énumération qu'elle ferme, sinon la phrase se disloque." },
-    "ReadAsText": { "traitement": "texte", "occurrences": 7, "note": "Texte CITÉ à l'intérieur d'une disposition en vigueur (« est remplacé par ce qui suit : … »). `LIMS2HTML.xsl` le rend en bloc cité. À ne pas confondre avec `AmendedText`, qui est refusé.", "justification_juridique": "Le texte cité fait partie de la disposition citante, laquelle est en vigueur." },
-    "Oath": { "traitement": "texte", "occurrences": 6, "note": "Formule de serment prescrite.", "justification_juridique": "Une formule prescrite par la loi est du texte de la loi." },
-    "Enacts": { "traitement": "texte", "occurrences": 2, "note": "Formule d'édiction, sous `Introduction`." },
-    "Footnote": { "traitement": "texte", "occurrences": 24, "note": "Le SPEC nomme `FootnoteRef` (le renvoi en ligne) mais pas le CONTENU de la note. À rendre à la fin de l'article, distinctement.", "justification_juridique": "À DÉPARTAGER PAR JASON : une note en bas de page n'est pas visée par l'art. 14 de la Loi d'interprétation, qui ne nomme que les notes marginales et les mentions de textes antérieurs. Par défaut je l'ingère, étiquetée." },
-    "FormBlank": { "traitement": "texte", "occurrences": 44, "note": "Espace à remplir sur un formulaire prescrit. À rendre par un marqueur stable plutôt que par du vide." },
-
-    "table": { "traitement": "texte", "occurrences": 74, "note": "CALS. Le SPEC §3.5 exige un « rendu tabulaire propre, PAS d'aplatissement en bouillie »." },
-    "tgroup": { "traitement": "structure", "occurrences": 74 },
-    "tbody": { "traitement": "structure", "occurrences": 74 },
-    "thead": { "traitement": "structure", "occurrences": 20 },
-    "row": { "traitement": "structure", "occurrences": 993 },
-    "entry": { "traitement": "texte", "occurrences": 4056, "note": "Cellule. La balise la plus fréquente du corpus." },
-    "colspec": { "traitement": "ignore", "occurrences": 236, "note": "Largeurs de colonnes : présentation." },
-    "title": { "traitement": "texte", "occurrences": 18, "note": "Titre d'un `table` CALS." },
-    "Caption": { "traitement": "texte", "occurrences": 8, "note": "Légende d'un `TableGroup`." },
-
-    "FormulaGroup": { "traitement": "structure", "occurrences": 8 },
-    "Formula": { "traitement": "texte", "occurrences": 8, "note": "Formule de calcul. Elle EST la règle de droit (calcul d'intérêt, de contribution)." },
-    "FormulaText": { "traitement": "texte", "occurrences": 8 },
-    "FormulaConnector": { "traitement": "texte", "occurrences": 8, "note": "« où », « that is » — la charnière entre la formule et ses définitions. La perdre rend la formule illisible." },
-    "FormulaDefinition": { "traitement": "texte", "occurrences": 24 },
-    "FormulaTerm": { "traitement": "texte", "occurrences": 24 },
-    "FormulaParagraph": { "traitement": "texte", "occurrences": 8 },
-
-    "SignatureBlock": { "traitement": "texte", "occurrences": 209, "note": "Bloc de signature d'un formulaire prescrit. Vit sous `Provision` (141) et `entry` (52), donc dans les annexes." },
-    "SignatureName": { "traitement": "texte", "occurrences": 272 },
-    "SignatureLine": { "traitement": "texte", "occurrences": 173 },
-    "SignatureTitle": { "traitement": "texte", "occurrences": 44 },
-
-    "DocumentInternal": { "traitement": "structure", "occurrences": 8, "note": "Conteneur d'annexe (T-13, D-3.4). C'est l'une des deux imbrications réelles de `Schedule` hors racine." },
-    "Group": { "traitement": "structure", "occurrences": 4 },
-    "GroupHeading": { "traitement": "division", "occurrences": 314, "note": "Intertitre interne d'annexe, sous `DocumentInternal`. Produit une division, donc entre dans le chemin positionnel de l'annexe." },
-    "RegulationPiece": { "traitement": "structure", "occurrences": 8, "note": "Déjà dans la liste BLANCHE : `Regulation < Schedule < RegulationPiece` porte 28 articles légitimes. La règle de la note compagnon (« refuser tout ancêtre Schedule ») les aurait perdus." },
-
-    "BilingualGroup": { "traitement": "hors_texte", "occurrences": 2, "note": "⚠️ VOICI le marqueur bilingue RÉEL, celui que le SPEC §3.8 croyait être `spanlanguages`. Deux occurrences seulement, sous `entry`. C'est LUI qui doit armer l'exclusion de FTS et de Vectorize — pas `spanlanguages`, dont il est mesuré que les 88 annexes du fichier FRANÇAIS contiennent 4 738 mots-outils français contre 1 anglais.", "justification_juridique": "Exclure du plein texte un contenu dont la langue n'est pas celle de la requête évite qu'une recherche française remonte de l'anglais ; le texte reste LISIBLE par get_division." },
-    "BilingualItemFr": { "traitement": "texte", "occurrences": 2 },
-    "BilingualItemEn": { "traitement": "texte", "occurrences": 2 },
-
-    "ShortTitle": { "traitement": "metadonnee", "occurrences": 32, "note": "Titre abrégé officiel (`status=\"official\"`). Source de `laws.name_fr`/`name_en` pour une LOI. Les règlements n'en ont pas." },
-    "LongTitle": { "traitement": "metadonnee", "occurrences": 36, "note": "Titre intégral. SEULE source de titre pour un RÈGLEMENT (36 = 32 lois + 4 règlements)." },
-    "RunningHead": { "traitement": "ignore", "occurrences": 32, "note": "Titre courant : présentation." },
-    "BillHistory": { "traitement": "ignore", "occurrences": 32 },
-    "Stages": { "traitement": "ignore", "occurrences": 34 },
-    "Date": { "traitement": "metadonnee", "occurrences": 42, "note": "Sous `ConsolidationDate` et `RegistrationDate`. NB : `Identification/ConsolidationDate` et l'attribut `lims:current-date` DIVERGENT d'un jour sur C.R.C. ch. 368 — le SPEC §3.7 tranche pour `lims:current-date`, et on s'y tient." },
-    "MM": { "traitement": "structure", "occurrences": 42 },
-    "DD": { "traitement": "structure", "occurrences": 42 },
-    "ConsolidationDate": { "traitement": "metadonnee", "occurrences": 4 },
-    "RegistrationDate": { "traitement": "metadonnee", "occurrences": 2 },
-    "RegulationMakerOrder": { "traitement": "metadonnee", "occurrences": 2 },
-    "RegulationMaker": { "traitement": "metadonnee", "occurrences": 2 },
-    "OrderNumber": { "traitement": "metadonnee", "occurrences": 2 },
-    "ReaderNote": { "traitement": "metadonnee", "occurrences": 2, "note": "Sous `Identification`. C'est ici que vit l'avis « non en vigueur » de F-29.2 — troisième signal concordant, avec l'absence d'`in-force` sur la racine et le `[Non en vigueur]` du lookup." },
-
-    "Order": { "traitement": "hors_texte", "occurrences": 2, "note": "Décret qui PREND le règlement. Enfant direct de `Regulation`, non classé par le SPEC §3.1.", "justification_juridique": "L'instrument qui édicte n'est pas le texte édicté ; le citer comme une règle serait faux." },
-    "Note": { "traitement": "hors_texte", "occurrences": 6, "note": "Sous `Provision` (4) et `ReaderNote` (2) : note de l'éditeur." },
-
-    "Amendment": { "traitement": "ignore", "occurrences": 199, "note": "Vit UNIQUEMENT sous `RecentAmendments`, que le SPEC §3.1 exclut déjà. Vérifié : aucune occurrence ailleurs." },
-    "AmendmentCitation": { "traitement": "ignore", "occurrences": 199 },
-    "AmendmentDate": { "traitement": "ignore", "occurrences": 199 }
+    "DefinitionEnOnly": {
+      "traitement": "texte",
+      "occurrences": 13,
+      "note": "Terme défini n'existant QUE dans la version anglaise. Asymétrie voulue par le législateur, pas un défaut d'extraction.",
+      "justification_juridique": "Les deux versions font également foi ; un terme propre à l'une ne s'efface pas."
+    },
+    "DefinitionFrOnly": {
+      "traitement": "texte",
+      "occurrences": 5,
+      "note": "Miroir du précédent."
+    },
+    "ContinuedSubparagraph": {
+      "traitement": "texte",
+      "occurrences": 2,
+      "note": "Le SPEC §3.5 nomme `ContinuedSectionSubsection`, `ContinuedParagraph` et `ContinuedDefinition` mais OUBLIE celle-ci. Même famille, même règle : rattacher APRÈS l'énumération qu'elle ferme, sinon la phrase se disloque."
+    },
+    "ReadAsText": {
+      "traitement": "texte",
+      "occurrences": 7,
+      "note": "Texte CITÉ à l'intérieur d'une disposition en vigueur (« est remplacé par ce qui suit : … »). `LIMS2HTML.xsl` le rend en bloc cité. À ne pas confondre avec `AmendedText`, qui est refusé.",
+      "justification_juridique": "Le texte cité fait partie de la disposition citante, laquelle est en vigueur."
+    },
+    "Oath": {
+      "traitement": "texte",
+      "occurrences": 6,
+      "note": "Formule de serment prescrite.",
+      "justification_juridique": "Une formule prescrite par la loi est du texte de la loi."
+    },
+    "Enacts": {
+      "traitement": "texte",
+      "occurrences": 2,
+      "note": "Formule d'édiction, sous `Introduction`."
+    },
+    "Footnote": {
+      "traitement": "texte",
+      "occurrences": 24,
+      "note": "Le SPEC nomme `FootnoteRef` (le renvoi en ligne) mais pas le CONTENU de la note. TRANCHÉ par Jason le 2026-09-11 : ingérée, ÉTIQUETÉE, et rendue À LA FIN de l'article — jamais insérée au fil du texte, où elle romprait la phrase. L'étiquette est un champ obligatoire de `structuredContent` (R4, corollaire structuré, décision 001) : une note servie sans elle se lirait comme du texte de loi.",
+      "justification_juridique": "DÉCIDÉ. L'art. 14 de la Loi d'interprétation (L.R.C. (1985), ch. I-21) exclut du texte les notes marginales et les mentions de textes antérieurs ; il ne nomme PAS les notes en bas de page. Faute d'exclusion légale, la note est rendue — mais distinctement, parce que rien n'affirme qu'elle soit normative.",
+      "rendu": "fin_d_article",
+      "etiquette_obligatoire": "footnotes"
+    },
+    "FormBlank": {
+      "traitement": "texte",
+      "occurrences": 44,
+      "note": "Espace à remplir sur un formulaire prescrit. À rendre par un marqueur stable plutôt que par du vide."
+    },
+    "table": {
+      "traitement": "texte",
+      "occurrences": 74,
+      "note": "CALS. Le SPEC §3.5 exige un « rendu tabulaire propre, PAS d'aplatissement en bouillie »."
+    },
+    "tgroup": {
+      "traitement": "structure",
+      "occurrences": 74
+    },
+    "tbody": {
+      "traitement": "structure",
+      "occurrences": 74
+    },
+    "thead": {
+      "traitement": "structure",
+      "occurrences": 20
+    },
+    "row": {
+      "traitement": "structure",
+      "occurrences": 993
+    },
+    "entry": {
+      "traitement": "texte",
+      "occurrences": 4056,
+      "note": "Cellule. La balise la plus fréquente du corpus."
+    },
+    "colspec": {
+      "traitement": "ignore",
+      "occurrences": 236,
+      "note": "Largeurs de colonnes : présentation."
+    },
+    "title": {
+      "traitement": "texte",
+      "occurrences": 18,
+      "note": "Titre d'un `table` CALS."
+    },
+    "Caption": {
+      "traitement": "texte",
+      "occurrences": 8,
+      "note": "Légende d'un `TableGroup`."
+    },
+    "FormulaGroup": {
+      "traitement": "structure",
+      "occurrences": 8
+    },
+    "Formula": {
+      "traitement": "texte",
+      "occurrences": 8,
+      "note": "Formule de calcul. Elle EST la règle de droit (calcul d'intérêt, de contribution)."
+    },
+    "FormulaText": {
+      "traitement": "texte",
+      "occurrences": 8
+    },
+    "FormulaConnector": {
+      "traitement": "texte",
+      "occurrences": 8,
+      "note": "« où », « that is » — la charnière entre la formule et ses définitions. La perdre rend la formule illisible."
+    },
+    "FormulaDefinition": {
+      "traitement": "texte",
+      "occurrences": 24
+    },
+    "FormulaTerm": {
+      "traitement": "texte",
+      "occurrences": 24
+    },
+    "FormulaParagraph": {
+      "traitement": "texte",
+      "occurrences": 8
+    },
+    "SignatureBlock": {
+      "traitement": "texte",
+      "occurrences": 209,
+      "note": "Bloc de signature d'un formulaire prescrit. Vit sous `Provision` (141) et `entry` (52), donc dans les annexes."
+    },
+    "SignatureName": {
+      "traitement": "texte",
+      "occurrences": 272
+    },
+    "SignatureLine": {
+      "traitement": "texte",
+      "occurrences": 173
+    },
+    "SignatureTitle": {
+      "traitement": "texte",
+      "occurrences": 44
+    },
+    "DocumentInternal": {
+      "traitement": "structure",
+      "occurrences": 8,
+      "note": "Conteneur d'annexe (T-13, D-3.4). C'est l'une des deux imbrications réelles de `Schedule` hors racine."
+    },
+    "Group": {
+      "traitement": "structure",
+      "occurrences": 4
+    },
+    "GroupHeading": {
+      "traitement": "division",
+      "occurrences": 314,
+      "note": "Intertitre interne d'annexe, sous `DocumentInternal`. Produit une division, donc entre dans le chemin positionnel de l'annexe."
+    },
+    "RegulationPiece": {
+      "traitement": "structure",
+      "occurrences": 8,
+      "note": "Déjà dans la liste BLANCHE : `Regulation < Schedule < RegulationPiece` porte 28 articles légitimes. La règle de la note compagnon (« refuser tout ancêtre Schedule ») les aurait perdus."
+    },
+    "BilingualGroup": {
+      "traitement": "hors_texte",
+      "occurrences": 2,
+      "note": "⚠️ VOICI le marqueur bilingue RÉEL, celui que le SPEC §3.8 croyait être `spanlanguages`. Deux occurrences seulement, sous `entry`. C'est LUI qui doit armer l'exclusion de FTS et de Vectorize — pas `spanlanguages`, dont il est mesuré que les 88 annexes du fichier FRANÇAIS contiennent 4 738 mots-outils français contre 1 anglais.",
+      "justification_juridique": "Exclure du plein texte un contenu dont la langue n'est pas celle de la requête évite qu'une recherche française remonte de l'anglais ; le texte reste LISIBLE par get_division."
+    },
+    "BilingualItemFr": {
+      "traitement": "texte",
+      "occurrences": 2
+    },
+    "BilingualItemEn": {
+      "traitement": "texte",
+      "occurrences": 2
+    },
+    "ShortTitle": {
+      "traitement": "metadonnee",
+      "occurrences": 32,
+      "note": "Titre abrégé officiel (`status=\"official\"`). Source de `laws.name_fr`/`name_en` pour une LOI. Les règlements n'en ont pas."
+    },
+    "LongTitle": {
+      "traitement": "metadonnee",
+      "occurrences": 36,
+      "note": "Titre intégral. SEULE source de titre pour un RÈGLEMENT (36 = 32 lois + 4 règlements)."
+    },
+    "RunningHead": {
+      "traitement": "ignore",
+      "occurrences": 32,
+      "note": "Titre courant : présentation."
+    },
+    "BillHistory": {
+      "traitement": "ignore",
+      "occurrences": 32
+    },
+    "Stages": {
+      "traitement": "ignore",
+      "occurrences": 34
+    },
+    "Date": {
+      "traitement": "metadonnee",
+      "occurrences": 42,
+      "note": "Sous `ConsolidationDate` et `RegistrationDate`. NB : `Identification/ConsolidationDate` et l'attribut `lims:current-date` DIVERGENT d'un jour sur C.R.C. ch. 368 — le SPEC §3.7 tranche pour `lims:current-date`, et on s'y tient."
+    },
+    "MM": {
+      "traitement": "structure",
+      "occurrences": 42
+    },
+    "DD": {
+      "traitement": "structure",
+      "occurrences": 42
+    },
+    "ConsolidationDate": {
+      "traitement": "metadonnee",
+      "occurrences": 4
+    },
+    "RegistrationDate": {
+      "traitement": "metadonnee",
+      "occurrences": 2
+    },
+    "RegulationMakerOrder": {
+      "traitement": "metadonnee",
+      "occurrences": 2
+    },
+    "RegulationMaker": {
+      "traitement": "metadonnee",
+      "occurrences": 2
+    },
+    "OrderNumber": {
+      "traitement": "metadonnee",
+      "occurrences": 2
+    },
+    "ReaderNote": {
+      "traitement": "metadonnee",
+      "occurrences": 2,
+      "note": "Sous `Identification`. C'est ici que vit l'avis « non en vigueur » de F-29.2 — troisième signal concordant, avec l'absence d'`in-force` sur la racine et le `[Non en vigueur]` du lookup."
+    },
+    "Order": {
+      "traitement": "hors_texte",
+      "occurrences": 2,
+      "note": "Décret qui PREND le règlement. Enfant direct de `Regulation`, non classé par le SPEC §3.1.",
+      "justification_juridique": "L'instrument qui édicte n'est pas le texte édicté ; le citer comme une règle serait faux."
+    },
+    "Note": {
+      "traitement": "hors_texte",
+      "occurrences": 6,
+      "note": "Sous `Provision` (4) et `ReaderNote` (2) : note de l'éditeur."
+    },
+    "Amendment": {
+      "traitement": "ignore",
+      "occurrences": 199,
+      "note": "Vit UNIQUEMENT sous `RecentAmendments`, que le SPEC §3.1 exclut déjà. Vérifié : aucune occurrence ailleurs."
+    },
+    "AmendmentCitation": {
+      "traitement": "ignore",
+      "occurrences": 199
+    },
+    "AmendmentDate": {
+      "traitement": "ignore",
+      "occurrences": 199
+    }
+  },
+  "_rendu": {
+    "fin_d_article": "Le contenu est rendu APRÈS le texte de l'article, dans un bloc distinct, et l'étiquette nommée par `etiquette_obligatoire` voyage dans `structuredContent`."
   }
 }

@@ -1,5 +1,17 @@
 Copyright © 2026 Jason Poirier Lavoie. Tous droits réservés / All rights reserved.
 
+Le présent avis couvre DEUX objets distincts, soumis à des régimes distincts :
+le LOGICIEL (partie A), propriété du titulaire du droit d'auteur, et les DONNÉES
+LÉGISLATIVES qu'il sert (partie B), qui ne lui appartiennent pas.
+
+This notice covers TWO distinct subjects under distinct regimes: the SOFTWARE
+(Part A), owned by the copyright holder, and the LEGISLATIVE DATA it serves
+(Part B), which it does not own.
+
+================================================================================
+PARTIE A — LE LOGICIEL / PART A — THE SOFTWARE
+================================================================================
+
 --- Version française ---
 
 Le présent logiciel et son code source sont la propriété exclusive du
@@ -30,3 +42,99 @@ of any rights.
 
 This notice is governed by the laws in force in the Province of
 Quebec and the federal laws of Canada applicable therein.
+
+================================================================================
+PARTIE B — LES DONNÉES LÉGISLATIVES / PART B — THE LEGISLATIVE DATA
+================================================================================
+
+La partie A ne s'étend PAS aux textes législatifs servis par ce logiciel, et
+réciproquement : la présente partie B ne concède aucun droit sur le logiciel.
+Aucun droit d'auteur n'est revendiqué sur ces textes.
+
+Part A does NOT extend to the legislative texts served by this software, and
+conversely: this Part B grants no rights in the software. No copyright is
+claimed over those texts.
+
+--------------------------------------------------------------------------------
+B.1 — QUÉBEC : LégisQuébec, Éditeur officiel du Québec
+--------------------------------------------------------------------------------
+
+Les lois et règlements du Québec servis par ce logiciel proviennent des
+publications officielles de LégisQuébec (https://www.legisquebec.gouv.qc.ca),
+publiées par l'Éditeur officiel du Québec, qui en détient les droits.
+
+Le texte est restitué VERBATIM, sans altération. La version officielle demeure
+celle publiée par l'Éditeur officiel du Québec, et c'est elle qui fait foi.
+Ce logiciel n'est pas une publication officielle et n'est ni approuvé ni
+avalisé par l'Éditeur officiel du Québec ni par le gouvernement du Québec.
+
+Quebec statutes and regulations served by this software come from the official
+LégisQuébec publications, published by the Québec Official Publisher, which
+holds the rights therein. The text is reproduced VERBATIM, unaltered. The
+official version remains the one published by the Québec Official Publisher,
+and it is the authoritative one. This software is not an official publication
+and is neither approved nor endorsed by the Québec Official Publisher or the
+Government of Québec.
+
+  ⚠️ Les conditions de reproduction applicables sont celles de LégisQuébec.
+     Elles n'ont pas pu être relevées automatiquement (le site refuse les
+     clients non navigateurs — HTTP 403) et restent à confirmer auprès de
+     l'Éditeur officiel du Québec. La présente mention attribue la source et
+     décline tout caractère officiel ; elle ne prétend pas résumer ces
+     conditions.
+
+--------------------------------------------------------------------------------
+B.2 — CANADA : Licence du gouvernement ouvert – Canada
+--------------------------------------------------------------------------------
+
+Les lois et règlements fédéraux servis par ce logiciel proviennent du dépôt
+« justicecanada/laws-lois-xml » du ministère de la Justice du Canada, diffusé
+sous la Licence du gouvernement ouvert – Canada.
+
+Federal statutes and regulations served by this software come from the
+Department of Justice Canada repository "justicecanada/laws-lois-xml",
+released under the Open Government Licence – Canada.
+
+MENTION D'ATTRIBUTION EXIGÉE PAR LA LICENCE / ATTRIBUTION STATEMENT REQUIRED
+BY THE LICENCE :
+
+  Contient des renseignements visés par la Licence du gouvernement ouvert –
+  Canada.
+  https://ouvert.canada.ca/fr/licence-du-gouvernement-ouvert-canada
+
+  Contains information licensed under the Open Government Licence – Canada.
+  https://open.canada.ca/en/open-government-licence-canada
+
+Conformément à cette licence, aucun droit n'est revendiqué ni exercé sur les
+noms, armoiries, logos ou autres symboles officiels du fournisseur de
+l'information, et rien dans ce dépôt ne doit être interprété comme conférant
+un statut officiel ni comme un aval du fournisseur de l'information.
+
+In accordance with that licence, no right is claimed or exercised in the
+names, crests, logos or other official symbols of the Information Provider,
+and nothing in this repository is to be construed as conferring any official
+status or as an endorsement by the Information Provider.
+
+RÉSERVE PROPRE À LA CODIFICATION FÉDÉRALE :
+
+L'article 31(1) de la Loi sur la révision et la codification des textes
+législatifs (L.R.C. (1985), ch. S-20) réserve la force probante à la
+codification publiée par le ministre. L'article 31(2) fait primer la loi
+d'origine en cas d'incompatibilité. Une codification retraitée par un tiers,
+comme celle servie ici, ne porte donc PAS cette présomption.
+
+Section 31(1) of the Legislation Revision and Consolidation Act (R.S.C. 1985,
+c. S-20) reserves evidentiary weight to the consolidation published by the
+Minister; section 31(2) provides that the original statute prevails in case of
+inconsistency. A consolidation reprocessed by a third party, such as the one
+served here, therefore does NOT carry that presumption.
+
+--------------------------------------------------------------------------------
+B.3 — AUCUN CONSEIL JURIDIQUE / NO LEGAL ADVICE
+--------------------------------------------------------------------------------
+
+Ce logiciel ne fournit aucun conseil juridique. En cas de doute, consulter la
+version officielle auprès de l'éditeur compétent et un professionnel du droit.
+
+This software provides no legal advice. In case of doubt, consult the official
+version from the competent publisher and a legal professional.

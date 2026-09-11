@@ -242,6 +242,15 @@ matière **par raison** (ingéré / refusé, avec le motif), comparé à un gran
 **7.4 Le `Label` doit être aplati.** Un `FootnoteRef` dans le `Label` rend un numéro vide si
 on prend `.text` au lieu du texte complet.
 
+**7.4 bis `Footnote` est rendue, mais À LA FIN et ÉTIQUETÉE.** 24 occurrences. Le SPEC
+nomme `FootnoteRef` (le renvoi en ligne) sans jamais dire ce que devient le CONTENU.
+Tranché : on l'ingère — l'art. 14 de la *Loi d'interprétation* exclut du texte les notes
+marginales et les mentions de textes antérieurs, **pas** les notes en bas de page, et
+faute d'exclusion légale on ne retranche pas. Mais on la rend **après** le texte, dans un
+bloc distinct, avec une étiquette `footnotes` **obligatoire** dans `structuredContent`
+(R4, décision 001) : insérée au fil du texte elle romprait la phrase, et servie sans
+étiquette elle se lirait comme du texte de loi.
+
 **7.5 Les espaces Unicode sont porteurs.** U+00A0, U+2002, U+2009 apparaissent dans les
 `Label` et les textes. À normaliser comme `_norm` le fait déjà.
 
@@ -276,7 +285,8 @@ C.R.C. ch. 368. On retient `lims:current-date`, qui est le « À jour au » affi
 6. **Sérialiser** le texte selon §4 et §7 : `Label` de la `Section` retiré, `Label` internes
    conservés, `Definition` descendue, `Continued*` rattachés après l'énumération,
    `MarginalNote` et `HistoricalNote` sortis dans leurs colonnes, tables CALS rendues
-   tabulairement, espaces Unicode normalisés.
+   tabulairement, espaces Unicode normalisés, **`Footnote` reportée en fin d'article et
+   étiquetée** (§7.4 bis).
 7. **Walker d'annexe distinct** (§6) : le vocabulaire n'est pas celui du `Body`.
 8. **Invariants de non-régression (tests de la phase suivante)** — témoins figés :
    - art. 183 L.F.I. : note marginale « Tribunaux compétents », alinéa (1.1), historique ;
@@ -296,7 +306,7 @@ C.R.C. ch. 368. On retient `lims:current-date`, qui est le « À jour au » affi
 **Tranchées par la mesure :** la polarité d'`in-force` (§5.1) ; l'absence de colonne
 `in_force` par article (§5.1) ; l'isomorphisme FR/EN (§3.1) ; la stabilité du chemin
 positionnel (§3.2) ; le marqueur bilingue réel (§7.6) ; l'espace de noms des numéros
-d'annexe (§6).
+d'annexe (§6) ; le sort des `Footnote` (§7.4 bis).
 
 **Tranchées par Jason le 2026-09-11 :** paramètre `jurisdiction` sur `qclaw_list_laws`,
 implémenté ; numéros d'annexe **préfixés** ; `official_cite_en` rempli pour les **97**
@@ -305,16 +315,13 @@ le retour arrière soit un interrupteur (R8).
 
 **Restant à trancher, et signalé comme tel :**
 
-1. **`Footnote` (24 occurrences) fait-il partie du texte ?** L'art. 14 de la *Loi
-   d'interprétation* ne nomme que les notes marginales et les mentions de textes antérieurs ;
-   il ne dit rien des notes en bas de page. Proposition : ingérer, étiqueté, rendu en fin
-   d'article. **Décision de contenu juridique.**
-2. **Le classement des 54 balises** (`pipeline/expected/lims_tags.json`) est une
+1. **Le classement des 54 balises** (`pipeline/expected/lims_tags.json`) est une
    **PROPOSITION** : le code l'applique, il ne l'a pas tranché. Les entrées portant
    `justification_juridique` sont celles à relire en premier.
-3. **`LICENSE` ne mentionne aucune licence de données tierce** alors que la Licence du
-   gouvernement ouvert – Canada impose une attribution. Hors des cinq surfaces, et hors de
-   ce document, mais à régler avant toute mise en service.
+2. *(clos)* `LICENSE` mentionne désormais les deux sources et porte l'attribution exigée
+   par la Licence du gouvernement ouvert – Canada. La seule réserve subsistante y est
+   inscrite : les conditions de reproduction de LégisQuébec n'ont pas pu être relevées
+   automatiquement (HTTP 403 aux clients non navigateurs) et restent à confirmer.
 
 ---
 
