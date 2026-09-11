@@ -6,7 +6,7 @@ import {
   ArticleJoined, ArticleRow, Lang, LawSummary, StructureNode,
   articlesByNumbers, articlesByRange, articlesInDivision, childDivisions,
   citationOf, consolOf, getArticle, getDivision, getLaw, getStructure,
-  boundKey, breadcrumbChains, headingInOtherLang, lawNames, lawOutlines, listLaws,
+  boundRef, breadcrumbChains, headingInOtherLang, lawNames, lawOutlines, listLaws,
   listSubjects, loadRelevanceData, logSearch, nearestArticles, paginate, parseCitation,
   relatedLaws, searchText, sortKeyOf, translateDivisionPath,
 } from "./lib";
@@ -468,14 +468,15 @@ export function registerTools(server: McpServer, env: Env): void {
       const page = paginate(limit, offset);
       let rows: Partial<ArticleRow>[];
       let total: number;
+      let resolution: "document" | "cle" | null = null;
       if (useRange) {
-        // bornes LUES en base (insensible à l'échelle de sort_key) — cf. boundKey
-        const [k1, k2] = await Promise.all([
-          boundKey(db, law, lang as Lang, from!),
-          boundKey(db, law, lang as Lang, to!),
+        // bornes LUES en base (insensible à l'échelle de sort_key) — cf. boundRef
+        const [b1, b2] = await Promise.all([
+          boundRef(db, law, lang as Lang, from!),
+          boundRef(db, law, lang as Lang, to!),
         ]);
-        const r = await articlesByRange(db, law, lang as Lang, k1, k2, page);
-        rows = r.rows; total = r.total;
+        const r = await articlesByRange(db, law, lang as Lang, b1, b2, page);
+        rows = r.rows; total = r.total; resolution = r.resolution;
       } else {
         rows = await articlesByNumbers(db, law, lang as Lang, numbers!);
         total = rows.length;
@@ -485,6 +486,14 @@ export function registerTools(server: McpServer, env: Env): void {
       return ok(body, {
         law, lang, count: rows.length, total,
         pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
+        // Comment la plage a été bornée. Champ TOUJOURS présent (null hors mode plage) :
+        // « absent » et « borné par le texte » ne doivent pas être confondus.
+        //   'document' — étendue exacte, de la première borne à la seconde, dans l'ordre
+        //                du texte officiel ;
+        //   'cle'      — au moins une borne est ouverte ou désigne un pseudo-article : la
+        //                plage est bornée par la clé de tri, qui n'est pas un ordre total
+        //                et peut donc sur-inclure.
+        range_resolution: resolution,
         articles: rows.map((a) => ({
           number: a.number, text: a.text, history: a.history,
           division_path: a.division_path, repealed: !!a.repealed,

@@ -531,20 +531,47 @@ export async function nearestArticles(
   return rows.map((r) => r.number);
 }
 
+/** Borne de plage résolue : la clé de tri, et l'`id` quand la borne est un article RÉEL. */
+export interface BoundRef {
+  key: number;
+  id: number | null;
+}
+
 /**
- * Clé de tri d'une borne de plage : on la LIT en base quand l'article existe, au lieu de la
- * recalculer. C'est la seule façon d'être insensible à un changement d'échelle de sort_key
+ * Résout une borne de plage. On LIT la clé en base quand l'article existe, au lieu de la
+ * recalculer : c'est la seule façon d'être insensible à un changement d'échelle de sort_key
  * (une divergence entre le pipeline et le serveur vidait silencieusement toutes les plages).
  * Repli sur le calcul si le numéro n'existe pas (borne ouverte, ex. to='9999').
+ *
+ * On rend AUSSI l'`id`, parce que `sort_key` N'EST PAS UN ORDRE TOTAL et que deux articles
+ * distincts peuvent y collisionner — mesuré en production le 2026-09-07 : `15.01` et `15.1`
+ * de ccq-r.8 partagent la clé 15001000000000, `15.02`/`15.2` la 15002000000000, idem
+ * `31.01`/`31.1` et `31.02`/`31.2` dans t-15.01, dans les DEUX langues. Cause : `sort_key`
+ * empaquette `int(composante)`, donc `int("01") === int("1")` — le zéro de tête est perdu.
+ * Conséquence mesurée : `from='15.1' to='15.2'` rendait QUATRE articles, en y ajoutant en
+ * silence 15.01 et 15.02, qui relèvent d'un tout autre chapitre.
+ *
+ * `id` est l'ordre du DOCUMENT à l'intérieur d'un couple (law_id, lang) : `load.prepare`
+ * (pipeline/load.py) attribue `id_base + j` dans l'ordre d'émission du parseur. Vérifié
+ * strictement croissant sur les 48 803 articles réels de la production.
+ *
+ * `id` reste NULL dans deux cas, où la plage retombe alors sur `sort_key` — le comportement
+ * d'origine : (1) borne absente du corpus ; (2) PSEUDO-ARTICLE (préliminaire, annexes), dont
+ * l'`id` ne suit PAS l'ordre du document, l'émission du parseur les plaçant hors de leur
+ * position réelle et de façon variable d'une loi à l'autre (mesuré : dans ccq FR
+ * `préliminaire` précède l'article 1, mais dans b-1-r.3.1 EN il porte l'id de l'article 3
+ * plus un).
  */
-export async function boundKey(
+export async function boundRef(
   db: D1Database, lawId: string, lang: Lang, number: string,
-): Promise<number> {
+): Promise<BoundRef> {
   const row = await db
-    .prepare("SELECT sort_key FROM articles WHERE law_id=? AND lang=? AND number=?")
+    .prepare("SELECT sort_key, id FROM articles WHERE law_id=? AND lang=? AND number=?")
     .bind(lawId, lang, number)
-    .first<{ sort_key: number }>();
-  return row ? row.sort_key : sortKeyOf(number);
+    .first<{ sort_key: number; id: number }>();
+  if (!row) return { key: sortKeyOf(number), id: null };
+  const reel = row.sort_key > 0 && row.sort_key < DISPOSITION_SORT_BASE;
+  return { key: row.sort_key, id: reel ? row.id : null };
 }
 
 /**
@@ -565,10 +592,40 @@ export async function boundKey(
  */
 const ARTICLE_COLS = "id, law_id, lang, number, division_path, text, history, repealed";
 
+/**
+ * Articles d'une plage. DEUX chemins, et la réponse DIT lequel a servi (`resolution`) —
+ * une étiquette qui borne un résultat voyage dans la sortie typée, jamais en prose seule.
+ *
+ * - `"document"` : les deux bornes désignent des articles réels existants. L'étendue est
+ *   celle du TEXTE, de la première borne à la seconde, sur `id`. EXACTE par construction :
+ *   `id` est une clé primaire, donc aucune collision n'est possible — ce que `sort_key` ne
+ *   peut pas garantir (cf. `boundRef`). C'est aussi la bonne sémantique : « de l'article
+ *   15.1 à l'article 15.2 » désigne une étendue de texte, pas un intervalle numérique.
+ * - `"cle"` : au moins une borne est ouverte ou désigne un pseudo-article. Intervalle sur
+ *   `sort_key`, comportement d'origine inchangé. Ce chemin peut sur-inclure si une borne
+ *   inexistante retombe par calcul sur une clé partagée ; c'est pourquoi il est ÉTIQUETÉ.
+ */
 export async function articlesByRange(
-  db: D1Database, lawId: string, lang: Lang, fromKey: number, toKey: number, page: Page,
-): Promise<{ rows: ArticleRow[]; total: number }> {
-  const [lo, hi] = fromKey <= toKey ? [fromKey, toKey] : [toKey, fromKey];
+  db: D1Database, lawId: string, lang: Lang, from: BoundRef, to: BoundRef, page: Page,
+): Promise<{ rows: ArticleRow[]; total: number; resolution: "document" | "cle" }> {
+  if (from.id != null && to.id != null) {
+    const [lo, hi] = from.id <= to.id ? [from.id, to.id] : [to.id, from.id];
+    // Les pseudo-articles dont l'`id` tombe DANS l'intervalle sont exclus : leur position
+    // d'émission n'est pas leur position dans le document (cf. `boundRef`). Sans ce filtre,
+    // une plage 3..4 de b-1-r.3.1 EN ramasserait `préliminaire`.
+    const filtre = `law_id=? AND lang=? AND id BETWEEN ? AND ?`
+      + ` AND sort_key > 0 AND sort_key < ${DISPOSITION_SORT_BASE}`;
+    const total = (await db
+      .prepare(`SELECT COUNT(*) AS n FROM articles WHERE ${filtre}`)
+      .bind(lawId, lang, lo, hi)
+      .first<{ n: number }>())!.n;
+    const rows = (await db
+      .prepare(`SELECT ${ARTICLE_COLS} FROM articles WHERE ${filtre} ORDER BY id LIMIT ? OFFSET ?`)
+      .bind(lawId, lang, lo, hi, page.limit, page.offset)
+      .all<ArticleRow>()).results;
+    return { rows, total, resolution: "document" };
+  }
+  const [lo, hi] = from.key <= to.key ? [from.key, to.key] : [to.key, from.key];
   const total = (await db
     .prepare("SELECT COUNT(*) AS n FROM articles WHERE law_id=? AND lang=? AND sort_key BETWEEN ? AND ?")
     .bind(lawId, lang, lo, hi)
@@ -576,13 +633,15 @@ export async function articlesByRange(
   const rows = (await db
     .prepare(
       // `sort_key` n'est PAS projetée : SQLite trie sur une colonne non projetée sans
-      // difficulté (même patron que articlesInDivision, plus bas).
+      // difficulté (même patron que articlesInDivision, plus bas). Départage par `id` :
+      // sans lui, deux articles à clé identique s'ordonnent au hasard et la pagination
+      // peut en sauter ou en répéter un.
       `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND sort_key BETWEEN ? AND ?
-       ORDER BY sort_key LIMIT ? OFFSET ?`,
+       ORDER BY sort_key, id LIMIT ? OFFSET ?`,
     )
     .bind(lawId, lang, lo, hi, page.limit, page.offset)
     .all<ArticleRow>()).results;
-  return { rows, total };
+  return { rows, total, resolution: "cle" };
 }
 
 export async function articlesByNumbers(
@@ -592,8 +651,10 @@ export async function articlesByNumbers(
   const placeholders = numbers.map(() => "?").join(",");
   const rows = (await db
     .prepare(
+      // Départage par `id` : deux numéros demandés peuvent partager une clé de tri
+      // (cf. `boundRef`), et sans départage leur ordre serait arbitraire.
       `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND number IN (${placeholders})
-       ORDER BY sort_key`,
+       ORDER BY sort_key, id`,
     )
     .bind(lawId, lang, ...numbers)
     .all<ArticleRow>()).results;
@@ -633,8 +694,10 @@ export async function articlesInDivision(
     : "number, division_path, repealed";
   const rows = (await db
     .prepare(
+      // Départage par `id` : la pagination doit être stable même quand deux articles
+      // partagent une clé de tri (cf. `boundRef`).
       `SELECT ${cols} FROM articles WHERE law_id=? AND lang=? AND ${sub}
-       ORDER BY sort_key LIMIT ? OFFSET ?`,
+       ORDER BY sort_key, id LIMIT ? OFFSET ?`,
     )
     .bind(lawId, lang, ...subBinds, page.limit, page.offset)
     .all<Partial<ArticleRow>>()).results;

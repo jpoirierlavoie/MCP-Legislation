@@ -314,6 +314,46 @@ async function smokeTests() {
       `path=${typeof a?.division_path} repealed=${typeof a?.repealed}`);
   }
 
+  // RÉGRESSION mesurée EN PRODUCTION le 2026-09-07 : `articles.sort_key` n'est PAS un ordre
+  // total. Il empaquette `int(composante)`, donc `int("01") === int("1")` — le zéro de tête
+  // est PERDU. Mesuré : `15.01` et `15.1` de ccq-r.8 partageaient la clé 15001000000000,
+  // `15.02`/`15.2` la 15002000000000, et `31.01`/`31.1`, `31.02`/`31.2` de t-15.01 de même,
+  // dans les DEUX langues. Défaut SERVI : `from='15.1' to='15.2'` rendait QUATRE articles,
+  // en y ajoutant 15.01 et 15.02 — qui relèvent d'un tout autre chapitre — sans un mot.
+  // Les plages bornées par deux articles réels passent désormais par l'ordre du DOCUMENT.
+  for (const [law, a, b] of [["ccq-r.8", "15.1", "15.2"], ["t-15.01", "31.1", "31.2"]]) {
+    for (const lang of ["fr", "en"]) {
+      const r = await callTool("qclaw_get_articles", { law, from: a, to: b, lang });
+      const nums = (r.structuredContent?.articles ?? []).map((x) => x.number);
+      add(`get_articles : plage ${law} ${a}..${b} (${lang}) exacte, sans les voisins à clé partagée`,
+        nums.length === 2 && nums[0] === a && nums[1] === b,
+        `rendu : [${nums.join(", ")}]`);
+      add(`get_articles : plage ${law} ${a}..${b} (${lang}) étiquetée 'document'`,
+        r.structuredContent?.range_resolution === "document",
+        `range_resolution=${r.structuredContent?.range_resolution}`);
+    }
+  }
+
+  // L'étiquette borne le résultat, donc elle voyage dans structuredContent en champ
+  // TOUJOURS présent (R4, corollaire structuré, décision 001) : « absent » et « borné par
+  // le texte » ne doivent pas être confondus.
+  {
+    const n = await callTool("qclaw_get_articles", { law: "ccq", numbers: ["1457", "1590"] });
+    add("get_articles : range_resolution présent et null en mode numbers[]",
+      "range_resolution" in (n.structuredContent ?? {}) && n.structuredContent.range_resolution === null,
+      `range_resolution=${JSON.stringify(n.structuredContent?.range_resolution)}`);
+    const o = await callTool("qclaw_get_articles", { law: "ccq", from: "1", to: "9999" });
+    add("get_articles : borne ouverte étiquetée 'cle' (repli sur la clé de tri)",
+      o.structuredContent?.range_resolution === "cle",
+      `range_resolution=${o.structuredContent?.range_resolution}`);
+    // Un pseudo-article comme borne retombe aussi sur la clé : son `id` ne suit pas
+    // l'ordre du document (l'émission du parseur le place hors de sa position réelle).
+    const p = await callTool("qclaw_get_articles", { law: "ccq", from: "préliminaire", to: "3" });
+    add("get_articles : pseudo-article en borne étiqueté 'cle'",
+      p.structuredContent?.range_resolution === "cle",
+      `range_resolution=${p.structuredContent?.range_resolution}`);
+  }
+
   // Un article ABROGÉ rendu comme en vigueur est le pire défaut possible ici, et il serait
   // parfaitement silencieux : `!!undefined === false`, donc une colonne `repealed` perdue
   // ferait disparaître la mention sans erreur. On l'exerce sur un article réellement abrogé.

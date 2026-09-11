@@ -33,6 +33,7 @@ jobs:
       - run: node --test scripts/check-consolidation.test.mjs
       - run: node --test tests/catalogue.test.mjs # garde anti-dérive de la documentation (R10)
       - run: node --test tests/page-client.test.mjs # comportement du JS client de la page
+      - run: node --test tests/ranges.test.mjs # mode plage : sort_key n'est pas un ordre total
 
       # INVARIANT 1 : l'ordre de laws.config.json porte les plages d'id. Le réordonner
       # fait écraser les articles d'autres lois à la prochaine ingestion, EN SILENCE.

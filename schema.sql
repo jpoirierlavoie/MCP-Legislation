@@ -41,6 +41,25 @@ CREATE TABLE articles (
   -- invariant 2. Ce commentaire a décrit pendant longtemps une TROISIÈME échelle
   -- (n*10^6+d1*10^3+d2) qui n'a jamais existé nulle part : qui vérifiait le miroir
   -- contre le schéma concluait que LES DEUX côtés étaient faux.
+  --
+  -- ⚠️ CETTE CLÉ N'EST PAS UN ORDRE TOTAL, et ne peut pas l'être. L'empaquetage applique
+  -- `int(composante)`, donc `int("01") == int("1")` : le zéro de tête est PERDU et deux
+  -- articles distincts peuvent partager une clé. Mesuré en production le 2026-09-07 :
+  -- 8 collisions (ccq-r.8 « 15.01 »≡« 15.1 » et « 15.02 »≡« 15.2 » ; t-15.01
+  -- « 31.01 »≡« 31.1 » et « 31.02 »≡« 31.2 », dans les DEUX langues) et 178 articles
+  -- portant une composante à zéro de tête.
+  --
+  -- Aucune arithmétique ne répare cela : le corpus exige À LA FOIS « 199.1 < 199.10 »
+  -- (lecture ordinale) et « 1.022 < 1.03 » (lecture fractionnaire, ordre du document de
+  -- b-1.1-r.2). Une lecture fractionnaire fait passer les collisions de 8 à 484 (mesuré).
+  -- Donc : NE PAS « corriger » cette échelle en croyant en faire un ordre total.
+  --
+  -- L'ordre EXACT du texte est `articles.id` à l'intérieur d'un couple (law_id, lang) :
+  -- pipeline/load.py attribue `id_base + j` dans l'ordre d'émission du parseur. C'est lui
+  -- que le mode plage de qclaw_get_articles emploie quand ses deux bornes désignent des
+  -- articles réels (cf. boundRef / articlesByRange, src/lib.ts). ATTENTION : cela ne vaut
+  -- PAS pour les pseudo-articles (préliminaire, annexes), dont l'id ne suit pas l'ordre du
+  -- document. `sort_key` reste la clé de tri d'affichage et de voisinage.
   sort_key      INTEGER NOT NULL,
   division_id   INTEGER REFERENCES divisions(id),
   division_path TEXT NOT NULL,              -- id Irosoft de la division feuille (dénormalisé)

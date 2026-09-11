@@ -91,8 +91,12 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
   if (kind === "articles") {
     const rows = (await db
       .prepare(
+        // Départage par `id` : le rattrapage pagine par LIMIT/OFFSET, or deux articles
+        // peuvent partager une clé de tri (cf. `boundRef` dans src/lib.ts). Sans ordre
+        // total, un lot pouvait sauter un article ou en embarquer deux fois — invisible
+        // depuis l'API, puisque seul le compte `embedded` est rendu.
         `SELECT number, division_path, text FROM articles
-         WHERE law_id = ? AND lang = 'fr' ORDER BY sort_key LIMIT ? OFFSET ?`,
+         WHERE law_id = ? AND lang = 'fr' ORDER BY sort_key, id LIMIT ? OFFSET ?`,
       )
       .bind(law, count, offset)
       .all<{ number: string; division_path: string; text: string }>()).results;
