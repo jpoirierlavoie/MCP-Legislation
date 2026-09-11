@@ -244,7 +244,7 @@ export function registerTools(server: McpServer, env: Env): void {
     },
     async ({ lang }) => {
       const en = lang === "en";
-      const subs = await listSubjects(db);
+      const subs = await listSubjects(db, env);
       if (subs.length === 0) return err("Aucune matière chargée (taxonomie absente).");
       const KIND: Record<string, string> = en
         ? { "prive-ccq": "Private law (C.C.Q.)", specialise: "Specialized areas" }
@@ -297,11 +297,11 @@ export function registerTools(server: McpServer, env: Env): void {
     },
     async ({ law, rel_type, direction, limit, lang }) => {
       const L = REL_LABEL[lang as Lang] ?? REL_LABEL.fr;
-      if (!(await getLaw(db, law))) {
+      if (!(await getLaw(db, law, env))) {
         const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
         return err(`${L.inconnue(law)} ${L.dispo} ${all || L.aucune}.`);
       }
-      const all = await relatedLaws(db, law, rel_type, direction, lang as Lang);
+      const all = await relatedLaws(db, law, rel_type, direction, lang as Lang, env);
       if (all.length === 0) {
         return err(
           `${L.aucuneRel(law)}` +
@@ -367,7 +367,7 @@ export function registerTools(server: McpServer, env: Env): void {
           "(ex. « bail de logement », « congédiement »), ou consultez qclaw_list_subjects.",
         );
       }
-      const data = await loadRelevanceData(db, tokens, lang as Lang);
+      const data = await loadRelevanceData(db, tokens, lang as Lang, env);
       const cands = rank({ tokens, ...data }, page.limit);
       await logSearch(db, {
         tool: "find_relevant", query, lang, result_count: cands.length,
@@ -419,7 +419,7 @@ export function registerTools(server: McpServer, env: Env): void {
       annotations: READONLY,
     },
     async ({ law, article, lang }) => {
-      const lawRow = await getLaw(db, law);
+      const lawRow = await getLaw(db, law, env);
       if (!lawRow) {
         const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
         return err(`Loi '${law}' inconnue. Lois disponibles : ${all || "aucune"}.`);
@@ -464,7 +464,7 @@ export function registerTools(server: McpServer, env: Env): void {
       annotations: READONLY,
     },
     async ({ law, from, to, numbers, lang, limit, offset }) => {
-      if (!(await getLaw(db, law))) return err(`Loi '${law}' inconnue.`);
+      if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       const useRange = from != null && to != null;
       if (!useRange && !(numbers && numbers.length)) {
         return err("Fournir soit (from ET to), soit numbers[].");
@@ -525,7 +525,7 @@ export function registerTools(server: McpServer, env: Env): void {
       annotations: READONLY,
     },
     async ({ law, lang, root_path, depth }) => {
-      if (!(await getLaw(db, law))) return err(`Loi '${law}' inconnue.`);
+      if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       const d = depth ?? 2;
       let tree = await getStructure(db, law, lang as Lang, root_path, d);
       if (tree.length === 0 && root_path) {
@@ -567,7 +567,7 @@ export function registerTools(server: McpServer, env: Env): void {
       annotations: READONLY,
     },
     async ({ law, path, division_id, lang, include_text, limit, offset }) => {
-      if (!(await getLaw(db, law))) return err(`Loi '${law}' inconnue.`);
+      if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       if (path == null && division_id == null) return err("Fournir path ou division_id.");
       let div = await getDivision(db, law, lang as Lang, { path, id: division_id });
       if (!div && path) {
@@ -635,7 +635,7 @@ export function registerTools(server: McpServer, env: Env): void {
       annotations: READONLY,
     },
     async ({ query, law, lang, limit, offset }) => {
-      if (law && !(await getLaw(db, law))) return err(`Loi '${law}' inconnue.`);
+      if (law && !(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       // Recherche corpus : viser 12-15 résultats (1.3) ; restreinte : 10 comme avant.
       const page = paginate(limit, offset, law ? 10 : 14, 50);
       let res;
@@ -648,6 +648,9 @@ export function registerTools(server: McpServer, env: Env): void {
         res = await searchText(db, query, lang as Lang, law, fetchPage, {
           relax: flags.RELAX_SEARCH !== "0",
           vector: flags.HYBRID_SEARCH === "1" ? { ai: env.AI, index: env.VECTORS } : undefined,
+          // FEDERAL_CORPUS : sans ce passage, la recherche plein texte servait des
+          // résultats fédéraux pendant que `list_laws` annonçait 79 lois — mesuré.
+          env,
         });
         if (!law) {
           const perLaw = new Map<string, number>();
@@ -794,7 +797,7 @@ export function registerTools(server: McpServer, env: Env): void {
         const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
         return err(`Référence « ${citation} » non résolue (loi ${law}, art. ${article}). Proches : ${near.join(", ")}.`);
       }
-      const lawRow = await getLaw(db, law);
+      const lawRow = await getLaw(db, law, env);
       // `parseCitation` n'a reconnu `law` que parmi les lois LUES en base, donc lawRow
       // existe ; le garde est là pour le type, pas pour un cas réel.
       if (!lawRow) return err(`Loi '${law}' inconnue.`);

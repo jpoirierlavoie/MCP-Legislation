@@ -17,7 +17,7 @@
 
 import catalogue from "../catalogue.json";
 import config from "../laws.config.json";
-import { LawSummary, SubjectSummary, citeOf, listLaws, listSubjects } from "./lib";
+import { LawSummary, SubjectSummary, citeOf, listLaws, listSubjects, masqueLawId } from "./lib";
 import {
   MAX_PER_SUBJECT, MAX_SUFFIX, RRF_K, SEMANTIC_MIN_SCORE, SPECIFIC_TOKEN_FACTOR,
   SPECIFIC_TOKEN_MAX_REACH, VECTOR_TOP_K, WEIGHTS,
@@ -99,15 +99,37 @@ function h2(id: SectionId): string {
 
 // --- document ----------------------------------------------------------------
 
-export async function renderSite(db: D1Database): Promise<string> {
+/**
+ * `env` est passé À DESSEIN, et les quatre sources sont masquées ENSEMBLE.
+ *
+ * Mesuré en production le 2026-09-11, interrupteur FERMÉ : la page annonçait « 79 lois » et
+ * « 49 277 articles ». Les 22 articles en trop sont ceux d'`ca-i-15` dans les deux langues —
+ * un texte que la page ne liste pas et qu'aucun outil ne sert. Après les 17 textes restants,
+ * l'écart passait à ~6 800. C'est la dérive R10 exacte : un fait vivant, faux, silencieux.
+ *
+ * Et `subject_map` non masqué produisait la même divergence en petit : `matieres` rend le
+ * décompte depuis `parMatiere` (non masqué) et la liste depuis `parId` (masqué), donc une
+ * matière aurait affiché « (8) » au-dessus de sept lois.
+ *
+ * Le masque suit l'interrupteur dans les DEUX sens : fermé, la page dit 79 ; ouvert, elle
+ * dira 97 sans qu'on y revienne. Coder le masque en dur aurait sous-déclaré 79 sur 97 au
+ * premier flip. La PROSE de la page (« Lois du Québec », facette de juridiction) reste la
+ * surface 5 de la phase 7 ; seuls les DÉCOMPTES sont corrigés ici, parce qu'un décompte se
+ * calcule et ne se recopie pas.
+ */
+export async function renderSite(
+  db: D1Database, env: { FEDERAL_CORPUS?: string } = {},
+): Promise<string> {
   // lang="fr" DÉLIBÉRÉMENT : listLaws en "en" déclenche translatePaths par loi (N+1) pour
   // un bénéfice nul — la ligne `laws` porte déjà name_fr ET name_en, consol_date_fr ET _en.
   const [laws, subjects, map, counts] = await Promise.all([
-    listLaws(db, {}, "fr"),
-    listSubjects(db),
-    db.prepare("SELECT subject_id, law_id FROM subject_map")
+    listLaws(db, {}, "fr", env),
+    listSubjects(db, env),
+    db.prepare(`SELECT subject_id, law_id FROM subject_map WHERE 1=1 ${masqueLawId(env, "law_id")}`)
       .all<{ subject_id: string; law_id: string }>(),
-    db.prepare("SELECT lang, COUNT(*) AS n FROM articles GROUP BY lang")
+    db.prepare(
+      `SELECT lang, COUNT(*) AS n FROM articles WHERE 1=1 ${masqueLawId(env, "law_id")} GROUP BY lang`,
+    )
       .all<{ lang: string; n: number }>(),
   ]);
 

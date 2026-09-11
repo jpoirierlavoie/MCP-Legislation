@@ -66,7 +66,7 @@ async function servePage(request: Request, env: Env, ctx: ExecutionContext): Pro
       ? new Response(null, { status: cached.status, headers: cached.headers })
       : cached;
   }
-  const html = await renderSite(env.DB);
+  const html = await renderSite(env.DB, env);
   const res = new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",

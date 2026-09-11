@@ -205,8 +205,59 @@ export function paginate(limit?: number, offset?: number, def = 50, max = 200): 
 
 // --- requêtes -----------------------------------------------------------------
 
-export async function getLaw(db: D1Database, lawId: string): Promise<LawRow | null> {
-  return db.prepare("SELECT * FROM laws WHERE id = ?").bind(lawId).first<LawRow>();
+/**
+ * Une loi par son id, MASQUE COMPRIS.
+ *
+ * C'est le POINT D'ÉTRANGLEMENT de l'interrupteur : presque tous les outils appellent
+ * `getLaw` en garde et refusent « Loi inconnue » si elle rend `null`. Masquer ici ferme donc
+ * d'un coup `get_article`, `get_articles`, `get_structure`, `get_division` et
+ * `related_laws`.
+ *
+ * ⚠️ POURQUOI CE PARAMÈTRE EXISTE. Mesuré en production le 2026-09-11, juste après
+ * l'ingestion du premier texte fédéral : le masque n'était posé que dans `listLaws`.
+ * Résultat — `list_laws` rendait bien 79 lois et zéro texte `ca-*`, mais
+ * `get_article(law='ca-i-15', article='2')` SERVAIT l'article, et `search_text` rendait
+ * 3 résultats fédéraux. Un interrupteur qui ne ferme qu'une porte sur cinq est PIRE que pas
+ * d'interrupteur : il donne l'apparence du contrôle. La carte du corpus disait 79 pendant
+ * que quatre autres portes servaient du fédéral.
+ */
+export async function getLaw(
+  db: D1Database, lawId: string, env: { FEDERAL_CORPUS?: string } = {},
+): Promise<LawRow | null> {
+  const masque = federalOuvert(env) ? "" : " AND jurisdiction = 'qc'";
+  return db.prepare(`SELECT * FROM laws WHERE id = ?${masque}`).bind(lawId).first<LawRow>();
+}
+
+/**
+ * Clause de masquage pour une colonne portant un `law_id` (FTS, subject_map, relations…).
+ * Vide quand l'interrupteur est ouvert.
+ */
+export function masqueLawId(env: { FEDERAL_CORPUS?: string }, col: string): string {
+  return federalOuvert(env)
+    ? ""
+    : `AND ${col} IN (SELECT id FROM laws WHERE jurisdiction = 'qc')`;
+}
+
+/**
+ * Masquage de l'AUTRE EXTRÉMITÉ d'une relation — et c'est un prédicat DIFFÉRENT de
+ * `masqueLawId`, pas une variante de style.
+ *
+ * `law_relations` porte des arêtes vers des textes HORS corpus (`in_corpus = 0`), qui n'ont
+ * aucune ligne dans `laws`. Le `IN (SELECT id FROM laws …)` de `masqueLawId` les supprimerait
+ * toutes — ce serait une régression québécoise causée par l'interrupteur fédéral. On exige
+ * donc l'inverse : on ne retire une arête que si son autre bout est une loi PRÉSENTE en base
+ * et NON québécoise.
+ *
+ * Mesuré en production le 2026-09-11 : 0 arête concernée aujourd'hui, parce que
+ * `discovery/relations.py` n'a pas encore été rejoué depuis l'ingestion d'`ca-i-15`. Ce
+ * masque est donc bit pour bit neutre aujourd'hui, et c'est la PROCHAINE étape de la phase 4
+ * qui l'arme. « Comme si le texte n'était pas chargé » veut dire ici que l'arête n'existe
+ * pas : avant l'ingestion, aucune arête ne référençait un id `ca-*`.
+ */
+export function masqueAutreBout(env: { FEDERAL_CORPUS?: string }, col: string): string {
+  return federalOuvert(env)
+    ? ""
+    : `AND NOT EXISTS (SELECT 1 FROM laws WHERE id = ${col} AND jurisdiction <> 'qc')`;
 }
 
 export interface MappedDivision {
@@ -247,6 +298,27 @@ export interface LawFilters {
  *
  * Fermé par défaut à dessein : un déploiement qui oublierait la variable ne sert rien de
  * neuf, au lieu de tout servir d'un coup.
+ *
+ * ⚠️ CE QUE L'INTERRUPTEUR NE PEUT PAS FAIRE — mesuré le 2026-09-11, à ne pas réapprendre.
+ *
+ * Il cache les DOCUMENTS fédéraux des résultats. Il ne défait PAS leur effet sur les
+ * statistiques de `bm25()`, qui sont GLOBALES à l'index fts5 : nombre de documents et
+ * longueur moyenne. Une clause WHERE filtre APRÈS le score, elle ne change pas les
+ * statistiques qui l'ont produit. Donc ingérer un texte fédéral déplace, d'un cheveu, le
+ * score de TOUTES les requêtes — y compris celles bornées à une loi québécoise.
+ *
+ * Constaté sur le cas d'éval 15 (« clause non-concurrence fin d'emploi », borné à `ccq`)
+ * après l'ingestion d'`ca-i-15`, soit 22 documents de plus sur 49 255 (+0,045 %) : le 10e
+ * rang est passé de `ccq|2402` à `ccq|2096`. Ces deux articles sont séparés de
+ * **3,4 × 10⁻³**, soit 0,03 % de leur bm25 — une égalité de fait, que le moindre décalage
+ * de statistiques fait basculer. Stable sur trois passes : ce n'est pas du bruit de mesure.
+ *
+ * CONSÉQUENCE POUR LA PORTE D'ÉVAL. « Identique bit pour bit à la baseline d'avant le
+ * fédéral » devient INATTEIGNABLE dès la première ingestion, interrupteur fermé ou non. La
+ * porte à tenir est donc : `recall_at_10`, `mrr`, `first_rank` et `must_found` inchangés cas
+ * par cas — et les permutations de la QUEUE du top-10 entre scores quasi ex æquo examinées,
+ * puis expliquées, jamais ignorées. Les 17 textes restants ajoutent ~6 800 articles (+13,8 %),
+ * donc ces bascules seront plus fréquentes, pas moins.
  */
 export function federalOuvert(env: { FEDERAL_CORPUS?: string }): boolean {
   return env.FEDERAL_CORPUS === "1";
@@ -529,14 +601,22 @@ export interface SubjectSummary {
   divisions_count: number;
 }
 
-export async function listSubjects(db: D1Database): Promise<SubjectSummary[]> {
+export async function listSubjects(
+  db: D1Database, env: { FEDERAL_CORPUS?: string } = {},
+): Promise<SubjectSummary[]> {
+  // Le masque va dans le ON du LEFT JOIN, PAS dans le WHERE : au WHERE, une matière mappée
+  // uniquement à des textes masqués DISPARAÎTRAIT de la taxonomie, alors qu'au ON elle reste
+  // listée avec un décompte de 0 — ce qui est vrai (« rien de servable ici ») au lieu d'être
+  // absent. `laws_count` est un fait VIVANT (R10) : non masqué, il annoncerait « 8 lois » pour
+  // une matière dont `list_laws` n'en rend que 6, sans qu'aucun test ne le voie.
+  const m = masqueLawId(env, "sm.law_id");
   return (await db
     .prepare(
       `SELECT s.id, s.label_fr, s.label_en, s.kind, s.description_fr, s.description_en,
               COUNT(DISTINCT sm.law_id) AS laws_count,
               COALESCE(SUM(CASE WHEN sm.division_path <> '' THEN 1 ELSE 0 END), 0) AS divisions_count
        FROM subjects s
-       LEFT JOIN subject_map sm ON sm.subject_id = s.id
+       LEFT JOIN subject_map sm ON sm.subject_id = s.id ${m}
        GROUP BY s.id, s.label_fr, s.label_en, s.kind, s.description_fr, s.description_en
        ORDER BY s.kind, s.id`,
     )
@@ -564,20 +644,25 @@ export interface RelationEdge extends RelationRow {
 
 export async function relatedLaws(
   db: D1Database, lawId: string, relType: string | undefined, direction: "out" | "in" | "both",
-  lang: Lang = "fr",
+  lang: Lang = "fr", env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<RelationEdge[]> {
   const typeClause = relType ? "AND rel_type = ?" : "";
+  // Le bout SUJET est déjà gardé : `qclaw_related_laws` passe par `getLaw(db, law, env)` et
+  // refuse avant d'arriver ici. C'est l'AUTRE bout qui fuyait — une arête vers un texte
+  // fédéral serait rendue avec `in_corpus = 1` et son nom résolu, donc le modèle irait
+  // appeler `get_article` dessus et se ferait refuser. Servir une piste qu'on refuse ensuite
+  // est pire que ne pas la servir.
   const edges: RelationEdge[] = [];
   if (direction === "out" || direction === "both") {
     const rows = (await db
-      .prepare(`SELECT * FROM law_relations WHERE from_law_id = ? ${typeClause}`)
+      .prepare(`SELECT * FROM law_relations WHERE from_law_id = ? ${typeClause} ${masqueAutreBout(env, "to_law_id")}`)
       .bind(...(relType ? [lawId, relType] : [lawId]))
       .all<RelationRow>()).results;
     edges.push(...rows.map((r) => ({ ...r, direction: "out" as const, other_id: r.to_law_id, other_name: null })));
   }
   if (direction === "in" || direction === "both") {
     const rows = (await db
-      .prepare(`SELECT * FROM law_relations WHERE to_law_id = ? ${typeClause}`)
+      .prepare(`SELECT * FROM law_relations WHERE to_law_id = ? ${typeClause} ${masqueAutreBout(env, "from_law_id")}`)
       .bind(...(relType ? [lawId, relType] : [lawId]))
       .all<RelationRow>()).results;
     edges.push(...rows.map((r) => ({ ...r, direction: "in" as const, other_id: r.from_law_id, other_name: null })));
@@ -585,10 +670,16 @@ export async function relatedLaws(
   // Noms des extrémités présentes au corpus, DANS LA LANGUE DEMANDÉE. `name_en` est
   // NOT NULL (schema.sql) ; le repli sur le français ne sert donc qu'en cas de ligne
   // anormale, mais il évite de rendre un nom vide si la base diverge du schéma.
+  // Le masque est répété ici À DESSEIN : si une arête fédérale survivait au filtre ci-dessus,
+  // son nom ne se résoudrait pas pour autant. Deux verrous coûtent une sous-requête ; un seul
+  // verrou coûte un nom de loi servi par un outil qui la déclare invisible.
   const ids = [...new Set(edges.filter((e) => e.in_corpus).map((e) => e.other_id))];
   if (ids.length) {
     const rows = (await db
-      .prepare(`SELECT id, name_fr, name_en FROM laws WHERE id IN (${ids.map(() => "?").join(",")})`)
+      .prepare(
+        `SELECT id, name_fr, name_en FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) ` +
+        `${masqueLawId(env, "id")}`,
+      )
       .bind(...ids)
       .all<{ id: string; name_fr: string; name_en: string | null }>()).results;
     const byId = new Map(rows.map((r) => [r.id, (lang === "en" ? r.name_en : r.name_fr) || r.name_fr]));
@@ -987,18 +1078,24 @@ export interface RelevanceData {
  * PRÉFILTRÉES en SQL par sous-chaîne ; l'ancrage au début de mot se fait ensuite en mémoire.
  */
 export async function loadRelevanceData(
-  db: D1Database, tokens: string[], lang: Lang,
+  db: D1Database, tokens: string[], lang: Lang, env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<RelevanceData> {
+  // Le masque de l'interrupteur, posé sur CHAQUE source du routeur. `find_relevant` ne
+  // passe par aucun `getLaw`, donc le point d'étranglement ne le couvre pas : mesuré, il
+  // rendait des candidats fédéraux pendant que `list_laws` annonçait 79 lois.
+  const mLaw = masqueLawId(env, "law_id");
+  const mId = federalOuvert(env) ? "" : "WHERE jurisdiction = 'qc'";
+  const mFrom = masqueLawId(env, "from_law_id");
   const [subjects, subjectMap, laws, relations] = await Promise.all([
     db.prepare("SELECT id, label_fr, label_en, label_norm, description_fr, description_en FROM subjects")
       .all<{ id: string; label_fr: string; label_en: string | null; label_norm: string;
              description_fr: string | null; description_en: string | null }>(),
-    db.prepare("SELECT subject_id, law_id, division_path FROM subject_map").all<SubjectMapLite>(),
-    db.prepare("SELECT id, name_fr, name_en, name_norm FROM laws")
+    db.prepare(`SELECT subject_id, law_id, division_path FROM subject_map WHERE 1=1 ${mLaw}`).all<SubjectMapLite>(),
+    db.prepare(`SELECT id, name_fr, name_en, name_norm FROM laws ${mId}`)
       .all<{ id: string; name_fr: string; name_en: string; name_norm: string | null }>(),
     db.prepare(
-      "SELECT from_law_id, to_law_id, rel_type, source, in_corpus, note FROM law_relations " +
-      "WHERE source = 'cure' OR rel_type = 'reglement-de'",
+      `SELECT from_law_id, to_law_id, rel_type, source, in_corpus, note FROM law_relations ` +
+      `WHERE (source = 'cure' OR rel_type = 'reglement-de') ${mFrom}`,
     ).all<RelationLite>(),
   ]);
 
@@ -1008,7 +1105,7 @@ export async function loadRelevanceData(
     divisions = (await db
       .prepare(
         `SELECT law_id, path, heading, heading_norm FROM divisions
-         WHERE lang = ? AND heading_norm IS NOT NULL AND (${ors}) LIMIT ?`,
+         WHERE lang = ? AND heading_norm IS NOT NULL AND (${ors}) ${mLaw} LIMIT ?`,
       )
       .bind(lang, ...tokens.map((t) => `%${t}%`), DIVISION_PREFILTER_LIMIT)
       .all<DivisionLite>()).results;
@@ -1261,7 +1358,7 @@ interface MatchScope {
 
 async function runMatch(
   db: D1Database, match: string, lang: Lang, scope: MatchScope, page: Page,
-  withScore = false,
+  withScore = false, env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<{ hits: SearchHit[]; total: number }> {
   const clauses: string[] = [];
   // MATCH BORNÉ À LA COLONNE `text`, et c'est une décision de calibration, pas un détail.
@@ -1280,6 +1377,19 @@ async function runMatch(
   const binds: unknown[] = [`{text} : (${match})`, lang];
   if (scope.law) { clauses.push("AND articles_fts.law_id = ?"); binds.push(scope.law); }
   if (scope.notLaw) { clauses.push("AND articles_fts.law_id <> ?"); binds.push(scope.notLaw); }
+  // `articles_fts` ne porte PAS de colonne `jurisdiction` (et lui en ajouter une exigerait
+  // de recréer la table), donc le masque passe par une sous-requête sur `laws`.
+  //
+  // POSÉ INCONDITIONNELLEMENT, y compris quand `scope.law` borne déjà la recherche — où il
+  // est effectivement redondant, `src/tools.ts` ayant déjà fait `getLaw(db, law, env)`.
+  //
+  // J'ai essayé de ne le poser que sur les barreaux non bornés, en croyant qu'il déplaçait
+  // l'ordre d'un cas d'éval. C'ÉTAIT FAUX, et la mesure l'a dit (voir ci-dessous). Il reste
+  // donc entier : la fuite que ce masque referme était née exactement du raisonnement
+  // « c'est déjà garanti en amont », et une sous-requête indexée ne se paie pas au prix
+  // d'un second verrou dans un outil juridique.
+  const m = masqueLawId(env, "articles_fts.law_id");
+  if (m) clauses.push(m);
   const where = `articles_fts MATCH ? AND articles_fts.lang = ? ${clauses.join(" ")}`;
   const totalRow = await db
     .prepare(`SELECT COUNT(*) AS n FROM articles_fts WHERE ${where}`)
@@ -1362,6 +1472,49 @@ async function queryVectors(
   }
 }
 
+/**
+ * L'INTERRUPTEUR APPLIQUÉ AU CANAL VECTORIEL — la porte que le masque D1 ne peut PAS fermer.
+ *
+ * `queryVectors` lit `md.law` dans les métadonnées de Vectorize, pas dans D1 : aucune clause
+ * WHERE ne l'atteint. Et les deux sorties ne fuient pas de la même façon. `arts` est
+ * rematérialisée en base, donc un masque en aval la rattraperait ; `divs` est servie
+ * DIRECTEMENT (`law_id`, `path`, `heading` viennent des métadonnées) et n'est jamais
+ * rematérialisée — un intitulé de division fédérale serait rendu tel quel.
+ *
+ * Filtrer ici plutôt qu'en aval a une seconde raison, moins visible : un résultat fédéral
+ * qui entre dans la fusion RRF OCCUPE UN RANG, et déplace donc un résultat québécois même si
+ * son texte n'est jamais rendu. Écarté après la fusion, il aurait dégradé le classement sans
+ * apparaître nulle part.
+ *
+ * Aucun vecteur fédéral n'existe aujourd'hui (le backfill n'a pas tourné depuis l'ingestion
+ * d'`ca-i-15`), donc ce filtre est neutre — mais c'est la phase 6 qui les posera, et la vraie
+ * garde d'alors est l'index de métadonnées `jurisdiction` déclaré AVANT le premier upsert
+ * (invariant 8 : ces index ne sont pas rétroactifs). Ce filtre-ci reste le filet du cas où
+ * l'ordre serait manqué.
+ *
+ * Coût nul dans l'état visé : interrupteur ouvert, on rend `vec` sans toucher à D1.
+ */
+async function filtreVecteurs(
+  db: D1Database, vec: VectorHits | null, env: { FEDERAL_CORPUS?: string },
+): Promise<VectorHits | null> {
+  if (!vec || federalOuvert(env)) return vec;
+  const ids = [...new Set([...vec.arts.map((a) => a.law), ...vec.divs.map((d) => d.law_id)])];
+  if (!ids.length) return vec;
+  const rows = (await db
+    .prepare(
+      `SELECT id FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) AND jurisdiction = 'qc'`,
+    )
+    .bind(...ids)
+    .all<{ id: string }>()).results;
+  // Liste BLANCHE : un id absent de `laws` (vecteur périmé) est écarté lui aussi, plutôt que
+  // toléré par défaut. C'est le même choix que la liste blanche d'ancêtres du parseur.
+  const permis = new Set(rows.map((r) => r.id));
+  return {
+    arts: vec.arts.filter((a) => permis.has(a.law)),
+    divs: vec.divs.filter((d) => permis.has(d.law_id)),
+  };
+}
+
 /** Matérialise des (law, number) en SearchHit dans la LANGUE DEMANDÉE (extrait ~240 car.). */
 async function articleBriefs(
   db: D1Database, lang: Lang, keys: string[],
@@ -1432,8 +1585,9 @@ async function fuseHybrid(
 
 export async function searchText(
   db: D1Database, query: string, lang: Lang, lawId: string | undefined, page: Page,
-  opts: { relax?: boolean; vector?: VectorBackend } = {},
+  opts: { relax?: boolean; vector?: VectorBackend; env?: { FEDERAL_CORPUS?: string } } = {},
 ): Promise<SearchOutcome> {
+  const env = opts.env ?? {};
   const match = toFtsQuery(query);
   if (!match) return { hits: [], total: 0, fallback: null, elsewhere: null };
   const scope: MatchScope = lawId ? { law: lawId } : {};
@@ -1443,10 +1597,12 @@ export async function searchText(
   // (une liste fusionnée ne se pagine pas).
   const useVector = !!opts.vector && page.offset === 0;
   const [exact, qVec] = await Promise.all([
-    runMatch(db, match, lang, scope, page),
+    runMatch(db, match, lang, scope, page, false, env),
     useVector ? embedQuery(opts.vector!, query) : Promise.resolve(null),
   ]);
-  const vec = qVec ? await queryVectors(opts.vector!, qVec, lawId) : null;
+  const vec = await filtreVecteurs(
+    db, qVec ? await queryVectors(opts.vector!, qVec, lawId) : null, env,
+  );
   const semDivs = (vec?.divs ?? [])
     .filter((d) => d.score >= DIVISION_MATCH_MIN_SCORE)
     .slice(0, DIVISION_MATCH_MAX);
@@ -1454,7 +1610,11 @@ export async function searchText(
   let vecWideCache: Awaited<ReturnType<typeof queryVectors>> | undefined;
   const vecWide = async () => {
     if (vecWideCache === undefined) {
-      vecWideCache = lawId && qVec ? await queryVectors(opts.vector!, qVec, undefined) : vec;
+      // Le barreau ELARGI repose le filtre : sans lawId, la requete Vectorize porte sur
+      // tout l'index, donc c'est le chemin le PLUS expose au corpus federal.
+      vecWideCache = lawId && qVec
+        ? await filtreVecteurs(db, await queryVectors(opts.vector!, qVec, undefined), env)
+        : vec;
     }
     return vecWideCache;
   };
@@ -1472,7 +1632,7 @@ export async function searchText(
   if (exact.total > 0) {
     let elsewhere: SearchOutcome["elsewhere"] = null;
     if (lawId) {
-      const others = await runMatch(db, match, lang, { notLaw: lawId }, { limit: 3, offset: 0 });
+      const others = await runMatch(db, match, lang, { notLaw: lawId }, { limit: 3, offset: 0 }, false, env);
       if (others.total > 0) elsewhere = { total: others.total, hits: others.hits };
     }
     return {
@@ -1483,7 +1643,7 @@ export async function searchText(
 
   // 2) élargissement automatique au corpus (plan v2, 1.1)
   if (lawId) {
-    const wide = await runMatch(db, match, lang, {}, page);
+    const wide = await runMatch(db, match, lang, {}, page, false, env);
     if (wide.total > 0) {
       return {
         hits: await fuse(wide, await vecWide()), total: wide.total,
@@ -1500,7 +1660,7 @@ export async function searchText(
     let best: { hits: SearchHit[]; total: number; omitted: string; sum: number } | null = null;
     for (let i = 0; i < tokens.length; i++) {
       const partial = tokens.filter((_, j) => j !== i).map(quoteTok).join(" ");
-      const r = await runMatch(db, partial, lang, scope, page, true);
+      const r = await runMatch(db, partial, lang, scope, page, true, env);
       if (r.total === 0) continue;
       const sum = r.hits.reduce((acc, h) => acc + (h.score ?? 0), 0);
       if (!best || sum < best.sum) best = { ...r, omitted: tokens[i], sum };
@@ -1519,7 +1679,7 @@ export async function searchText(
     const orTerms = [...new Set(tokens.flatMap((t) => t.split(/[-.'’]/)).filter((t) => t.length >= 2))];
     if (orTerms.length) {
       const matchOr = orTerms.map(quoteTok).join(" OR ");
-      const scoped = await runMatch(db, matchOr, lang, scope, page, true);
+      const scoped = await runMatch(db, matchOr, lang, scope, page, true, env);
       if (scoped.total > 0) {
         return {
           hits: await fuse(scoped, vec), total: scoped.total,
@@ -1527,7 +1687,7 @@ export async function searchText(
         };
       }
       if (lawId) {
-        const wideOr = await runMatch(db, matchOr, lang, {}, page, true);
+        const wideOr = await runMatch(db, matchOr, lang, {}, page, true, env);
         if (wideOr.total > 0) {
           return {
             hits: await fuse(wideOr, await vecWide()), total: wideOr.total,

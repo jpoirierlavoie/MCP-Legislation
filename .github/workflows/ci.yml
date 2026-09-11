@@ -35,6 +35,7 @@ jobs:
       - run: node --test tests/page-client.test.mjs # comportement du JS client de la page
       - run: node --test tests/ranges.test.mjs # mode plage : sort_key n'est pas un ordre total
       - run: node --test tests/paths.test.mjs # deux familles de chemins, un seul decoupeur
+      - run: node --test tests/federal-switch.test.mjs # FEDERAL_CORPUS : aucune lecture du corpus non masquee
 
       # INVARIANT 1 : l'ordre de laws.config.json porte les plages d'id. Le réordonner
       # fait écraser les articles d'autres lois à la prochaine ingestion, EN SILENCE.
