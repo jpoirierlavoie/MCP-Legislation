@@ -9,10 +9,23 @@ class Law:
     id: str
     name_fr: str
     name_en: str
+    # Citation officielle. Le champ s'appelle encore `rlrq_cite` ici : le renommage en
+    # `official_cite` est une MIGRATION (phase 3), et la renommer avant elle ferait divergir
+    # le dataclass de la colonne. `pipeline/load.py::_LAW_COLS` fait le pont.
     rlrq_cite: str
     consol_date_fr: str | None = None
     consol_date_en: str | None = None
     name_norm: str | None = None     # rempli au chargement (couche découverte)
+    # --- corpus fédéral (SPEC §2.1) -------------------------------------------
+    # Ces champs ne sont ÉCRITS EN BASE qu'à partir de la migration 0004 : tant qu'ils ne
+    # figurent pas dans `_LAW_COLS`, ils restent en mémoire sans effet. C'est voulu — le
+    # parseur peut les remplir avant que le schéma ne les accueille.
+    official_cite_en: str | None = None   # « R.S.C. 1985, c. B-3 », « CQLR, c. CCQ-1991 »
+    chapter: str | None = None            # « B-3 » — ce sur quoi parseCitation doit apparier
+    jurisdiction: str = "qc"              # 'qc' | 'ca'
+    in_force: int = 1                     # 0 = édictée mais NON en vigueur (refus d'ingestion)
+    last_amended: str | None = None       # « Dernière modification le … » (lims:lastAmendedDate)
+    unit: str = "article"                 # 'article' | 'regle' (Règles des Cours fédérales)
 
 
 @dataclass
@@ -43,9 +56,21 @@ class Article:
     html: str | None = None      # HTML nettoyé (integrity:* retirés, liens absolus, historique retiré)
     history: str | None = None   # ligne d'historique : '1991, c. 64, a. 1457; ...'
     repealed: int = 0            # 1 si '(Abrogé).'
+    # --- corpus fédéral -------------------------------------------------------
+    # Intitulé officiel d'article (`MarginalNote`). HORS DU TEXTE par l'art. 14 de la Loi
+    # d'interprétation : « ne font pas partie de celui-ci, n'y figurant qu'à titre de repère
+    # ou d'information ». Donc colonne propre, JAMAIS concaténée au texte.
+    marginal_note: str | None = None
+    # Notes en bas de page, jointes par '\n'. Tranché le 2026-09-11 : ingérées, rendues À LA
+    # FIN de l'article et ÉTIQUETÉES — l'art. 14 n'exclut que les notes marginales et les
+    # mentions de textes antérieurs, pas celles-ci.
+    footnotes: str | None = None
     # rempli au chargement :
     id: int | None = None
-    sort_key: int = 0
+    # None (et non 0) pour distinguer « pas encore calculée » de « calculée à 0 ». Le
+    # préambule vaut LÉGITIMEMENT 0, et `load.prepare` le jetait : son
+    # `a.sort_key = a.sort_key or sort_key(...)` teste la FAUSSETÉ, donc 0 était recalculé.
+    sort_key: int | None = None
     division_id: int | None = None
 
 

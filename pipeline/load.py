@@ -29,8 +29,16 @@ def prepare(law: Law, divisions: list[Division], articles: list[Article], id_bas
         d.parent_id = by_path[d.parent_path].id if d.parent_path and d.parent_path in by_path else None
     for j, a in enumerate(articles, start=1):
         a.id = id_base + j
-        # le parseur fixe le sort_key des pseudo-articles (dispositions) ; sinon on le calcule.
-        a.sort_key = a.sort_key or sort_key(a.number)
+        # Le parseur fixe le sort_key des pseudo-articles (dispositions) ; sinon on le calcule.
+        #
+        # ⚠️ Test de PRÉSENCE, pas de vérité. L'ancienne forme — `a.sort_key or sort_key(...)`
+        # — jetait en silence toute clé pré-posée à 0, parce que 0 est faux. Or 0 est une
+        # clé LÉGITIME : c'est celle de `préliminaire`, et ce sera celle du préambule
+        # fédéral, que le SPEC §3.6 veut explicitement à 0 pour qu'il précède l'article 1.
+        # Sans ce correctif, le préambule repartait à DISPOSITION_SORT_BASE (9e15), donc à
+        # la FIN du corpus, et `get_articles(from, to)` ne le voyait jamais.
+        if a.sort_key is None:
+            a.sort_key = sort_key(a.number)
         leaf = by_path.get(a.division_path)
         a.division_id = leaf.id if leaf else None
 

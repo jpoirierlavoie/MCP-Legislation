@@ -430,6 +430,12 @@ def parse_epub(epub_path: str | Path, law: Law, lang: str) -> tuple[list[Divisio
         div.sort_order = sort_order
         # sort_key des pseudo-articles : préliminaire avant tout, finales/annexes après le
         # corpus, dans l'ordre du document (le parseur le fixe ; load.prepare le respecte).
+        #
+        # Ce dernier point était FAUX jusqu'au 2026-09-11 : `load.prepare` testait
+        # `a.sort_key or sort_key(...)`, donc il RECALCULAIT toute clé pré-posée à 0 — celle
+        # de `préliminaire`. Le résultat restait juste par accident, `sort_key("préliminaire")`
+        # rendant 0 lui aussi. Il ne l'aurait plus été pour le préambule fédéral, dont le
+        # numéro n'est pas ce littéral. Le test est désormais un test de PRÉSENCE.
         if art.number == "préliminaire":
             art.sort_key = 0
         else:

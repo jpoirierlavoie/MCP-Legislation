@@ -83,10 +83,126 @@ def fetch_consolidation(url: str) -> str | None:
     return None
 
 
+def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
+                       show: list[str], strict: bool,
+                       apply_local: bool, apply_remote: bool) -> int:
+    """Queue COMMUNE aux deux sources : --show, écriture du SQL, porte --strict, bascule D1.
+
+    Extraite plutôt que dupliquée : c'est ici que vit la porte qui REFUSE la bascule quand
+    un invariant échoue (`pipeline/ingest.py`, historiquement les lignes 158-160). Deux
+    copies de cette porte divergeraient, et l'une des deux finirait par ne plus refuser.
+    """
+    for num in show:
+        a = next((x for x in articles if x.number == num), None)
+        if a is None:
+            print(f"\n[art {num} introuvable]")
+            continue
+        print(f"\n===== ARTICLE {a.number} (loi={a.law_id}, lang={a.lang}, abrogé={a.repealed}) =====")
+        print(f"division_path : {a.division_path}")
+        print(f"historique    : {a.history}")
+        print("--- texte ---")
+        print(a.text)
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    sql_path = OUT_DIR / f"{law_id}-{lang}.sql"
+    # newline="\n" : NE PAS traduire les \n en \r\n sous Windows, sinon les \n\n entre
+    # alinéas seraient stockés en \r\n\r\n dans le texte des articles.
+    sql_path.write_text(load.to_sql(law, divisions, articles, lang), encoding="utf-8", newline="\n")
+    print(f"\nSQL écrit : {sql_path}  ({sql_path.stat().st_size // 1024} Ko, "
+          f"{len(divisions)} divisions, {len(articles)} articles)")
+
+    if strict and not rep.ok:
+        print("Invariants en échec -> bascule refusée (utiliser --no-strict pour forcer).")
+        return 1
+
+    for remote in ([False] if apply_local else []) + ([True] if apply_remote else []):
+        flag = "--remote" if remote else "--local"
+        print(f"\nApplication des données en D1 {flag} …")
+        cmd = f'npx wrangler d1 execute {DB_NAME} {flag} --file="{sql_path}"' + (" -y" if remote else "")
+        res = subprocess.run(cmd, shell=True, cwd=config.REPO_ROOT)
+        if res.returncode != 0:
+            print(f"wrangler a échoué (code {res.returncode}).")
+            return res.returncode
+    return 0 if rep.ok else 2
+
+
+def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
+    """Acquisition + parsing d'un texte FÉDÉRAL. Rend (divisions, articles, bilan).
+
+    Pendant du bloc EPUB, et volontairement SÉPARÉ de lui : quatre choses y sont propres à
+    LégisQuébec et n'ont aucun sens ici — le téléchargement HTTP, le titre anglais lu dans
+    l'OPF d'un zip, le scrapage de la date « À jour au », et le scan des identifiants `se:`
+    de l'invariant « phase B ». Les laisser sur le chemin commun les ferait tomber sur un
+    fichier XML lu par `git show`.
+
+    L'invariant de comptage est remplacé par le BILAN DE MATIÈRE, que `parse_lims` impose
+    lui-même : il compte par PROVENANCE et refuse de rendre un résultat si une seule
+    `Section` du fichier n'a été ni ingérée ni refusée. C'est strictement plus fort que le
+    scan « phase B », qui ne compare que deux totaux.
+    """
+    import xml.etree.ElementTree as ET
+
+    from pipeline import parser_lims
+
+    chemin = cfg_law["xml"][lang]
+    print(f"Lecture {chemin} @ {config.LIMS_REF} ({law.id}/{lang}) …")
+    data = parser_lims.git_show_lims(config.LIMS_REF, chemin)
+    racine = ET.fromstring(data)
+
+    # Métadonnées DÉRIVÉES du fichier, jamais recopiées de la config (R10).
+    cite, chapitre = parser_lims.derive_citation(racine, lang)
+    attendue = cfg_law.get("official_cite" if lang == "fr" else "official_cite_en")
+    if attendue and cite != attendue:
+        raise parser_lims.BalisageIncoherent(
+            f"citation recalculée « {cite} » ≠ citation de la config « {attendue} » "
+            f"(SPEC §4 invariant 6) — arrêt"
+        )
+    setattr(law, "rlrq_cite" if lang == "fr" else "official_cite_en", cite)
+    law.chapter = chapitre
+    law.jurisdiction = "ca"
+    law.unit = cfg_law.get("unit", "article")
+    law.in_force = parser_lims.derive_in_force(racine)
+    law.last_amended = racine.get("{http://justice.gc.ca/lims}lastAmendedDate")
+    titre = parser_lims.derive_titre(racine)
+    if lang == "fr":
+        law.name_fr = titre
+    else:
+        law.name_en = titre
+    consol = racine.get("{http://justice.gc.ca/lims}current-date")
+    if consol:
+        setattr(law, f"consol_date_{lang}", consol)
+
+    if not law.in_force and not allow_not_in_force:
+        raise parser_lims.BalisageIncoherent(
+            f"{law.id} est ÉDICTÉE mais NON EN VIGUEUR (racine <{racine.tag.split('}')[-1]}> "
+            f"sans in-force='yes'). Ingestion refusée : servir un texte non en vigueur comme "
+            f"du droit applicable est le pire défaut possible. Forcer avec "
+            f"--allow-not-in-force, en sachant ce que cela implique."
+        )
+
+    bilan = parser_lims.Bilan()
+    divisions, articles = parser_lims.parse_lims(data, law, lang, bilan=bilan)
+    print(f"  bilan de matière : {bilan.as_dict()}")
+    return divisions, articles, bilan
+
+
 def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote: bool,
-        show: list[str], strict: bool, refresh_dates: bool = False) -> int:
+        show: list[str], strict: bool, refresh_dates: bool = False,
+        allow_not_in_force: bool = False) -> int:
     cfg_law = config.get_law_any(law_id)
     law = _law_from_config(cfg_law)
+
+    # AIGUILLAGE PAR SOURCE, avant toute opération propre à un format. `source` absent =
+    # LégisQuébec, pour que les 79 entrées existantes n'aient pas à être touchées.
+    if cfg_law.get("source") == "lims":
+        divisions, articles, _bilan = _acquiert_lims(cfg_law, law, lang, allow_not_in_force)
+        load.prepare(law, divisions, articles, id_base=_id_base(law_id, lang))
+        rep = validate.validate(law_id, lang, divisions, articles)
+        print("\n".join(rep.lines))
+        print(f"\nRésultat des invariants : {'OK ✅' if rep.ok else 'ÉCHEC ❌'}")
+        return _ecrit_et_applique(law_id, lang, law, divisions, articles, rep,
+                                  show, strict, apply_local, apply_remote)
+
     epub = _sample_path(law_id, lang)
     if download or not epub.exists():
         url = cfg_law["epub"][lang]
@@ -136,38 +252,8 @@ def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote:
     print("\n".join(rep.lines))
     print(f"\nRésultat des invariants : {'OK ✅' if rep.ok else 'ÉCHEC ❌'}")
 
-    for num in show:
-        a = next((x for x in articles if x.number == num), None)
-        if a is None:
-            print(f"\n[art {num} introuvable]")
-            continue
-        print(f"\n===== ARTICLE {a.number} (loi={a.law_id}, lang={a.lang}, abrogé={a.repealed}) =====")
-        print(f"division_path : {a.division_path}")
-        print(f"historique    : {a.history}")
-        print("--- texte ---")
-        print(a.text)
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    sql_path = OUT_DIR / f"{law_id}-{lang}.sql"
-    # newline="\n" : NE PAS traduire les \n en \r\n sous Windows, sinon les \n\n entre
-    # alinéas seraient stockés en \r\n\r\n dans le texte des articles.
-    sql_path.write_text(load.to_sql(law, divisions, articles, lang), encoding="utf-8", newline="\n")
-    print(f"\nSQL écrit : {sql_path}  ({sql_path.stat().st_size // 1024} Ko, "
-          f"{len(divisions)} divisions, {len(articles)} articles)")
-
-    if strict and not rep.ok:
-        print("Invariants en échec -> bascule refusée (utiliser --no-strict pour forcer).")
-        return 1
-
-    for remote in ([False] if apply_local else []) + ([True] if apply_remote else []):
-        flag = "--remote" if remote else "--local"
-        print(f"\nApplication des données en D1 {flag} …")
-        cmd = f'npx wrangler d1 execute {DB_NAME} {flag} --file="{sql_path}"' + (" -y" if remote else "")
-        res = subprocess.run(cmd, shell=True, cwd=config.REPO_ROOT)
-        if res.returncode != 0:
-            print(f"wrangler a échoué (code {res.returncode}).")
-            return res.returncode
-    return 0 if rep.ok else 2
+    return _ecrit_et_applique(law_id, lang, law, divisions, articles, rep,
+                              show, strict, apply_local, apply_remote)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -181,6 +267,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--apply-local", action="store_true", help="Appliquer le SQL en D1 local.")
     p.add_argument("--apply-remote", action="store_true", help="Appliquer le SQL en D1 cloud (auth requise).")
     p.add_argument("--show", nargs="*", default=[], help="Numéros d'articles à afficher (ex. 1457).")
+    p.add_argument("--allow-not-in-force", action="store_true",
+                   help="Ingerer un texte EDICTE mais NON EN VIGUEUR. Par defaut refuse : "
+                        "servir un texte non en vigueur comme du droit applicable est le "
+                        "pire defaut possible. F-29.2 est le seul cas connu du corpus.")
     p.add_argument("--no-strict", dest="strict", action="store_false",
                    help="Générer/appliquer même si des invariants échouent.")
     a = p.parse_args(argv)
@@ -194,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     for law_id, lang in combos:
         print(f"\n{'=' * 60}\n### {law_id}/{lang}\n{'=' * 60}")
         rc = run(law_id, lang, a.download, a.apply_local, a.apply_remote,
-                 a.show, a.strict, a.refresh_dates)
+                 a.show, a.strict, a.refresh_dates, a.allow_not_in_force)
         worst = max(worst, rc)
     return worst
 

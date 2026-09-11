@@ -1,0 +1,13 @@
+Fixtures du parseur LIMS — extraits de justicecanada/laws-lois-xml
+SHA : 9c40b2a03bc38be8250ef7f86b1d5699afd08cbe
+
+Contient des renseignements visés par la Licence du gouvernement ouvert – Canada.
+https://ouvert.canada.ca/fr/licence-du-gouvernement-ouvert-canada
+
+Contains information licensed under the Open Government Licence – Canada.
+https://open.canada.ca/en/open-government-licence-canada
+
+Les fichiers `*-fr.xml` / `*-en.xml` sans suffixe descriptif sont des textes ENTIERS,
+pris tels quels (les deux plus petits du corpus, plus le témoin de refus F-29.2).
+Les autres sont des EXTRAITS : une Section remise dans une enveloppe minimale.
+Régénérer : voir l'en-tête de pipeline/tests/test_parser_lims.py.
