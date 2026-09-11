@@ -23,6 +23,9 @@ const json = (p) => JSON.parse(lire(p));
 
 const catalogue = json("catalogue.json");
 const laws = json("laws.config.json").laws;
+// Ce que le serveur SERT réellement — distinct de ce qu'il ingère. Voir l'en-tête du
+// fichier et le test des décomptes du README.
+const served = json("pipeline/expected/served.json");
 const taxonomy = json("taxonomy.json");
 const toolsTs = lire("src/tools.ts");
 const relevanceTs = lire("src/relevance.ts");
@@ -172,9 +175,22 @@ test("le catalogue ne contient aucune chaîne en forme de jeton", () => {
 test("README : les décomptes dérivables des JSON versionnés sont exacts", () => {
   // Faits VIVANTS mais dérivables hors D1 : on les épingle. Reformuler la phrase oblige à
   // toucher ce test — friction assumée, même convention qu'ORDRE_ATTENDU côté pipeline.
+  // ⚠️ LE DÉCOMPTE DE LOIS SE LIT DANS `served.json`, PAS DANS `laws.config.json`.
+  //
+  // Les deux ont longtemps été le même nombre. Ils divergent depuis l'arrivée du corpus
+  // fédéral : `laws.config.json` décrit ce que le pipeline INGÈRE, `served.json` ce qu'un
+  // usager peut RÉELLEMENT obtenir — les textes `ca-*` sont chargés en base mais invisibles
+  // à tous les outils tant que l'interrupteur `FEDERAL_CORPUS` est fermé (R8).
+  //
+  // Épingler le README sur `laws.config.json` le forcerait à annoncer 97 textes dès l'ajout
+  // des entrées de config, alors que la production en servirait 79 : la dérive R10 exacte,
+  // et produite par un test épinglé. Le README parle à un LECTEUR, donc il dit ce qui est
+  // servi.
   const attendus = [
-    [/\*\*(\d+) lois et règlements\*\*/, laws.length, "nombre de lois"],
-    [/les (\d+) tarifs/, laws.filter((l) => l.fonction === "tarif").length, "nombre de tarifs"],
+    [/\*\*(\d+) lois et règlements\*\*/, served.ids.length, "nombre de lois SERVIES"],
+    [/les (\d+) tarifs/,
+     laws.filter((l) => l.fonction === "tarif" && served.ids.includes(l.id)).length,
+     "nombre de tarifs"],
     [/Les (\d+) matières/, taxonomy.subjects.length, "nombre de matières"],
   ];
   for (const [re, valeur, quoi] of attendus) {
@@ -182,6 +198,29 @@ test("README : les décomptes dérivables des JSON versionnés sont exacts", () 
     assert.ok(m, `${quoi} : la phrase attendue est introuvable dans README.md (reformulée ? ` +
       `mettre à jour tests/catalogue.test.mjs). Motif : ${re}`);
     assert.equal(Number(m[1]), valeur, `${quoi} : le README dit ${m[1]}, les données versionnées disent ${valeur}. ${RAPPEL}`);
+  }
+});
+
+test("served.json est un SOUS-ENSEMBLE cohérent de laws.config.json", () => {
+  // La distinction « ingéré » / « servi » n'a de valeur que si elle reste vérifiable. Deux
+  // dérives possibles, toutes deux silencieuses sans ce contrôle : déclarer servi un texte
+  // qui n'existe pas au corpus, ou laisser `served.json` prendre du retard sur un flip
+  // d'interrupteur déjà fait.
+  const idsConfig = new Set(laws.map((l) => l.id));
+  const fantomes = served.ids.filter((id) => !idsConfig.has(id));
+  assert.deepEqual(fantomes, [],
+    "served.json déclare servis des textes absents de laws.config.json");
+  assert.equal(new Set(served.ids).size, served.ids.length, "doublon dans served.ids");
+  assert.equal(served.flag, "FEDERAL_CORPUS",
+    "l'interrupteur nommé par served.json doit être celui de wrangler.jsonc");
+
+  // Si TOUT le corpus est déclaré servi, l'interrupteur doit être ouvert — sinon le README
+  // annonce plus que ce que la production rend.
+  const federaux = laws.filter((l) => l.jurisdiction === "ca").map((l) => l.id);
+  const federauxServis = federaux.filter((id) => served.ids.includes(id));
+  if (federauxServis.length) {
+    assert.equal(federauxServis.length, federaux.length,
+      "servir une PARTIE du fédéral n'est pas un état prévu : l'interrupteur est global");
   }
 });
 

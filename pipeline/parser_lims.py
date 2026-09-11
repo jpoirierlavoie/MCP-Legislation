@@ -484,6 +484,10 @@ class Bilan:
     refuse_ancetre: int = 0
     refuse_annexe: int = 0
     inconnu: int = 0
+    # Numéros des Section REFUSÉES. Sert au rapport de validation : une « lacune » dans la
+    # numérotation fédérale s'explique soit par un retrait à la codification, soit par un
+    # refus de non-vigueur — et il faut pouvoir DIRE lequel, article par article.
+    numeros_refuses: list[str] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -624,6 +628,7 @@ def parse_lims(
             elif nom == "Section":
                 if statut_section(el, parents) == "refuse":
                     b.refuse_ancetre += 1
+                    b.numeros_refuses.append(numero_de_label(el.find("Label")))
                     continue
                 numero = numero_de_label(el.find("Label"))
 
@@ -685,7 +690,9 @@ def parse_lims(
     schedules = [e for e in racine.iter() if _sans_ns(e.tag) == "Schedule"]
     for idx, sched in enumerate(schedules, start=1):
         if schedule_refuse(sched):
-            b.refuse_annexe += sum(1 for d in sched.iter() if _sans_ns(d.tag) == "Section")
+            refusees = [d for d in sched.iter() if _sans_ns(d.tag) == "Section"]
+            b.refuse_annexe += len(refusees)
+            b.numeros_refuses += [numero_de_label(d.find("Label")) for d in refusees]
             continue
         chemin = f"fs:{idx}"
         sfh = sched.find("ScheduleFormHeading")

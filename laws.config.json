@@ -1777,6 +1777,444 @@
       "forum": [],
       "numbering": "standard",
       "kind_epub": "cs"
+    },
+    {
+      "id": "ca-b-3",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur la faillite et l’insolvabilité",
+      "name_en": "Bankruptcy and Insolvency Act",
+      "official_cite": "L.R.C. (1985), ch. B-3",
+      "official_cite_en": "R.S.C. 1985, c. B-3",
+      "chapter": "B-3",
+      "xml": {
+        "fr": "fra/lois/B-3.xml",
+        "en": "eng/acts/B-3.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/B-3/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/B-3/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ]
+    },
+    {
+      "id": "ca-c-36",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur les arrangements avec les créanciers des compagnies",
+      "name_en": "Companies’ Creditors Arrangement Act",
+      "official_cite": "L.R.C. (1985), ch. C-36",
+      "official_cite_en": "R.S.C. 1985, c. C-36",
+      "chapter": "C-36",
+      "xml": {
+        "fr": "fra/lois/C-36.xml",
+        "en": "eng/acts/C-36.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-36/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-36/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ]
+    },
+    {
+      "id": "ca-d-3.4",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur le divorce",
+      "name_en": "Divorce Act",
+      "official_cite": "L.R.C. (1985), ch. 3 (2e suppl.)",
+      "official_cite_en": "R.S.C. 1985, c. 3 (2nd Supp.)",
+      "chapter": "D-3.4",
+      "xml": {
+        "fr": "fra/lois/D-3.4.xml",
+        "en": "eng/acts/D-3.4.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/D-3.4/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/D-3.4/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ]
+    },
+    {
+      "id": "ca-c-44",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi canadienne sur les sociétés par actions",
+      "name_en": "Canada Business Corporations Act",
+      "official_cite": "L.R.C. (1985), ch. C-44",
+      "official_cite_en": "R.S.C. 1985, c. C-44",
+      "chapter": "C-44",
+      "xml": {
+        "fr": "fra/lois/C-44.xml",
+        "en": "eng/acts/C-44.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-44/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-44/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ]
+    },
+    {
+      "id": "ca-c-34",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur la concurrence",
+      "name_en": "Competition Act",
+      "official_cite": "L.R.C. (1985), ch. C-34",
+      "official_cite_en": "R.S.C. 1985, c. C-34",
+      "chapter": "C-34",
+      "xml": {
+        "fr": "fra/lois/C-34.xml",
+        "en": "eng/acts/C-34.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-34/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-34/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ]
+    },
+    {
+      "id": "ca-c-42",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur le droit d’auteur",
+      "name_en": "Copyright Act",
+      "official_cite": "L.R.C. (1985), ch. C-42",
+      "official_cite_en": "R.S.C. 1985, c. C-42",
+      "chapter": "C-42",
+      "xml": {
+        "fr": "fra/lois/C-42.xml",
+        "en": "eng/acts/C-42.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-42/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-42/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure",
+        "Cour fédérale"
+      ]
+    },
+    {
+      "id": "ca-t-13",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur les marques de commerce",
+      "name_en": "Trademarks Act",
+      "official_cite": "L.R.C. (1985), ch. T-13",
+      "official_cite_en": "R.S.C. 1985, c. T-13",
+      "chapter": "T-13",
+      "xml": {
+        "fr": "fra/lois/T-13.xml",
+        "en": "eng/acts/T-13.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/T-13/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/T-13/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour fédérale"
+      ]
+    },
+    {
+      "id": "ca-l-2",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Code canadien du travail",
+      "name_en": "Canada Labour Code",
+      "official_cite": "L.R.C. (1985), ch. L-2",
+      "official_cite_en": "R.S.C. 1985, c. L-2",
+      "chapter": "L-2",
+      "xml": {
+        "fr": "fra/lois/L-2.xml",
+        "en": "eng/acts/L-2.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/L-2/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/L-2/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Transversal"
+      ]
+    },
+    {
+      "id": "ca-p-8.6",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur la protection des renseignements personnels et les documents électroniques",
+      "name_en": "Personal Information Protection and Electronic Documents Act",
+      "official_cite": "L.C. 2000, ch. 5",
+      "official_cite_en": "S.C. 2000, c. 5",
+      "chapter": "P-8.6",
+      "xml": {
+        "fr": "fra/lois/P-8.6.xml",
+        "en": "eng/acts/P-8.6.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/P-8.6/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/P-8.6/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour fédérale"
+      ]
+    },
+    {
+      "id": "ca-i-21",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi d’interprétation",
+      "name_en": "Interpretation Act",
+      "official_cite": "L.R.C. (1985), ch. I-21",
+      "official_cite_en": "R.S.C. 1985, c. I-21",
+      "chapter": "I-21",
+      "xml": {
+        "fr": "fra/lois/I-21.xml",
+        "en": "eng/acts/I-21.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/I-21/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/I-21/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Transversal"
+      ]
+    },
+    {
+      "id": "ca-c-5",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur la preuve au Canada",
+      "name_en": "Canada Evidence Act",
+      "official_cite": "L.R.C. (1985), ch. C-5",
+      "official_cite_en": "R.S.C. 1985, c. C-5",
+      "chapter": "C-5",
+      "xml": {
+        "fr": "fra/lois/C-5.xml",
+        "en": "eng/acts/C-5.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-5/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-5/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Transversal"
+      ]
+    },
+    {
+      "id": "ca-f-7",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur les Cours fédérales",
+      "name_en": "Federal Courts Act",
+      "official_cite": "L.R.C. (1985), ch. F-7",
+      "official_cite_en": "R.S.C. 1985, c. F-7",
+      "chapter": "F-7",
+      "xml": {
+        "fr": "fra/lois/F-7.xml",
+        "en": "eng/acts/F-7.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/F-7/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/F-7/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour fédérale",
+        "Cour d'appel fédérale"
+      ]
+    },
+    {
+      "id": "ca-s-26",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur la Cour suprême",
+      "name_en": "Supreme Court Act",
+      "official_cite": "L.R.C. (1985), ch. S-26",
+      "official_cite_en": "R.S.C. 1985, c. S-26",
+      "chapter": "S-26",
+      "xml": {
+        "fr": "fra/lois/S-26.xml",
+        "en": "eng/acts/S-26.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/S-26/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/S-26/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour suprême du Canada"
+      ]
+    },
+    {
+      "id": "ca-c-50",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur la responsabilité civile de l’État et le contentieux administratif",
+      "name_en": "Crown Liability and Proceedings Act",
+      "official_cite": "L.R.C. (1985), ch. C-50",
+      "official_cite_en": "R.S.C. 1985, c. C-50",
+      "chapter": "C-50",
+      "xml": {
+        "fr": "fra/lois/C-50.xml",
+        "en": "eng/acts/C-50.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-50/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-50/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour fédérale",
+        "Cour supérieure"
+      ]
+    },
+    {
+      "id": "ca-i-15",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur l’intérêt",
+      "name_en": "Interest Act",
+      "official_cite": "L.R.C. (1985), ch. I-15",
+      "official_cite_en": "R.S.C. 1985, c. I-15",
+      "chapter": "I-15",
+      "xml": {
+        "fr": "fra/lois/I-15.xml",
+        "en": "eng/acts/I-15.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/I-15/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/I-15/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Transversal"
+      ]
+    },
+    {
+      "id": "ca-b-4",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur les lettres de change",
+      "name_en": "Bills of Exchange Act",
+      "official_cite": "L.R.C. (1985), ch. B-4",
+      "official_cite_en": "R.S.C. 1985, c. B-4",
+      "chapter": "B-4",
+      "xml": {
+        "fr": "fra/lois/B-4.xml",
+        "en": "eng/acts/B-4.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/B-4/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/B-4/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ]
+    },
+    {
+      "id": "ca-dors-98-106",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Règles des Cours fédérales",
+      "name_en": "Federal Courts Rules",
+      "official_cite": "DORS/98-106",
+      "official_cite_en": "SOR/98-106",
+      "chapter": "DORS/98-106",
+      "xml": {
+        "fr": "fra/reglements/DORS-98-106.xml",
+        "en": "eng/regulations/SOR-98-106.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/reglements/SOR-98-106/",
+        "en": "https://lois-laws.justice.gc.ca/eng/regulations/SOR-98-106/"
+      },
+      "fonction": "regles-procedure",
+      "numbering": "decimal",
+      "unit": "regle",
+      "forum": [
+        "Cour fédérale",
+        "Cour d'appel fédérale"
+      ],
+      "enabling": "ca-f-7"
+    },
+    {
+      "id": "ca-crc-368",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Règles générales sur la faillite et l’insolvabilité",
+      "name_en": "Bankruptcy and Insolvency General Rules",
+      "official_cite": "C.R.C., ch. 368",
+      "official_cite_en": "C.R.C., c. 368",
+      "chapter": "C.R.C., ch. 368",
+      "xml": {
+        "fr": "fra/reglements/C.R.C.,_ch._368.xml",
+        "en": "eng/regulations/C.R.C.,_c._368.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/reglements/C.R.C.,_c._368/",
+        "en": "https://lois-laws.justice.gc.ca/eng/regulations/C.R.C.,_c._368/"
+      },
+      "fonction": "regles-procedure",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ],
+      "enabling": "ca-b-3"
     }
   ]
 }

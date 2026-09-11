@@ -199,7 +199,8 @@ def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote:
     if cfg_law.get("source") == "lims":
         divisions, articles, _bilan = _acquiert_lims(cfg_law, law, lang, allow_not_in_force)
         load.prepare(law, divisions, articles, id_base=_id_base(law_id, lang))
-        rep = validate.validate(law_id, lang, divisions, articles)
+        rep = validate.validate(law_id, lang, divisions, articles,
+                                jurisdiction="ca", numeros_refuses=_bilan.numeros_refuses)
         print("\n".join(rep.lines))
         print(f"\nRésultat des invariants : {'OK ✅' if rep.ok else 'ÉCHEC ❌'}")
         return _ecrit_et_applique(law_id, lang, law, divisions, articles, rep,

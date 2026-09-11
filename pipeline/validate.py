@@ -18,6 +18,25 @@ _NUMERIC = re.compile(r"\d+(?:\.\d+)*$")
 def is_disposition(number: str) -> bool:
     return _NUMERIC.fullmatch(number) is None
 
+
+def numeros_effectifs(a: Article) -> list[str]:
+    """Les numéros qu'un article OCCUPE réellement.
+
+    Un label de PLAGE (« 7 et 8 », « 29 à 35 », « 257 à 264 ») est un seul article qui
+    occupe plusieurs numéros. `Article.alias_numbers` les porte — c'est le parseur qui les
+    calcule, parce que la forme est propre à la langue (`à`/`to`, `et`/`and`).
+
+    ⚠️ SANS CETTE EXPANSION, LES CONTRÔLES DE LACUNES REFUSENT L'INGESTION. Mesuré le
+    2026-09-11 : 16 des 36 combinaisons fédérales échouaient sur « lacunes dans la plage
+    entière » — [7, 8] pour la L.F.I., [29..35] pour la Loi sur les Cours fédérales,
+    [9, 10, 11] pour les Règles des Cours fédérales. Ce ne sont PAS des lacunes : ces
+    numéros existent, portés par un article dont le label est une plage.
+
+    Et sans elle, `is_disposition` classe « 7 et 8 » comme pseudo-article, donc le décompte
+    d'articles réels sous-estime, et le contrôle de doublons ne l'inspecte même pas.
+    """
+    return a.alias_numbers or [a.number]
+
 # Invariants attendus, par (law_id, lang). FR et EN d'une même loi partagent les mêmes
 # décomptes (même loi, traduite) — seul le texte diffère.
 _CCQ = {
@@ -64,12 +83,25 @@ class Report:
             self.lines.append(f"  {'✓' if ok else '✗'} {label}: {got}" + ("" if ok else f"  (attendu {expected})"))
 
 
-def validate(law_id: str, lang: str, divisions: list[Division], articles: list[Article]) -> Report:
+def validate(law_id: str, lang: str, divisions: list[Division], articles: list[Article],
+             jurisdiction: str = "qc", numeros_refuses: list[str] | None = None) -> Report:
+    """Invariants du corpus. `jurisdiction` est PASSÉE, jamais devinée du préfixe d'id.
+
+    Renifler « ca- » au début d'un identifiant serait exactement la chirurgie de chaîne
+    qui a déjà produit le défaut `B-1` ⊂ `B-1.1` de `parseCitation`.
+    """
     r = Report()
-    real = [a for a in articles if not is_disposition(a.number)]
-    disp = [a for a in articles if is_disposition(a.number)]
-    ints = sorted({int(a.number) for a in real if "." not in a.number})
-    decimals = [a for a in real if "." in a.number]
+    # Un article de PLAGE est réel : il occupe plusieurs numéros, tous numériques. On juge
+    # donc sur les numéros EFFECTIFS, pas sur le label brut.
+    real = [a for a in articles
+            if not all(is_disposition(n) for n in numeros_effectifs(a))]
+    disp = [a for a in articles
+            if all(is_disposition(n) for n in numeros_effectifs(a))]
+    # Tous les numéros occupés, plages expansées. C'est CE jeu que les contrôles de lacunes
+    # et de doublons doivent voir.
+    occupes = [n for a in real for n in numeros_effectifs(a)]
+    ints = sorted({int(n) for n in occupes if "." not in n and n.isdigit()})
+    decimals = [n for n in occupes if "." in n]
     div_no_disp = [d for d in divisions if d.kind not in ("disposition", "annexe")]
     by_kind: dict[str, int] = {}
     for d in div_no_disp:
@@ -88,10 +120,10 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
         full = set(range(ints[0], ints[-1] + 1))
         gaps = sorted(full - set(ints))
         seen, dd = set(), set()
-        for a in real:
-            if "." not in a.number:
-                n = int(a.number)
-                (dd if n in seen else seen).add(n)
+        for n in occupes:
+            if "." not in n and n.isdigit():
+                v = int(n)
+                (dd if v in seen else seen).add(v)
         dups = sorted(dd)
 
     exp = EXPECTED.get((law_id, lang))
@@ -113,7 +145,34 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
         r.check("divisions par type", by_kind)
 
     # invariants structurels (toutes lois)
-    r.check("lacunes dans la plage entière", gaps if gaps else "aucune", "aucune")
+    #
+    # LES LACUNES NE SONT PAS UN INVARIANT DU CORPUS FÉDÉRAL, et c'est mesuré.
+    #
+    # Le RLRQ laisse un jalon « (Abrogé) » à la place d'une disposition abrogée : la plage
+    # entière reste donc dense, et une lacune y signale un défaut d'extraction. La
+    # codification fédérale, elle, RETIRE la disposition. Exemple mesuré sur la Loi sur la
+    # concurrence : les art. 37, 41, 42, 43 et 44 n'existent dans AUCUNE Section du fichier,
+    # et les art. 38, 39 et 40 n'y existent qu'en position REFUSÉE (non en vigueur).
+    #
+    # Garder le contrôle bloquant aurait un effet pervers exact : pour « combler » la
+    # lacune, il faudrait ingérer les art. 38 à 40, c'est-à-dire du droit NON EN VIGUEUR.
+    # Le contrôle pousserait donc à la faute qu'il est censé prévenir.
+    #
+    # Pour le fédéral, la lacune devient donc INFORMATIVE — mais EXPLIQUÉE : chaque numéro
+    # manquant est classé « refusé » (non en vigueur, donc légitimement absent) ou « retiré »
+    # (absent du fichier). La vraie garantie d'exhaustivité est ailleurs, dans le bilan de
+    # matière par provenance de `parser_lims`, qui refuse de rendre un résultat si une seule
+    # `Section` du fichier n'a été ni ingérée ni refusée.
+    if jurisdiction == "ca":
+        refuses = {n for n in (numeros_refuses or []) if n.isdigit()}
+        manquants = [int(n) for n in map(str, gaps)]
+        par_refus = sorted(n for n in manquants if str(n) in refuses)
+        par_retrait = sorted(n for n in manquants if str(n) not in refuses)
+        r.check("lacunes (fédéral : informatif)",
+                f"{len(manquants)} — non en vigueur (refusés) : {par_refus or 'aucun'} ; "
+                f"retirés de la codification : {par_retrait or 'aucun'}")
+    else:
+        r.check("lacunes dans la plage entière", gaps if gaps else "aucune", "aucune")
     r.check("doublons d'entiers", dups if dups else "aucun", "aucun")
     no_div = [a.number for a in real if not a.division_path]
     if not div_no_disp:

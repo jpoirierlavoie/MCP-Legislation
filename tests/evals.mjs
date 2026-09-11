@@ -6,6 +6,7 @@
 //
 // Sortie : une ligne par éval, code de sortie 1 si l'une échoue.
 
+import { readFileSync } from "node:fs";
 import { createMcpClient, parseBody, resolveClientToken, resolveMcpToken } from "../eval/mcp-client.mjs";
 
 const MCP_URL = process.env.MCP_URL ?? "http://127.0.0.1:8787/mcp";
@@ -193,9 +194,17 @@ async function smokeTests() {
   // légitimement pas le jeton d'un AUTRE client. D'où un troisième état, imprimé ⊘.
   const skip = (nom, pourquoi) => checks.push({ nom, ok: true, saute: true, detail: pourquoi });
 
+  // Le décompte est DÉRIVÉ, plus écrit en dur. Motif : pendant l'ingestion fédérale
+  // texte par texte, un littéral `=== 79` rougit dès le premier texte basculé et reste
+  // rouge pendant les dix-sept suivants — on perdrait le harnais au moment précis où il
+  // sert le plus. `served.json` déclare ce que le serveur SERT (interrupteur compris), donc
+  // le contrôle reste vert à chaque cran et rouge dès qu'une ingestion diverge du déclaré.
+  const servis = JSON.parse(
+    readFileSync(new URL("../pipeline/expected/served.json", import.meta.url), "utf8"),
+  ).ids.length;
   const laws = await callTool("qclaw_list_laws", {});
-  add("list_laws : 79 lois", laws.structuredContent?.count === 79,
-    `count=${laws.structuredContent?.count}`);
+  add(`list_laws : ${servis} lois servies`, laws.structuredContent?.count === servis,
+    `count=${laws.structuredContent?.count}, déclaré=${servis}`);
   const ccq = laws.structuredContent?.laws?.find((l) => l.id === "ccq");
   add("list_laws : ccq porte ses Livres (matières)", (ccq?.mapped_divisions?.length ?? 0) >= 10,
     `${ccq?.mapped_divisions?.length ?? 0} division(s) mappée(s)`);
@@ -294,7 +303,7 @@ async function smokeTests() {
     const r = await callTool("qclaw_get_articles", { law: l.id, from: "1", to: "3" });
     if (r.isError) cassees.push(l.id);
   }
-  add("get_articles : mode plage opérant sur les 79 lois", cassees.length === 0,
+  add(`get_articles : mode plage opérant sur les ${servis} lois servies`, cassees.length === 0,
     cassees.length ? `échec sur ${cassees.length} : ${cassees.slice(0, 6).join(", ")}…` : "");
 
   // Le contrôle ci-dessus ne regarde que `isError`. Il resterait VERT si une colonne
@@ -408,7 +417,7 @@ async function smokeTests() {
 
   // Une source juridique sans date de consolidation n'est pas citable : les 78 doivent l'avoir.
   const sansDate = toutes.filter((l) => !l.consol_date_fr).map((l) => l.id);
-  add("list_laws : date de consolidation sur les 79 lois", sansDate.length === 0,
+  add(`list_laws : date de consolidation sur les ${servis} lois servies`, sansDate.length === 0,
     sansDate.length ? `manquante sur ${sansDate.length} : ${sansDate.slice(0, 5).join(", ")}…` : "");
 
   // Les identifiants Irosoft sont propres à la langue : une piste rendue en anglais doit
