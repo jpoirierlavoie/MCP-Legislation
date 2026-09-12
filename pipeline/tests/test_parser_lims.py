@@ -21,8 +21,8 @@ from pathlib import Path
 
 from pipeline.model import DISPOSITION_SORT_BASE, Law
 from pipeline.parser_lims import (
-    Bilan, ErreurIngestion, derive_citation, derive_in_force, derive_titre,
-    expand_plage, numero_de_label, parse_lims,
+    Bilan, BalisageIncoherent, ErreurIngestion, derive_citation, derive_in_force,
+    derive_titre, expand_plage, numero_de_division, numero_de_label, parse_lims,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "lims"
@@ -121,6 +121,60 @@ class TestLabelsABalisage(unittest.TestCase):
             for a in arts:
                 self.assertFalse(a.number.startswith(("*", "†", "‡")),
                                  f"{nom} : numéro {a.number!r} porte un marqueur de note")
+
+
+class TestNumeroDeDivision(unittest.TestCase):
+    """Le numéro d'un `Heading` — défaut mesuré le 2026-09-11, et il était SERVI.
+
+    L'ancienne règle cherchait la PREMIÈRE lettre romane du label, sans ancrage :
+
+        re.search(r"([IVXLCDM0-9][IVXLCDM0-9.]*)", "PARTIE III")  ->  "I"
+
+    Le « I » trouvé était celui du mot PARTIE. Mesuré en production : 244 divisions
+    fédérales dont le numéro divergeait entre le français et l'anglais, sur 16 des
+    18 textes — la Loi sur la faillite rendait ses QUATORZE parties toutes numérotées « I ».
+    Asymétrique entre les langues, parce que « PART » ne porte aucune lettre romane.
+    """
+
+    def test_les_formes_reelles_du_corpus(self):
+        """Recensement du 2026-09-11 : 4 mots-clés, 3 formes de numéro, rien d'autre."""
+        for label, attendu in [
+            ("PARTIE I", "I"), ("PARTIE II", "II"), ("PARTIE III", "III"),
+            ("PARTIE IV", "IV"), ("PARTIE XIV", "XIV"), ("PARTIE XXI", "XXI"),
+            ("PART III", "III"), ("PART 2", "2"),
+            ("SECTION I", "I"), ("SECTION 3", "3"),
+            ("DIVISION I", "I"), ("DIVISION 7", "7"),
+            # suffixé : 19 labels du corpus en portent (« PARTIE XIV.1 », « SECTION I.1 »)
+            ("PARTIE XIV.1", "XIV.1"), ("PARTIE VII.1", "VII.1"), ("SECTION I.1", "I.1"),
+        ]:
+            self.assertEqual(numero_de_division(label), attendu, label)
+
+    def test_les_pieges_exacts_de_l_ancienne_regle(self):
+        """Chacun de ces quatre cas rendait autrefois la valeur de droite."""
+        for label, ancienne_valeur_fausse in [
+            ("PARTIE II", "I"),      # le I du mot PARTIE
+            ("PARTIE XIV", "I"),     # idem, sur toutes les parties d'une loi
+            ("SECTION I", "C"),      # le C du mot SECTION
+            ("DIVISION I", "DIVI"),  # les quatre premières lettres du mot DIVISION
+        ]:
+            self.assertNotEqual(numero_de_division(label), ancienne_valeur_fausse, label)
+
+    def test_un_mot_cle_inedit_ARRETE(self):
+        """Refuser vaut mieux que deviner : un numéro faux serait servi en silence."""
+        for label in ("ANNEXE 1", "SCHEDULE 2", "CHAPITRE IV", "TARIF A"):
+            with self.assertRaises(BalisageIncoherent, msg=label):
+                numero_de_division(label)
+
+    def test_label_vide_ou_absent(self):
+        self.assertIsNone(numero_de_division(""))
+        self.assertIsNone(numero_de_division("   "))
+
+    def test_le_corpus_quebecois_nest_pas_concerne(self):
+        """Le parseur EPUB est un AUTRE code — vérifié en production : 0 divergence FR/EN
+        sur les 79 textes québécois. Ce test épingle la séparation des deux parseurs."""
+        import pipeline.parser as parser_epub
+        self.assertFalse(hasattr(parser_epub, "numero_de_division"),
+                         "le correctif ne doit pas fuir dans le parseur EPUB")
 
 
 class TestPlages(unittest.TestCase):

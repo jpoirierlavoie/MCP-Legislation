@@ -150,6 +150,57 @@ def git_show_lims(ref: str, chemin: str) -> bytes:
     return r.stdout
 
 
+# Mots-clés qui introduisent le numéro d'un `Heading`. Liste BLANCHE, CLOSE : recensement du
+# 2026-09-11 sur les 36 fichiers — 290 `Label` de Heading, et EXACTEMENT quatre mots-clés
+# (PARTIE 101, PART 101, SECTION 44, DIVISION 44). Aucun autre.
+_MOTS_CLES_DIVISION = ("PARTIE", "PART", "SECTION", "DIVISION", "SOUS-SECTION", "SUBDIVISION")
+
+# Le numéro lui-même : romain, arabe, ou romain/arabe suffixé (« XIV.1 », « 7.2 »). Ancré en
+# FIN de label et précédé d'une frontière de mot — c'est cet ancrage qui est le correctif.
+_NUMERO_DIVISION = re.compile(
+    r"(?:^|\s)((?:[IVXLCDM]+|[0-9]+)(?:\.[0-9]+)*)\s*$", re.IGNORECASE)
+
+
+def numero_de_division(brut: str) -> str | None:
+    """Numéro d'un `Heading` tiré de son `Label` (« PARTIE III » -> « III »).
+
+    ⚠️ DÉFAUT MESURÉ LE 2026-09-11, ET IL ÉTAIT SERVI. La règle précédente cherchait la
+    PREMIÈRE lettre romane du label, sans ancrage :
+
+        re.search(r"([IVXLCDM0-9][IVXLCDM0-9.]*)", "PARTIE III")  ->  "I"
+
+    Le « I » trouvé est celui du mot **PARTIE**, pas le numéro. Conséquences mesurées sur les
+    244 divisions fédérales dont le numéro DIVERGEAIT entre le français et l'anglais :
+
+        « PARTIE II »   -> « I »      (les 4 parties du Code canadien du travail : toutes « I »)
+        « SECTION I »   -> « C »      (le C de SECTION)
+        « DIVISION I »  -> « DIVI »   (les 4 premières lettres)
+        « ANNEXE 1 »    -> « X »      (le X d'ANNEXE)
+
+    La règle ne fonctionnait que par accident — « PARTIE I » (le I du mot vaut le numéro) et
+    « PART III » (aucune lettre romane dans PART). Le défaut était donc ASYMÉTRIQUE entre les
+    langues, et `qclaw_get_structure` aurait rendu quatorze parties toutes numérotées « I »
+    pour la Loi sur la faillite. Le corpus québécois n'est pas touché : son parseur est
+    `parser.py`, un autre code (vérifié : 0 divergence FR/EN sur les 79 textes).
+
+    ARRÊT sur un mot-clé inédit plutôt qu'un numéro deviné : c'est la même liste blanche que
+    `statut_section`, et pour la même raison — un numéro faux est servi en silence.
+    """
+    brut = (brut or "").strip()
+    if not brut:
+        return None
+    tete = re.split(r"[\s.]", brut, maxsplit=1)[0].upper()
+    if tete not in _MOTS_CLES_DIVISION:
+        raise BalisageIncoherent(
+            f"Label de Heading au mot-clé inédit : {brut!r} (tête {tete!r}). "
+            f"Attendus : {', '.join(_MOTS_CLES_DIVISION)}. Recensement du 2026-09-11 : "
+            "290 Label sur les 36 fichiers, quatre mots-clés, aucun autre. Classer le "
+            "nouveau plutôt que deviner son numéro."
+        )
+    m = _NUMERO_DIVISION.search(brut)
+    return m.group(1) if m else None
+
+
 def numero_de_label(lab: ET.Element | None) -> str:
     """Numéro d'article tiré d'un `Label`, marqueurs de note RETIRÉS.
 
@@ -613,10 +664,12 @@ def parse_lims(
                 kind = "partie" if joint.startswith(("PARTIE", "PART ")) else "rubrique"
                 numero = None
                 if brut:
-                    m = re.search(r"([IVXLCDM0-9][IVXLCDM0-9.]*)", brut)
-                    numero = m.group(1) if m else None
+                    numero = numero_de_division(brut)
                 elif intitule:
-                    m = re.match(r"(?:PARTIE|PART)\s+([IVXLCDM0-9]+)", intitule.upper())
+                    # Pas de Label : le numéro vit alors DANS le titre (« Partie I — … »).
+                    # Ancré en tête, donc insensible au défaut corrigé plus haut.
+                    m = re.match(r"(?:PARTIE|PART)\s+([IVXLCDM]+|[0-9]+(?:\.[0-9]+)*)\b",
+                                 intitule.upper())
                     numero = m.group(1) if m else None
                 divisions.append(Division(
                     law_id=law.id, lang=lang, kind=kind, path=chemin_courant,
