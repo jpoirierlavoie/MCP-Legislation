@@ -137,7 +137,7 @@ const EVALS = [
   // le top 8 à elles seules. Cf. MAX_PER_SUBJECT (src/relevance.ts).
   {
     query: "perte de l'ouvrage cinq ans entrepreneur",
-    attendu: "ouvrages immobiliers du C.c.Q. presents (la matiere « batiment » ne se declenche plus ici)",
+    attendu: "ouvrages immobiliers du C.c.Q. présents (la matière « bâtiment » ne se déclenche plus ici)",
     present: [{ law: "ccq", pathPrefix: "ga:l_cinquieme-gb:l_deuxieme-gc:l_huitieme" }],
   },
   {
