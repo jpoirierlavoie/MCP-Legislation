@@ -221,12 +221,12 @@
     "titre_en": "Limits",
     "corps_fr": [
       "L'aide au repérage est heuristique. Elle propose où lire ; elle ne détermine pas le droit applicable.",
-      "Le texte des articles est restitué verbatim depuis les EPUB officiels de LégisQuébec, sans altération. Il n'en demeure pas moins que la version officielle est celle publiée par l'Éditeur officiel du Québec, et c'est elle qui fait foi.",
+      "Le texte des articles est restitué verbatim, sans altération : depuis les EPUB officiels de LégisQuébec pour les textes du Québec, et depuis les XML du ministère de la Justice du Canada pour les textes fédéraux. La version officielle est celle publiée par l'Éditeur officiel du Québec, et pour le fédéral celle publiée par le ministre (art. 31 de la Loi sur la révision et la codification des textes législatifs) : c'est elle qui fait foi. Ce service n'est pas une version officielle. Il contient de l'information publiée sous la Licence du gouvernement ouvert – Canada.",
       "Ce service ne fournit aucun conseil juridique. Les dates de consolidation affichées indiquent l'état du corpus chargé ici, qui peut accuser un retard sur la publication officielle."
     ],
     "corps_en": [
       "The retrieval aid is heuristic. It suggests where to read; it does not determine the applicable law.",
-      "Article text is returned verbatim from the official LégisQuébec EPUBs, unaltered. That said, the official version is the one published by the Québec Official Publisher, and it is the authoritative one.",
+      "Article text is returned verbatim, unaltered: from the official LégisQuébec EPUBs for Québec texts, and from Department of Justice Canada XML for federal texts. The official version is the one published by the Québec Official Publisher, and for federal texts the one published by the Minister (s. 31, Legislation Revision and Consolidation Act): that version is the authoritative one. This service is not an official version. It contains information licensed under the Open Government Licence – Canada.",
       "This service provides no legal advice. The consolidation dates shown reflect the state of the corpus loaded here, which may lag the official publication."
     ]
   }

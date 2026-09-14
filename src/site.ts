@@ -169,7 +169,7 @@ export async function renderSite(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lois du Québec — serveur MCP</title>
+<title>Lois du Québec et du Canada — serveur MCP</title>
 <meta name="description" content="Serveur MCP donnant un accès en lecture seule au texte officiel de la législation québécoise, en français et en anglais.">
 <style>${CSS}</style>
 <script>${BOOT}</script>
@@ -241,7 +241,7 @@ const FLECHE = "↑︎";
 function entete(): string {
   return `<header>
   <div class="bar">
-    <h1>${bi("Lois du Québec", "Laws of Québec")}</h1>
+    <h1>${bi("Lois du Québec et du Canada", "Laws of Québec and Canada")}</h1>
     <div class="btns">
       <button id="theme" type="button" title="Thème / Theme">${
         etat("auto", "◐ Auto", "◐ Auto")}${
@@ -251,8 +251,8 @@ function entete(): string {
     </div>
   </div>
   ${biP(
-    ["Serveur MCP donnant aux assistants IA un accès en lecture seule au texte officiel de la législation québécoise, en français et en anglais. Le texte des articles provient des EPUB officiels de LégisQuébec et est restitué verbatim : le serveur n'altère jamais le contenu officiel."],
-    ["An MCP server giving AI assistants read-only access to the official text of Québec legislation, in French and English. Article text comes from the official LégisQuébec EPUBs and is returned verbatim: the server never alters official content."],
+    ["Serveur MCP donnant aux assistants IA un accès en lecture seule au texte officiel de la législation du Québec et des lois fédérales que le litige civil québécois convoque, en français et en anglais. Le texte des articles provient des EPUB officiels de LégisQuébec et des fichiers XML du ministère de la Justice du Canada ; il est restitué verbatim : le serveur n'altère jamais le contenu officiel."],
+    ["An MCP server giving AI assistants read-only access to the official text of Québec legislation and of the federal statutes that Québec civil litigation relies on, in French and English. Article text comes from the official LégisQuébec EPUBs and from the Department of Justice Canada XML files; it is returned verbatim: the server never alters official content."],
   )}
 </header>`;
 }
@@ -286,8 +286,8 @@ function corpus(laws: LawSummary[]): string {
   return `<section id="corpus">
   ${h2("corpus")}
   ${biP(
-    ["Tous les textes sont chargés dans les deux langues officielles, avec leur hiérarchie complète et leur date de consolidation. Les chiffres de cette page sont lus en base au moment du rendu : ils ne peuvent pas dériver de ce qui est réellement servi. Chaque titre renvoie au texte officiel sur LégisQuébec."],
-    ["Every text is loaded in both official languages, with its full hierarchy and consolidation date. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text on LégisQuébec."],
+    ["Tous les textes sont chargés dans les deux langues officielles, avec leur hiérarchie complète et leur date de consolidation. Les chiffres de cette page sont lus en base au moment du rendu : ils ne peuvent pas dériver de ce qui est réellement servi. Chaque titre renvoie au texte officiel, sur LégisQuébec ou sur le site Web de la législation (Justice) du Canada."],
+    ["Every text is loaded in both official languages, with its full hierarchy and consolidation date. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text, on LégisQuébec or on the Justice Laws Website of Canada."],
   )}
   <div class="ctl">
     <input id="q" type="search" placeholder="Filtrer / Filter">
@@ -450,8 +450,8 @@ function pied(consol: string): string {
     // « Aucun conseil juridique » vit AUSSI ici, et pas seulement dans l'avertissement :
     // celui-ci est désormais une sous-section des aides au repérage, alors que la clause
     // porte sur tout le service. Le pied, lui, est sous chaque écran de la page.
-    [`Données : EPUB officiels de LégisQuébec (Éditeur officiel du Québec) ; consolidation la plus récente chargée : ${consol}. La version officielle fait foi. Aucun conseil juridique.`],
-    [`Data: official LégisQuébec EPUBs (Québec Official Publisher); most recent consolidation loaded: ${consol}. The official version prevails. No legal advice.`],
+    [`Données : EPUB officiels de LégisQuébec (Éditeur officiel du Québec) et XML du ministère de la Justice du Canada, contenant de l'information publiée sous la Licence du gouvernement ouvert – Canada ; consolidation la plus récente chargée : ${consol}. La version officielle fait foi : celle de l'Éditeur officiel du Québec, et pour le fédéral celle publiée par le ministre (art. 31 de la Loi sur la révision et la codification des textes législatifs). Ce site n'est pas une version officielle. Aucun conseil juridique.`],
+    [`Data: official LégisQuébec EPUBs (Québec Official Publisher) and Department of Justice Canada XML, containing information licensed under the Open Government Licence – Canada; most recent consolidation loaded: ${consol}. The official version prevails: that of the Québec Official Publisher, and for federal texts the one published by the Minister (s. 31, Legislation Revision and Consolidation Act). This is not an official version. No legal advice.`],
   )}
   <p><a href="${LEGISQUEBEC}" rel="noopener">legisquebec.gouv.qc.ca</a> · <a href="${DEPOT}" rel="noopener">GitHub</a></p>
 </footer>`;

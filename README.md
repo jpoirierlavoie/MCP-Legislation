@@ -1,9 +1,10 @@
-# Lois du Québec — serveur MCP
+# Lois du Québec et du Canada — serveur MCP
 
 Serveur [MCP](https://modelcontextprotocol.io) donnant aux assistants IA un accès **en
-lecture seule** au texte officiel de la législation québécoise : **79 lois et règlements**
-(dont le Code civil du Québec et le Code de procédure civile), en **français et en
-anglais**, avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres →
+lecture seule** au texte officiel de **97 lois et règlements** : la législation du Québec
+(dont le Code civil du Québec et le Code de procédure civile) et 18 textes fédéraux que le
+litige civil québécois convoque — faillite, divorce, sociétés par actions, droit d'auteur,
+preuve, Cours fédérales. En **français et en anglais**, avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres →
 articles) et recherche hybride lexicale + sémantique.
 
 **Page publique :** <https://legislation.poirierlavoie.ca/> — outils, aides au repérage,

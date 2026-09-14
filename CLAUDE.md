@@ -1,9 +1,11 @@
-# CLAUDE.md — Lois du Québec (serveur MCP)
+# CLAUDE.md — Lois du Québec et du Canada (serveur MCP)
 
-Serveur MCP **en production** servant le texte officiel de 79 lois et règlements du Québec
-(FR + EN) : `https://legislation.poirierlavoie.ca/mcp`. Propriétaire : Jason Poirier Lavoie
+Serveur MCP **en production** servant le texte officiel de 97 lois et règlements — 79 du
+Québec et 18 fédéraux — (FR + EN) : `https://legislation.poirierlavoie.ca/mcp`. Propriétaire : Jason Poirier Lavoie
 (avocat). Lecture seule pour les usagers ; les données viennent des EPUB officiels de
-LégisQuébec. **C'est un outil juridique : un résultat faux rendu en silence est le pire
+LégisQuébec et des XML du ministère de la Justice du Canada (Licence du gouvernement
+ouvert – Canada ; la version officielle fédérale est celle publiée par le ministre,
+art. 31 de la Loi sur la révision et la codification des textes législatifs). **C'est un outil juridique : un résultat faux rendu en silence est le pire
 défaut possible — refuser vaut toujours mieux que deviner.**
 
 ## ⛔ OBLIGATION PRÉALABLE À TOUTE MODIFICATION (aucune exception)

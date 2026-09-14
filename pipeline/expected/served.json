@@ -1,5 +1,5 @@
 {
-  "_comment": "CE QUE LE SERVEUR SERT, par opposition a ce que le depot INGERE. laws.config.json decrit le corpus que le pipeline charge ; ce fichier-ci decrit ce qu un usager peut REELLEMENT obtenir. Les deux divergent tant que l interrupteur FEDERAL_CORPUS est ferme : les textes ca-* sont charges en base mais INVISIBLES a tous les outils (R8). Sans cette distinction, le decompte du README serait force a 97 des l ajout des entrees de config, alors que la production en servirait 79 — la derive R10 exacte, produite par un test epingle. Ajouter les 18 ids ca-* ICI dans le MEME commit que le flip de l interrupteur, jamais avant.",
+  "_comment": "CE QUE LE SERVEUR SERT. Depuis le 2026-09-14, l interrupteur FEDERAL_CORPUS est OUVERT : les 97 textes de laws.config.json sont servis, quebecois et federaux. Ce fichier a ete cree quand les deux ensembles divergeaient (79 servis, 97 ingeres) ; il reste la source du decompte du README (tests/catalogue.test.mjs) et il redeviendrait utile si l interrupteur etait referme — le rollback R8 est un flip de variable, pas un revert.",
   "flag": "FEDERAL_CORPUS",
   "ids": [
     "ccq",
@@ -80,6 +80,24 @@
     "d-11.1",
     "p-33.01",
     "c-52.2",
-    "c-27.1"
+    "c-27.1",
+    "ca-b-3",
+    "ca-c-36",
+    "ca-d-3.4",
+    "ca-c-44",
+    "ca-c-34",
+    "ca-c-42",
+    "ca-t-13",
+    "ca-l-2",
+    "ca-p-8.6",
+    "ca-i-21",
+    "ca-c-5",
+    "ca-f-7",
+    "ca-s-26",
+    "ca-c-50",
+    "ca-i-15",
+    "ca-b-4",
+    "ca-dors-98-106",
+    "ca-crc-368"
   ]
 }
