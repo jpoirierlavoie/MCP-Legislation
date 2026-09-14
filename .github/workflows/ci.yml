@@ -63,6 +63,12 @@ jobs:
       # cle, un renvoi quebecois resoudrait un jour vers une loi FEDERALE. Aucun reseau.
       - run: python -m unittest pipeline.tests.test_relations -v
 
+      # discovery/load.py ne doit pas DETRUIRE ce que l'ingestion a ecrit. Mesure du
+      # 2026-09-14 : `seed_laws` remettait a NULL la date de consolidation des 18 textes
+      # federaux — leur config n'en porte pas, elle vient du XML — A CHAQUE chargement de
+      # la couche de decouverte. Silencieux, et rejoue apres chaque reparation.
+      - run: python -m unittest pipeline.tests.test_discovery_load -v
+
       # PORTE DE LA PHASE 0 du corpus fédéral : le classement des balises LIMS est une
       # liste BLANCHE. Une balise absente du classement doit ARRÊTER l'ingestion, pas
       # être traversée en silence. Ce test verrouille les propriétés du classement ;

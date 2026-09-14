@@ -51,10 +51,31 @@ def seed_laws(db) -> int:
         # Les métadonnées de loi issues de la CONFIG sont synchronisées ici : c'est bien
         # moins coûteux que de réingérer tous les couples (loi, langue) pour deux dates.
         # (name_en n'y figure PAS : il vient de l'OPF anglais, pas de la config — §5.)
-        db.run(f"UPDATE laws SET fonction = {q(l.get('fonction'))}, forum = {q(forum)}, "
-               f"name_fr = {q(l['name_fr'])}, name_norm = {q(normalize(l['name_fr']))}, "
-               f"consol_date_fr = {q(consol.get('fr'))}, consol_date_en = {q(consol.get('en'))} "
-               f"WHERE id = {q(l['id'])}")
+        sets = [f"fonction = {q(l.get('fonction'))}", f"forum = {q(forum)}",
+                f"name_fr = {q(l['name_fr'])}", f"name_norm = {q(normalize(l['name_fr']))}"]
+
+        # ⚠️ LES DATES DE CONSOLIDATION NE SONT ÉCRASÉES QUE SI LA CONFIG LES DÉCLARE.
+        #
+        # Défaut mesuré le 2026-09-14, silencieux et RÉCURRENT. Ce `UPDATE` posait
+        # inconditionnellement `consol_date_fr = consol.get('fr')`. Or les 18 entrées
+        # FÉDÉRALES de `laws.config.json` ne portent aucune clé `consolidation` : leur date
+        # vient du XML (`lims:current-date`), écrite par `pipeline/ingest.py`. L'UPDATE la
+        # remettait donc à NULL — À CHAQUE CHARGEMENT de la couche de découverte.
+        #
+        # Conséquence servie : `qclaw_list_laws` et la page publique annonçaient 18 textes
+        # SANS date « à jour au ». Sur un outil juridique, servir du droit sans dire de
+        # quand il date est le genre de faux silencieux que ce dépôt refuse. Et le défaut
+        # se rejouait à chaque passe éditoriale sur `taxonomy.json`, donc une réingestion
+        # « corrective » était effacée au chargement suivant.
+        #
+        # Le raisonnement du commentaire ci-dessus reste juste POUR LE QUÉBEC, où la config
+        # porte les dates. Il est exactement faux pour le fédéral, où elle ne les porte pas.
+        if consol.get("fr"):
+            sets.append(f"consol_date_fr = {q(consol['fr'])}")
+        if consol.get("en"):
+            sets.append(f"consol_date_en = {q(consol['en'])}")
+
+        db.run(f"UPDATE laws SET {', '.join(sets)} WHERE id = {q(l['id'])}")
     return len(laws)
 
 

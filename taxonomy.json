@@ -13,8 +13,8 @@
       "label_fr": "Famille",
       "label_en": "The Family",
       "kind": "prive-ccq",
-      "description_fr": "Mariage, union civile/parentale, filiation, obligation alimentaire, autorité parentale (Livre 2 C.c.Q.).",
-      "description_en": "Marriage, civil and parental union, filiation, support obligation, parental authority (Book Two, C.C.Q.)."
+      "description_fr": "Mariage, union civile/parentale, filiation, divorce, séparation, époux, conjoint, obligation alimentaire, aliments pour enfants, autorité parentale, garde des enfants, médiation familiale (Livre 2 C.c.Q. et Loi sur le divorce).",
+      "description_en": "Marriage, civil and parental union, filiation, divorce, separation, spouses, de facto spouse, support obligation, child support, parental authority, custody of the children, family mediation (Book Two, C.C.Q., and the Divorce Act)."
     },
     {
       "id": "successions",
@@ -197,8 +197,8 @@
       "label_fr": "Renseignements personnels",
       "label_en": "Personal Information",
       "kind": "specialise",
-      "description_fr": "Protection des renseignements personnels dans le secteur privé ET dans le secteur public (Loi 25) : accès aux documents des organismes publics, consentement, collecte, communication, incident de confidentialité, droit de rectification.",
-      "description_en": "Protection of personal information in both the private and the public sector (Law 25): access to documents held by public bodies, consent, collection, communication, confidentiality incident, right of rectification."
+      "description_fr": "Protection des renseignements personnels dans le secteur privé et dans le secteur public, au Québec et au fédéral (LPRPDE) : accès aux documents des organismes publics, consentement, collecte, communication, incident de confidentialité, droit de rectification.",
+      "description_en": "Protection of personal information in the private and public sectors, in Québec and federally (PIPEDA): access to documents held by public bodies, consent, collection, communication, confidentiality incident, right of rectification."
     },
     {
       "id": "droit-professionnel",
@@ -245,8 +245,8 @@
       "label_fr": "Interprétation des lois",
       "label_en": "Interpretation of Statutes",
       "kind": "specialise",
-      "description_fr": "Loi d'interprétation : règles transversales de lecture des lois du Québec.",
-      "description_en": "Interpretation Act: transversal rules for reading the statutes of Québec."
+      "description_fr": "Lois d'interprétation fédérales et du Québec : règles transversales pour interpréter un texte législatif.",
+      "description_en": "Federal and Québec Interpretation Acts: transversal rules for construing a legislative text."
     },
     {
       "id": "procedure-penale",
