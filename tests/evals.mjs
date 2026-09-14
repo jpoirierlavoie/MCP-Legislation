@@ -275,15 +275,15 @@ async function smokeTests() {
     `count=${bySubject.structuredContent?.count}`);
 
   const subs = await callTool("qclaw_list_subjects", {});
-  add("list_subjects : 37 matières", subs.structuredContent?.count === 37,
+  add("list_subjects : 42 matières", subs.structuredContent?.count === 42,
     `count=${subs.structuredContent?.count}`);
 
-  // Les 37 matières doivent être traduites : c'est la surface d'appariement du signal S1,
+  // Les 42 matières doivent être traduites : c'est la surface d'appariement du signal S1,
   // sans quoi le routeur reste muet en anglais.
   const subsEn = await callTool("qclaw_list_subjects", { lang: "en" });
   const sansEn = (subsEn.structuredContent?.subjects ?? [])
     .filter((s) => !s.label_en || !s.description_en).map((s) => s.id);
-  add("list_subjects (lang=en) : les 37 matières traduites", sansEn.length === 0,
+  add("list_subjects (lang=en) : les 42 matières traduites", sansEn.length === 0,
     sansEn.length ? `sans traduction : ${sansEn.slice(0, 5).join(", ")}…` : "");
   // Contrôler les ENTRÉES, pas seulement les en-têtes de groupe : une première version
   // traduisait « Private law (C.C.Q.) » tout en listant « biens — Biens » et sa description
@@ -336,7 +336,7 @@ async function smokeTests() {
       === "Loi sur les cités et villes" && !/\[fr\]/.test(relFr.content?.[0]?.text ?? ""));
 
   // list_laws rendait les libellés de MATIÈRES toujours en français, même sous lang='en',
-  // alors que label_en est peuplé sur les 37 matières. Contrôler les ENTRÉES, pas l'en-tête :
+  // alors que label_en est peuplé sur les 42 matières. Contrôler les ENTRÉES, pas l'en-tête :
   // c'est la leçon déjà tirée pour list_subjects et jamais reportée ici.
   const lawsEn = await callTool("qclaw_list_laws", { lang: "en", structure: false });
   const cmEn = lawsEn.structuredContent?.laws?.find((l) => l.id === "c-27.1");

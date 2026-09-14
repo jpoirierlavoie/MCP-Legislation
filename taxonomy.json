@@ -295,6 +295,46 @@
       "kind": "specialise",
       "description_fr": "Fiscalité municipale, évaluation foncière et expropriation : taxe foncière, taxation municipale, évaluation foncière des immeubles, tenant lieu de taxes, expropriation d'un immeuble, exproprié, réserve foncière.",
       "description_en": "Municipal taxation, property assessment and expropriation: property tax, municipal taxation, property assessment of immovables, payments in lieu of taxes, expropriation of an immovable, expropriated party, land reserve."
+    },
+    {
+      "id": "faillite-insolvabilite",
+      "label_fr": "Faillite et insolvabilité",
+      "label_en": "Bankruptcy and Insolvency",
+      "kind": "specialise",
+      "description_fr": "Faillite et insolvabilité : failli, insolvable, banqueroute, surendettement, concordataire, restructuration, financement temporaire, fournisseurs essentiels, surintendant des faillites.",
+      "description_en": "Bankruptcy and insolvency: insolvent, insolvency, restructuring, interim financing, critical suppliers, Superintendent of Bankruptcy."
+    },
+    {
+      "id": "propriete-intellectuelle",
+      "label_fr": "Propriété intellectuelle",
+      "label_en": "Intellectual Property",
+      "kind": "specialise",
+      "description_fr": "Droit d'auteur, droits moraux et marques de commerce : œuvre littéraire, artistique, dramatique ou musicale, titularité du droit d'auteur, plagiat, utilisation équitable, artiste-interprète, enregistrement sonore, radiodiffuseur, signal de communication, redevances, Commission du droit d'auteur, marque officielle, marque projetée, caractère distinctif, achalandage, registraire des marques de commerce.",
+      "description_en": "Copyright, moral rights and trademarks: literary, artistic, dramatic or musical works, authorship of copyright, plagiarism, fair dealing, performer, sound recording, broadcaster, communication signal, royalties, Copyright Board, official mark, proposed trademark, distinctiveness, goodwill, Registrar of Trademarks."
+    },
+    {
+      "id": "cours-federales",
+      "label_fr": "Cours fédérales et Cour suprême",
+      "label_en": "Federal Courts and Supreme Court",
+      "kind": "specialise",
+      "description_fr": "Cours fédérales et Cour suprême du Canada : Règles des Cours fédérales, contrôle judiciaire, office fédéral, mandamus, certiorari, quo warranto, prohibition, amirauté, droit maritime, navigation.",
+      "description_en": "Federal Courts and Supreme Court of Canada: Federal Courts Rules, judicial review, federal board, mandamus, certiorari, quo warranto, prohibition, admiralty, maritime law, navigation."
+    },
+    {
+      "id": "poursuites-couronne-federale",
+      "label_fr": "Poursuites contre la Couronne fédérale",
+      "label_en": "Proceedings Against the Federal Crown",
+      "kind": "specialise",
+      "description_fr": "Poursuites visant la Couronne fédérale et Sa Majesté du chef du Canada : procureur général du Canada, organismes mandataires de la Couronne, immunité de la Couronne, prérogative royale, contentieux administratif fédéral.",
+      "description_en": "Proceedings against the federal Crown and His Majesty in right of Canada: Attorney General of Canada, Crown agencies, Crown immunity, Crown prerogative, federal administrative litigation."
+    },
+    {
+      "id": "effets-negociables",
+      "label_fr": "Lettres de change, chèques et billets",
+      "label_en": "Bills of Exchange, Cheques and Notes",
+      "kind": "specialise",
+      "description_fr": "Lettre de change, chèque, chèque barré, billet, effet cambiaire : tireur, endosseur, endossement, protêt, complaisance, grâce.",
+      "description_en": "Bill of exchange, cheque, crossed cheque, promissory note, negotiable instrument: drawer, endorser, endorsement, protest, accommodation, grace."
     }
   ],
   "mappings": [
@@ -791,6 +831,42 @@
     {
       "subject": "famille",
       "law": "ca-d-3.4"
+    },
+    {
+      "subject": "faillite-insolvabilite",
+      "law": "ca-b-3"
+    },
+    {
+      "subject": "faillite-insolvabilite",
+      "law": "ca-c-36"
+    },
+    {
+      "subject": "propriete-intellectuelle",
+      "law": "ca-c-42"
+    },
+    {
+      "subject": "propriete-intellectuelle",
+      "law": "ca-t-13"
+    },
+    {
+      "subject": "cours-federales",
+      "law": "ca-f-7"
+    },
+    {
+      "subject": "cours-federales",
+      "law": "ca-dors-98-106"
+    },
+    {
+      "subject": "cours-federales",
+      "law": "ca-s-26"
+    },
+    {
+      "subject": "poursuites-couronne-federale",
+      "law": "ca-c-50"
+    },
+    {
+      "subject": "effets-negociables",
+      "law": "ca-b-4"
     }
   ]
 }
