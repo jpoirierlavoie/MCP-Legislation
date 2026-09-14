@@ -755,6 +755,42 @@
     {
       "subject": "registraire-entreprises",
       "law": "p-44.1"
+    },
+    {
+      "subject": "renseignements-personnels",
+      "law": "ca-p-8.6",
+      "division_path": "fh1:2"
+    },
+    {
+      "subject": "technologies-information",
+      "law": "ca-p-8.6",
+      "division_path": "fh1:3"
+    },
+    {
+      "subject": "suretes",
+      "law": "ca-i-15",
+      "division_path": "fh1:3"
+    },
+    {
+      "subject": "travail-emploi",
+      "law": "ca-l-2",
+      "division_path": "fh1:5"
+    },
+    {
+      "subject": "preuve",
+      "law": "ca-c-5"
+    },
+    {
+      "subject": "societes-par-actions",
+      "law": "ca-c-44"
+    },
+    {
+      "subject": "interpretation-lois",
+      "law": "ca-i-21"
+    },
+    {
+      "subject": "famille",
+      "law": "ca-d-3.4"
     }
   ]
 }
