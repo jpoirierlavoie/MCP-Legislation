@@ -37,9 +37,18 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 # que ~2 Mo.
 #
 # LIMS_REF est délibérément un POINT FIXE et non une branche : c'est le SHA consigné au
-# rapport d'ingestion qui rend une ingestion reproductible, et la veille s'en sert pour
-# détecter qu'une loi a bougé. Employer "HEAD" pour une reconnaissance, un SHA pour une
-# ingestion que l'on veut pouvoir rejouer à l'identique.
+# rapport d'ingestion qui rend une ingestion reproductible. Employer "HEAD" pour une
+# reconnaissance, un SHA pour une ingestion que l'on veut pouvoir rejouer à l'identique.
+#
+# ⚠️ CORRECTION DU 2026-09-14 : LA VEILLE NE S'EN SERT PAS. Cette phrase annonçait le
+# contrôle Git prescrit par le SPEC §7 (`git log -1 --format=%H -- <chemin>` comparé au SHA
+# d'ingestion). Il a été écarté : `laws.consol_date_*` porte la date AFFICHÉE par Justice
+# Canada, et un SHA ne s'ordonne pas — il dit « le fichier a bougé », jamais « à quelle date
+# le texte est à jour », donc il ne peut pas être comparé à la colonne servie aux usagers.
+# La veille fédérale est un scraping, comme la québécoise
+# (`scripts/check-consolidation.mjs`, `extractConsolidationFederale`). Le coût assumé est
+# que le signal `unreachable` existe pour ces 36 contrôles ; il est rendu visible par une
+# agrégation PAR PUBLIEUR plutôt que dilué dans le total.
 LIMS_REPO = Path(os.environ.get("LIMS_REPO", REPO_ROOT.parent / "laws-lois-xml"))
 LIMS_REF = os.environ.get("LIMS_REF", "HEAD")
 

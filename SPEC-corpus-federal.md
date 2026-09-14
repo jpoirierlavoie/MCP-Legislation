@@ -397,6 +397,25 @@ plus fiable que `extractConsolidation` (aucun miroir HTML à maintenir), et le s
 vérifié**, pas un texte à jour. `scripts/check-consolidation.mjs` et ses 13 contrôles
 restent la référence du côté québécois.
 
+> **AMENDEMENT DU 2026-09-14 — le contrôle Git a été ÉCARTÉ, et voici pourquoi.**
+>
+> La veille fédérale est un **scraping**, comme la québécoise, et non le `git log -1` prescrit
+> ci-dessus. Motif : `laws.consol_date_*` porte désormais la **date affichée** par Justice
+> Canada (cf. l'amendement du §3.7), et un SHA ne s'ordonne pas — il dit « le fichier a
+> bougé », jamais « à quelle date le texte est à jour ». Il ne peut donc pas être comparé à
+> la colonne servie aux usagers.
+>
+> **Conséquence assumée : le signal `unreachable` NE disparaît PAS** pour ces 36 contrôles,
+> contrairement à ce qu'annonce le paragraphe ci-dessus — la phase A réintroduit une classe
+> de panne que cette conception avait écartée. Elle est rendue VISIBLE plutôt que diluée :
+> le seuil de joignabilité s'applique **par publieur** (`agregeParSeau`), et une sortie
+> `sources_bloquees` dit lequel a bloqué, pour que le titre d'issue cesse de nommer
+> LégisQuébec en dur.
+>
+> Les contrôles sont **26** et non 13, et ils ne sont plus « la référence du côté québécois »
+> seulement : ils couvrent les deux publieurs, dont une garde qui compare les deux moitiés
+> du miroir **lues en source**.
+
 ---
 
 ## 8. Phases et critères d'acceptation

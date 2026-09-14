@@ -72,13 +72,58 @@ export function extractConsolidation(html) {
 }
 
 /**
+ * Date « à jour AAAA-MM-JJ » / « current to AAAA-MM-JJ » d'une page de Justice Canada.
+ * MIROIR FIDÈLE de pipeline/ingest.py:extrait_consolidation_federale.
+ *
+ *   - Portée bornée au SEUL <p id="assentedDate">, comme le couple québécois l'est aux
+ *     blocs text-end. La page porte d'autres dates (historique, versions antérieures).
+ *   - Ancrage sur la PHRASE, jamais sur la première date du bloc : celui-ci en porte
+ *     DEUX — « à jour AAAA-MM-JJ » puis « dernière modification AAAA-MM-JJ ». Mesuré le
+ *     2026-09-14 sur les 36 pages : bloc présent partout, phrase présente partout, au
+ *     moins deux dates partout. Borner la portée NE SUFFIT DONC PAS.
+ *   - La date est DÉJÀ en ISO : aucune table de mois, contrairement à FR_MONTHS. Si
+ *     Justice Canada passait un jour au format littéral, les DEUX moitiés du miroir
+ *     rendraient null — c'est-à-dire « illisible », donc actionnable, jamais « à jour ».
+ *
+ * On s'ancre sur « jour » et non sur « à jour » : le « à » arrive tantôt en entité
+ * (&agrave;, pages de lois) tantôt en littéral (pages de règlements), et ce
+ * dépouillement-ci ne décode PAS les entités là où BeautifulSoup le fait côté Python.
+ * L'ancrage court neutralise cette asymétrie — les deux moitiés rendent la même valeur
+ * sur le même HTML, ce qui est tout l'objet d'un miroir.
+ *
+ * Le retrait de <script>/<style> n'a pas d'équivalent côté Python parce que BeautifulSoup
+ * PARSE là où l'on dépouille ici : sans lui, une chaîne ressemblant à la balise cible dans
+ * un script pourrait être captée par la regex et jamais par le parseur. Cet écart RAPPROCHE
+ * les deux moitiés au lieu de les éloigner.
+ */
+// Nommée, et non inline, pour être la MOITIÉ COMPARABLE de `_DATE_FEDERALE`
+// (pipeline/ingest.py) : `scripts/check-consolidation.test.mjs` extrait les deux des
+// SOURCES et exige qu'elles soient identiques. Un miroir que rien ne compare finit par
+// diverger — c'est l'invariant 2, appliqué ici avant qu'il ne coûte quelque chose.
+const DATE_FEDERALE = /(?:jour|current\s+to)\s*(\d{4}-\d{2}-\d{2})/i;
+
+export function extractConsolidationFederale(html) {
+  const cleaned = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ");
+  const bloc = cleaned.match(/<p[^>]*\bid=['"]assentedDate['"][^>]*>([\s\S]*?)<\/p>/i);
+  if (!bloc) return null;
+  const text = bloc[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const m = text.match(DATE_FEDERALE);
+  return m ? m[1] : null;
+}
+
+/**
  * Trois issues distinctes, jamais confondues :
  *   { status: "ok", date }              page atteinte, date lue
  *   { status: "illisible", note }       page atteinte (2xx) mais date introuvable — le
  *                                        miroir a peut-être cassé : ACTIONNABLE
  *   { status: "injoignable", note }     réseau / HTTP >= 400 / délai / URL absente
+ *
+ * `extracteur` est passé par l'appelant parce que le corpus a DEUX publieurs, dont les
+ * bannières n'ont ni la même portée ni le même format. Le choisir ici, d'après l'URL,
+ * reviendrait à deviner le publieur à partir d'une chaîne — alors que la configuration le
+ * DIT déjà (`consolidation_source` ou `official_source`).
  */
-async function fetchLiveDate(url) {
+async function fetchLiveDate(url, extracteur) {
   if (!url) return { status: "injoignable", note: "URL de consolidation absente de laws.config.json" };
   try {
     const res = await fetch(url, {
@@ -86,7 +131,7 @@ async function fetchLiveDate(url) {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!res.ok) return { status: "injoignable", note: `HTTP ${res.status}` };
-    const date = extractConsolidation(await res.text());
+    const date = extracteur(await res.text());
     if (date) return { status: "ok", date };
     return { status: "illisible", note: "page atteinte (200) mais date « À jour au » introuvable" };
   } catch (e) {
@@ -138,9 +183,73 @@ async function pool(items, size, worker) {
   await Promise.all(runners);
 }
 
+/** Deux publieurs, deux bannières, deux extracteurs. Le seau est porté par le contrôle. */
+const EXTRACTEURS = {
+  legisquebec: extractConsolidation,
+  justice: extractConsolidationFederale,
+};
+export const NOM_PUBLIEUR = { legisquebec: "LégisQuébec", justice: "Justice Canada" };
+
+/**
+ * Répartit les contrôles PAR PUBLIEUR, applique `classify` puis `computeDrift` à CHAQUE
+ * seau, et réunit les drapeaux par OU.
+ *
+ * C'EST LE CŒUR DU CORRECTIF DU 2026-09-14, et c'est pour ça que cette fonction est
+ * extraite et exportée plutôt que fondue dans `main()` : l'agrégation n'était gardée par
+ * RIEN, alors que c'est elle qui décide si le job mensuel parle ou se tait.
+ *
+ * `computeDrift` compare `injoignable.length / total` à un seuil de 25 %. Agrégé sur tout
+ * le corpus, ce ratio DILUE : un blocage TOTAL du fédéral (36 pages sur 36) pesait
+ * 36/194 = 18,6 %, donc sous le seuil, donc le job passait VERT pendant que 18 textes sur
+ * 97 n'étaient vérifiés par rien. La dilution joue dans les DEUX sens — un blocage
+ * québécois massif noierait de même un signal fédéral propre.
+ *
+ * Les SIGNATURES de `classify` et de `computeDrift` ne bougent pas : c'est ce qui préserve
+ * leurs contrôles. Seul le NOMBRE d'appels change.
+ *
+ * Un seau VIDE est omis, et non compté comme sain : sans quoi un corpus qui perdrait
+ * toutes ses entrées fédérales rendrait `drift = false` en le présentant comme un succès.
+ */
+export function agregeParSeau(checks, sansLangue = []) {
+  const seaux = new Map();
+  for (const nom of Object.keys(EXTRACTEURS)) {
+    const lot = checks.filter((c) => c.publieur === nom);
+    const lotSansLangue = sansLangue.filter((c) => c.publieur === nom);
+    if (!lot.length && !lotSansLangue.length) continue;
+    const parts = classify(lot);
+    const arg = { ...parts, sansLangue: lotSansLangue, total: lot.length };
+    seaux.set(nom, { ...arg, ...computeDrift(arg) });
+  }
+  const vals = [...seaux.values()];
+  return {
+    seaux,
+    drift: vals.some((s) => s.drift),
+    unreachableAlert: vals.some((s) => s.unreachableAlert),
+    // Quel publieur a bloqué. Sans cette sortie, le titre d'issue nomme LégisQuébec en dur
+    // et MENTIRAIT dès qu'un blocage viendrait de Justice Canada — le dépôt a déjà corrigé
+    // exactement ce défaut le 2026-07-23 (« le titre mentait »).
+    bloquees: [...seaux.entries()]
+      .filter(([, s]) => s.unreachableAlert).map(([nom]) => NOM_PUBLIEUR[nom]),
+  };
+}
+
 async function main() {
   const config = JSON.parse(readFileSync(join(ROOT, "laws.config.json"), "utf8"));
-  const sources = new Map(config.laws.map((l) => [l.id, l.consolidation_source || {}]));
+
+  // Le corpus a DEUX publieurs, et la configuration DIT lequel : `consolidation_source`
+  // pour LégisQuébec (EPUB), `official_source` pour Justice Canada (XML). Deviner le
+  // publieur d'après l'URL serait deviner ce qui est déjà déclaré.
+  //
+  // Défaut mesuré le 2026-09-14 : seule `consolidation_source` était lue, donc les 36
+  // contrôles fédéraux n'avaient AUCUNE URL, tombaient en `injoignable`, et — exclus
+  // d'`actionable` et noyés sous le seuil global de 25 % (36/194 = 18,6 %) — laissaient le
+  // job MENSUEL passer VERT pendant que 18 textes sur 97 n'étaient surveillés par rien.
+  const sources = new Map(config.laws.map((l) => [
+    l.id,
+    l.consolidation_source
+      ? { urls: l.consolidation_source, publieur: "legisquebec" }
+      : { urls: l.official_source || {}, publieur: "justice" },
+  ]));
 
   // 1) Dates stockées, via l'endpoint MCP public (une seule session).
   const mcp = createMcpClient(MCP_URL);
@@ -157,9 +266,12 @@ async function main() {
   const checks = [];
   const sansLangue = [];
   for (const law of laws) {
+    const src = sources.get(law.id) || { urls: {}, publieur: "legisquebec" };
     const langs = Array.isArray(law.langs) ? law.langs : [];
     if (langs.length === 0) {
-      sansLangue.push({ id: law.id, name: law.name_fr || law.name_en || law.id });
+      sansLangue.push({
+        id: law.id, name: law.name_fr || law.name_en || law.id, publieur: src.publieur,
+      });
       continue;
     }
     for (const lang of langs) {
@@ -168,7 +280,10 @@ async function main() {
         name: law.name_fr || law.name_en || law.id,
         lang,
         stored: law[`consol_date_${lang}`] ?? null,
-        url: (sources.get(law.id) || {})[lang] ?? null,
+        url: src.urls[lang] ?? null,
+        // `publieur` TRAVERSE `classify` sans qu'elle le lise : sa signature ne bouge pas,
+        // donc ses contrôles restent intacts. C'est l'appelant qui répartit.
+        publieur: src.publieur,
       });
     }
   }
@@ -177,24 +292,29 @@ async function main() {
     throw new Error("aucun couple (loi, langue) construit — forme de qclaw_list_laws inattendue ?");
   }
 
-  // 3) Date live pour chaque contrôle.
+  // 3) Date live pour chaque contrôle, avec l'extracteur de SON publieur.
   await pool(checks, CONCURRENCY, async (c) => {
-    const { status, date, note } = await fetchLiveDate(c.url);
+    const { status, date, note } = await fetchLiveDate(c.url, EXTRACTEURS[c.publieur]);
     c.status = status;
     c.live = date ?? null;
     c.note = note ?? null;
   });
 
-  // 4) Classement + calcul de dérive.
-  const { retard, anomalie, sansStockee, illisible, injoignable } = classify(checks);
+  // 4) Classement et dérive, PAR SEAU DE PUBLIEUR — cf. `agregeParSeau`, qui porte le
+  //    raisonnement et que `scripts/check-consolidation.test.mjs` verrouille.
+  const { seaux, drift, unreachableAlert, bloquees } = agregeParSeau(checks, sansLangue);
+
+  // Totaux, pour le rapport et le journal : union des seaux, jamais recalculés à part.
+  const cat = (cle) => [...seaux.values()].flatMap((s) => s[cle]);
+  const retard = cat("retard"), anomalie = cat("anomalie"), sansStockee = cat("sansStockee");
+  const illisible = cat("illisible"), injoignable = cat("injoignable");
   const total = checks.length;
-  const { drift, unreachableRatio, unreachableAlert } =
-    computeDrift({ retard, anomalie, sansStockee, illisible, sansLangue, injoignable, total });
+  const unreachableRatio = total ? injoignable.length / total : 0;
 
   // 5) Rapport.
   const report = buildReport({
     total, laws: laws.length, retard, anomalie, sansStockee, illisible, sansLangue,
-    injoignable, unreachableRatio, unreachableAlert,
+    injoignable, unreachableRatio, unreachableAlert, seaux,
   });
   writeFileSync(join(ROOT, "consolidation-report.md"), report, "utf8");
 
@@ -205,13 +325,21 @@ async function main() {
   console.log(`  page illisible     : ${illisible.length}`);
   console.log(`  loi sans langue    : ${sansLangue.length}`);
   console.log(`  injoignables réseau: ${injoignable.length} (${(unreachableRatio * 100).toFixed(0)} %)`);
+  for (const [nom, s] of seaux) {
+    console.log(`  — ${NOM_PUBLIEUR[nom]} : ${s.total} couples, ` +
+      `${s.injoignable.length} injoignables (${(s.unreachableRatio * 100).toFixed(0)} %), ` +
+      `dérive ${s.drift ? "OUI" : "non"}, alerte réseau ${s.unreachableAlert ? "OUI" : "non"}`);
+  }
   console.log(`  => dérive corpus   : ${drift ? "OUI" : "non"}`);
-  console.log(`  => alerte réseau   : ${unreachableAlert ? "OUI" : "non"}`);
+  console.log(`  => alerte réseau   : ${unreachableAlert ? "OUI" : "non"}` +
+    (bloquees.length ? ` (${bloquees.join(" et ")})` : ""));
   for (const c of retard) console.log(`    RETARD ${c.id}/${c.lang} : D1 ${c.stored} < live ${c.live}`);
   for (const c of illisible) console.log(`    ILLISIBLE ${c.id}/${c.lang} : ${c.note}`);
 
   if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `drift=${drift}\nunreachable=${unreachableAlert}\n`);
+    appendFileSync(process.env.GITHUB_OUTPUT,
+      `drift=${drift}\nunreachable=${unreachableAlert}\n` +
+      `sources_bloquees=${bloquees.join(" et ")}\n`);
   }
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, report + "\n");
@@ -219,21 +347,36 @@ async function main() {
 }
 
 function buildReport(d) {
-  const { total, laws, retard, anomalie, sansStockee, illisible, sansLangue, injoignable, unreachableRatio, unreachableAlert } = d;
+  const { total, laws, retard, anomalie, sansStockee, illisible, sansLangue, injoignable, unreachableRatio, unreachableAlert, seaux } = d;
   const stamp = new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const pub = (c) => NOM_PUBLIEUR[c.publieur] ?? "?";
   const rows = (list) =>
     list
-      .map((c) => `| ${c.id} | ${c.lang} | ${c.stored ?? "—"} | ${c.live ?? "—"} | ${(c.name || "").replace(/\|/g, "/")} |`)
+      .map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.stored ?? "—"} | ${c.live ?? "—"} | ${(c.name || "").replace(/\|/g, "/")} |`)
       .join("\n");
   const dateTable = (title, list) =>
     list.length
-      ? `\n### ${title}\n\n| Loi | Langue | D1 (chargé) | LégisQuébec (live) | Titre |\n|---|---|---|---|---|\n${rows(list)}\n`
+      ? `\n### ${title}\n\n| Loi | Langue | Publieur | D1 (chargé) | Source (live) | Titre |\n|---|---|---|---|---|---|\n${rows(list)}\n`
       : "";
 
   let md = `# Veille de consolidation — ${stamp}\n\n`;
   md += `Détecteur **en lecture seule** : ${laws} lois, ${total} couples (loi, langue) comparés `;
   md += `entre les dates chargées en D1 (via \`qclaw_list_laws\`) et les dates « À jour au » `;
-  md += `affichées par LégisQuébec.\n\n`;
+  md += `affichées par leur publieur officiel — LégisQuébec pour le Québec, Justice Canada `;
+  md += `pour le fédéral.\n\n`;
+
+  // Ventilation par publieur. Le seuil de joignabilité s'applique PAR SEAU : agrégé, un
+  // blocage total d'un des deux se diluerait sous les 25 % et le job passerait vert.
+  if (seaux && seaux.size > 1) {
+    md += `| Publieur | Couples | Retard | Injoignables | Dérive | Alerte réseau |\n`;
+    md += `|---|---|---|---|---|---|\n`;
+    for (const [nom, s] of seaux) {
+      md += `| ${NOM_PUBLIEUR[nom]} | ${s.total} | ${s.retard.length} | `;
+      md += `${s.injoignable.length} (${(s.unreachableRatio * 100).toFixed(0)} %) | `;
+      md += `${s.drift ? "**OUI**" : "non"} | ${s.unreachableAlert ? "**OUI**" : "non"} |\n`;
+    }
+    md += `\n`;
+  }
   md += `- en retard (rafraîchissement dû) : **${retard.length}**\n`;
   md += `- en avance / anomalie : **${anomalie.length}**\n`;
   md += `- sans date stockée : **${sansStockee.length}**\n`;
@@ -241,18 +384,20 @@ function buildReport(d) {
   md += `- lois sans langue déclarée : **${sansLangue.length}**\n`;
   md += `- injoignables réseau : **${injoignable.length}** (${(unreachableRatio * 100).toFixed(0)} %)\n`;
 
-  md += dateTable("Rafraîchissement dû — D1 en retard sur LégisQuébec", retard);
-  md += dateTable("Anomalie — D1 EN AVANCE sur LégisQuébec (à investiguer)", anomalie);
+  md += dateTable("Rafraîchissement dû — D1 en retard sur la source officielle", retard);
+  md += dateTable("Anomalie — D1 EN AVANCE sur la source officielle (à investiguer)", anomalie);
   md += dateTable("Date de consolidation absente en D1", sansStockee);
 
   if (illisible.length) {
     md += `\n### Pages atteintes mais date « À jour au » introuvable\n\n`;
     md += `> ⚠️ Ces pages répondent (HTTP 200) mais le parseur n'y trouve pas la date. `;
-    md += `Cause probable : LégisQuébec a changé le libellé/format de la bannière — le parseur `;
-    md += `\`extractConsolidation\` (miroir de \`fetch_consolidation\`) est à mettre à jour. `;
-    md += `Ce n'est PAS un problème réseau.\n\n`;
-    md += `| Loi | Langue | Détail |\n|---|---|---|\n`;
-    md += illisible.map((c) => `| ${c.id} | ${c.lang} | ${c.note ?? "?"} |`).join("\n") + "\n";
+    md += `Cause probable : le publieur a changé le libellé ou le format de la bannière — le `;
+    md += `miroir correspondant est à mettre à jour, DANS SES DEUX MOITIÉS `;
+    md += `(\`extractConsolidation\` ↔ \`fetch_consolidation\` pour LégisQuébec ; `;
+    md += `\`extractConsolidationFederale\` ↔ \`extrait_consolidation_federale\` pour Justice `;
+    md += `Canada). Ce n'est PAS un problème réseau.\n\n`;
+    md += `| Loi | Langue | Publieur | Détail |\n|---|---|---|---|\n`;
+    md += illisible.map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.note ?? "?"} |`).join("\n") + "\n";
   }
 
   if (sansLangue.length) {
@@ -266,12 +411,17 @@ function buildReport(d) {
   if (injoignable.length) {
     md += `\n### Pages injoignables (réseau)\n\n`;
     if (unreachableAlert) {
-      md += `> ⚠️ ${(unreachableRatio * 100).toFixed(0)} % des pages sont injoignables depuis le runner. `;
-      md += `Un blocage massif (WAF LégisQuébec, filtrage des IP de centre de données) est possible — `;
-      md += `il conditionnerait aussi toute ingestion automatisée. À vérifier hors CI.\n\n`;
+      const bloquees = [...(seaux ?? new Map()).entries()]
+        .filter(([, s]) => s.unreachableAlert)
+        .map(([nom, s]) => `**${NOM_PUBLIEUR[nom]}** (${(s.unreachableRatio * 100).toFixed(0)} %)`);
+      md += `> ⚠️ Le seuil de joignabilité est franchi chez ${bloquees.join(" et ") || "un publieur"}. `;
+      md += `Il s'applique PAR PUBLIEUR : agrégé sur tout le corpus, un blocage total de l'un `;
+      md += `des deux se diluerait sous les 25 % et ce rapport passerait vert. `;
+      md += `Un blocage massif (WAF, filtrage des IP de centre de données) est possible — il `;
+      md += `conditionnerait aussi toute ingestion automatisée. À vérifier hors CI.\n\n`;
     }
-    md += `| Loi | Langue | Motif |\n|---|---|---|\n`;
-    md += injoignable.map((c) => `| ${c.id} | ${c.lang} | ${c.note ?? "?"} |`).join("\n") + "\n";
+    md += `| Loi | Langue | Publieur | Motif |\n|---|---|---|---|\n`;
+    md += injoignable.map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.note ?? "?"} |`).join("\n") + "\n";
   }
 
   md += `\n---\n`;

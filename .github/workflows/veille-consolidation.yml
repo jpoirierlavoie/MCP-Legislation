@@ -4,10 +4,15 @@ name: veille-consolidation
 # qu'il écrivait en production sans faire le rafraîchissement complet — cf. l'historique
 # de .github/workflows/ et CLAUDE.md). Ici : rien n'est écrit en base.
 #
-# Compare, pour chaque loi, la date « À jour au » affichée par LégisQuébec à la date
-# consol_date_* chargée en D1 (lue via l'endpoint MCP PUBLIC, sans secret Cloudflare).
-# Si LégisQuébec a consolidé au-delà de ce qui est chargé, ouvre/actualise une issue.
-# La bascule elle-même reste la procédure manuelle et supervisée de CLAUDE.md.
+# Compare, pour chaque loi, la date « À jour au » affichée par son PUBLIEUR OFFICIEL
+# — LégisQuébec pour les 79 textes québécois, Justice Canada pour les 18 fédéraux —
+# à la date consol_date_* chargée en D1 (lue via l'endpoint MCP PUBLIC, sans secret
+# Cloudflare). Si la source a consolidé au-delà de ce qui est chargé, ouvre ou
+# actualise une issue. La bascule reste la procédure manuelle de CLAUDE.md.
+#
+# Le seuil de joignabilité s'applique PAR PUBLIEUR (2026-09-14) : agrégé sur tout le
+# corpus, un blocage TOTAL du fédéral pesait 36/194 = 18,6 %, donc sous les 25 %,
+# donc ce job passait vert pendant que 18 textes sur 97 n'étaient vérifiés par rien.
 on:
   schedule:
     - cron: "0 12 1 * *" # 1er de chaque mois, 12:00 UTC — lecture seule, sans risque
@@ -85,7 +90,11 @@ jobs:
             --color FBCA04 --force
           existing=$(gh issue list --label veille-consolidation --state open \
             --json number --jq '.[0].number // empty')
-          title="Veille consolidation — vérification incomplète, LégisQuébec injoignable depuis le runner ($(date -u +%Y-%m-%d))"
+          # `sources_bloquees` vient du detecteur, qui SAIT quel publieur a bloque.
+          # Le nommer en dur ici ferait mentir le titre des qu'un blocage viendrait
+          # de Justice Canada — c'est exactement le defaut corrige le 2026-07-23.
+          bloquees="${{ steps.detect.outputs.sources_bloquees }}"
+          title="Veille consolidation — vérification incomplète, ${bloquees:-source officielle} injoignable depuis le runner ($(date -u +%Y-%m-%d))"
           if [ -n "$existing" ]; then
             gh issue edit "$existing" --title "$title" --body-file consolidation-report.md
             echo "Issue #$existing retitrée : vérification incomplète."

@@ -103,7 +103,7 @@ npm run eval                                       # harnais d'éval : 20 cas, r
 node eval/run.mjs --refresh-paths                  # revalide eval/cases.resolved.json et SORT — diff à VIDER avant de mesurer
 node scripts/journal.mjs [--local|--jours N|--tout] # dépouille search_log (lecture seule) : replis et reformulations
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # 23 tests
-node --test scripts/check-consolidation.test.mjs   # 13 contrôles du détecteur de veille (sans réseau, en CI)
+node --test scripts/check-consolidation.test.mjs   # 26 contrôles du détecteur de veille (sans réseau, en CI)
 node --test tests/catalogue.test.mjs               # garde anti-dérive doc (R10 ; sans réseau, en CI)
 node --test tests/page-client.test.mjs             # JS client de la page (sans réseau ni navigateur, en CI)
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.ingest --law X --lang fr --apply-local
@@ -358,19 +358,28 @@ laissant les embeddings sur l'ancien texte donc du droit périmé rendu en silen
 
 **Veille de consolidation** (`.github/workflows/veille-consolidation.yml` +
 `scripts/check-consolidation.mjs`) : job **en LECTURE SEULE**, mensuel, qui compare la
-date « À jour au » de chaque loi sur LégisQuébec à `consol_date_*` en D1 (lue via
-`qclaw_list_laws` sur l'endpoint MCP — jeton de LECTURE `MCP_TOKEN` en secret GitHub,
-toujours AUCUN secret Cloudflare) et ouvre/actualise une
+date « À jour au » de chaque loi **sur son publieur officiel** à `consol_date_*` en D1
+(lue via `qclaw_list_laws` sur l'endpoint MCP — jeton de LECTURE `MCP_TOKEN` en secret
+GitHub, toujours AUCUN secret Cloudflare) et ouvre/actualise une
 issue étiquetée `veille-consolidation` quand un rafraîchissement est dû (issue close
-automatiquement à la résolution). Il DÉTECTE, il ne bascule jamais. `extractConsolidation`
-est un miroir FIDÈLE de `fetch_consolidation` (portée bornée aux blocs `text-end`) ;
-une page atteinte mais illisible est un signal ACTIONNABLE (le miroir a peut-être cassé),
+automatiquement à la résolution). Il DÉTECTE, il ne bascule jamais.
+**DEUX publieurs, donc DEUX miroirs**, chacun fidèle à sa moitié Python et borné à sa
+bannière : `extractConsolidation` ↔ `fetch_consolidation` (LégisQuébec, blocs `text-end`) ;
+`extractConsolidationFederale` ↔ `extrait_consolidation_federale` (Justice Canada, le seul
+`<p id="assentedDate">`). Ce second bloc porte **deux** dates — « à jour » et « dernière
+modification » — donc borner la portée ne suffit pas : c'est l'ancrage sur la phrase qui
+les distingue, et un test compare les deux regex **lues en source**.
+Une page atteinte mais illisible est un signal ACTIONNABLE (le miroir a peut-être cassé),
 jamais un null confondu avec une panne réseau — verrouillé par
-`scripts/check-consolidation.test.mjs` (13 contrôles, en CI). Deux signaux SÉPARÉS
+`scripts/check-consolidation.test.mjs` (26 contrôles, en CI). Deux signaux SÉPARÉS
 depuis le 2026-07-23 : `drift` (dérive corpus) et `unreachable` (blocage réseau) —
-le titre de l'issue dit lequel a parlé, et elle ne clôt que si les DEUX sont éteints
-(une page injoignable est une loi NON VÉRIFIÉE, pas une loi à jour). Défauts trouvés par revue
-adversariale (2026-07-21) et corrigés avant le premier commit.
+le titre de l'issue dit lequel a parlé ET **quel publieur** a bloqué (sortie
+`sources_bloquees`), et elle ne clôt que si les DEUX sont éteints
+(une page injoignable est une loi NON VÉRIFIÉE, pas une loi à jour).
+**Le seuil de joignabilité s'applique PAR PUBLIEUR** (`agregeParSeau`, 2026-09-14) :
+agrégé, un blocage TOTAL du fédéral pesait 36/194 = 18,6 %, donc sous les 25 %, donc le job
+passait vert pendant que 18 textes sur 97 n'étaient vérifiés par rien. Défauts trouvés par
+revue adversariale (2026-07-21 et 2026-09-14) et corrigés avant le commit.
 
 ## Où trouver quoi
 
