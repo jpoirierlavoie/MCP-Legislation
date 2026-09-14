@@ -12,6 +12,7 @@ import argparse
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -125,14 +126,33 @@ def extrait_consolidation_federale(html: str) -> str | None:
     return m.group(1) if m else None
 
 
-def fetch_consolidation_federale(url: str) -> str | None:
-    """Frère fédéral de `fetch_consolidation` : télécharge, puis délègue l'extraction."""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
-        html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
-    except Exception:
-        return None
-    return extrait_consolidation_federale(html)
+def fetch_consolidation_federale(url: str, essais: int = 3) -> str | None:
+    """Frère fédéral de `fetch_consolidation` : télécharge, puis délègue l'extraction.
+
+    REPRISE BORNÉE, et elle n'affaiblit rien. Une lecture ratée est FATALE ici (cf.
+    `_acquiert_lims`), donc un aléa réseau abattait une réingestion de 36 combos au
+    quinzième — constaté le 2026-09-14 sur `ca-c-44/en`, dont la page répondait 200 et
+    rendait sa date à la seconde suivante. Réessayer la MÊME page n'est pas un repli sur
+    une autre source : la garantie — « la date vient de la page, ou rien » — est intacte.
+
+    Asymétrie VOULUE avec la veille (`scripts/check-consolidation.mjs`), qui ne réessaie
+    pas : là-bas, une page injoignable est le SIGNAL que le job doit rapporter, et la
+    réessayer le masquerait. Ici, c'est un obstacle à une opération humaine supervisée.
+    """
+    for essai in range(essais):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
+            html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+        except Exception:
+            if essai + 1 < essais:
+                time.sleep(2 * (essai + 1))
+                continue
+            return None
+        date = extrait_consolidation_federale(html)
+        # Une page atteinte mais ILLISIBLE n'est pas un aléa : c'est le miroir qui a
+        # peut-être cassé. On ne la réessaie pas — on rend None, et l'appelant refuse.
+        return date
+    return None
 
 
 def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
