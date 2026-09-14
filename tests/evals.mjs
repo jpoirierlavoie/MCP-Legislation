@@ -160,6 +160,31 @@ const EVALS = [
     maxParMatiere: 3,
   },
   {
+    // LE DÉFAUT QUI A JUSTIFIÉ LA SCISSION DU SECTEUR FINANCIER, épinglé le 2026-09-14.
+    //
+    // Avant : `secteur-financier` portait 12 entités, toutes appariées au MÊME score par
+    // « amf », aucune ne portant d'autre signal. MAX_PER_SUBJECT en laissait passer 3, et le
+    // départage est ALPHABÉTIQUE (relevance.ts:315) : a-32.1, c-67.3, d-9.2. La Loi sur
+    // l'encadrement du secteur financier — CELLE QUI CRÉE L'AUTORITÉ — arrivait neuvième
+    // dans l'alphabet et était absente du classement entier.
+    //
+    // Aucun enrichissement de description ne pouvait corriger cela : ajouter des mots montait
+    // les douze à égalité. Seule la réduction de la matière le fait.
+    query: "pouvoirs de l'AMF",
+    attendu: "e-6.1, la loi qui crée l'Autorité, présente — elle était ABSENTE avant la scission",
+    present: [{ law: "e-6.1" }],
+  },
+  {
+    // Miroir du précédent, côté distribution. Avant la scission, les trois premiers étaient
+    // « Contrats publics » — l'Autorité des marchés PUBLICS captait « autorité » et
+    // « marchés » là où `secteur-financier` écrivait seulement le sigle « AMF ». Les textes
+    // justes arrivaient 5e, 6e et 8e.
+    query: "plainte contre un représentant en épargne collective devant l'Autorité des marchés financiers",
+    attendu: "les textes de la distribution en tête, devant la Loi sur l'Autorité des marchés PUBLICS",
+    top: { law: "d-9.2-r.10" },
+    present: [{ law: "d-9.2" }, { law: "d-9.2-r.2" }],
+  },
+  {
     query: "zzzzq wxyv",
     attendu: "aucun rapprochement, message d'aide",
     none: true,
@@ -250,15 +275,15 @@ async function smokeTests() {
     `count=${bySubject.structuredContent?.count}`);
 
   const subs = await callTool("qclaw_list_subjects", {});
-  add("list_subjects : 35 matières", subs.structuredContent?.count === 35,
+  add("list_subjects : 37 matières", subs.structuredContent?.count === 37,
     `count=${subs.structuredContent?.count}`);
 
-  // Les 35 matières doivent être traduites : c'est la surface d'appariement du signal S1,
+  // Les 37 matières doivent être traduites : c'est la surface d'appariement du signal S1,
   // sans quoi le routeur reste muet en anglais.
   const subsEn = await callTool("qclaw_list_subjects", { lang: "en" });
   const sansEn = (subsEn.structuredContent?.subjects ?? [])
     .filter((s) => !s.label_en || !s.description_en).map((s) => s.id);
-  add("list_subjects (lang=en) : les 35 matières traduites", sansEn.length === 0,
+  add("list_subjects (lang=en) : les 37 matières traduites", sansEn.length === 0,
     sansEn.length ? `sans traduction : ${sansEn.slice(0, 5).join(", ")}…` : "");
   // Contrôler les ENTRÉES, pas seulement les en-têtes de groupe : une première version
   // traduisait « Private law (C.C.Q.) » tout en listant « biens — Biens » et sa description
@@ -311,7 +336,7 @@ async function smokeTests() {
       === "Loi sur les cités et villes" && !/\[fr\]/.test(relFr.content?.[0]?.text ?? ""));
 
   // list_laws rendait les libellés de MATIÈRES toujours en français, même sous lang='en',
-  // alors que label_en est peuplé sur les 35 matières. Contrôler les ENTRÉES, pas l'en-tête :
+  // alors que label_en est peuplé sur les 37 matières. Contrôler les ENTRÉES, pas l'en-tête :
   // c'est la leçon déjà tirée pour list_subjects et jamais reportée ici.
   const lawsEn = await callTool("qclaw_list_laws", { lang: "en", structure: false });
   const cmEn = lawsEn.structuredContent?.laws?.find((l) => l.id === "c-27.1");

@@ -153,12 +153,28 @@
       "description_en": "Securities: prospectus, distribution, reporting issuer, continuous disclosure, dealers and advisers, take-over bid, insider; derivative instruments; transfer of securities and security entitlements."
     },
     {
-      "id": "secteur-financier",
-      "label_fr": "Secteur financier et institutions financières",
-      "label_en": "Financial Sector and Financial Institutions",
+      "id": "distribution-produits-financiers",
+      "label_fr": "Distribution de produits et services financiers",
+      "label_en": "Distribution of Financial Products and Services",
       "kind": "specialise",
-      "description_fr": "Encadrement AMF et Tribunal administratif des marchés financiers (TAMF), institutions de dépôts, assureurs et activités d'assurance, coopératives de services financiers (caisses), entreprises de services monétaires, distribution de produits et services financiers.",
-      "description_en": "Oversight by the Autorité des marchés financiers and the Financial Markets Administrative Tribunal, deposit institutions, insurers and insurance activities, financial services cooperatives (credit unions), money-services businesses, distribution of financial products and services."
+      "description_fr": "Distribution de produits et services financiers : représentant, cabinet, épargne collective, plainte.",
+      "description_en": "Distribution of financial products and services: complaints."
+    },
+    {
+      "id": "encadrement-amf",
+      "label_fr": "Encadrement du secteur financier (AMF et TAMF)",
+      "label_en": "Regulation of the Financial Sector (AMF and FMAT)",
+      "kind": "specialise",
+      "description_fr": "Encadrement du secteur financier : AMF, TAMF.",
+      "description_en": "Regulation of the financial sector: AMF, FMAT."
+    },
+    {
+      "id": "institutions-depots-assureurs",
+      "label_fr": "Institutions de dépôts, caisses et assureurs",
+      "label_en": "Deposit Institutions, Credit Unions and Insurers",
+      "kind": "specialise",
+      "description_fr": "Institution financière : institution de dépôts, caisse, assureur, activités monétaires.",
+      "description_en": "Financial institution: deposit institution, credit union (caisse), insurer, monetary activities."
     },
     {
       "id": "assurances",
@@ -315,7 +331,7 @@
       "law": "j-3-r.3.2"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "institutions-depots-assureurs",
       "law": "i-13.2.2"
     },
     {
@@ -379,15 +395,15 @@
       "law": "c-73.2"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "encadrement-amf",
       "law": "e-6.1"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "distribution-produits-financiers",
       "law": "d-9.2"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "institutions-depots-assureurs",
       "law": "e-12.000001"
     },
     {
@@ -521,7 +537,7 @@
       "law": "a-2.1"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "institutions-depots-assureurs",
       "law": "a-32.1"
     },
     {
@@ -529,7 +545,7 @@
       "law": "a-32.1"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "institutions-depots-assureurs",
       "law": "c-67.3"
     },
     {
@@ -553,27 +569,27 @@
       "law": "ccq-r.6"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "encadrement-amf",
       "law": "e-6.1-r.2"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "encadrement-amf",
       "law": "e-6.1-r.0.3"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "distribution-produits-financiers",
       "law": "d-9.2-r.2"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "distribution-produits-financiers",
       "law": "d-9.2-r.10"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "distribution-produits-financiers",
       "law": "d-9.2-r.19"
     },
     {
-      "subject": "secteur-financier",
+      "subject": "distribution-produits-financiers",
       "law": "d-9.2-r.20"
     },
     {

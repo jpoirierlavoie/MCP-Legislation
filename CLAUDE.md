@@ -76,7 +76,7 @@ inter-dépôts, non gardé.
    `PYTHONUTF8=1`) — télécharge/parse les EPUB Irosoft, charge D1 par
    staging → validation → bascule. Ne JAMAIS écrire directement en production.
 3. **Données versionnées** — `laws.config.json` (79 lois), `catalogue.json` (doc publique
-   des outils et des aides au repérage, bilingue — R10), `taxonomy.json` (35 matières
+   des outils et des aides au repérage, bilingue — R10), `taxonomy.json` (37 matières
    bilingues), `relations.json` (relations curées), `schema.sql` + `schema-decouverte.sql`
    + `migrations/` (wrangler d1 migrations).
 
