@@ -276,22 +276,6 @@
   "mappings": [
     {
       "subject": "administration-justice",
-      "law": "c-25.01-r.0.2.01"
-    },
-    {
-      "subject": "administration-justice",
-      "law": "c-25.01-r.0.2.2"
-    },
-    {
-      "subject": "administration-justice",
-      "law": "c-25.01-r.0.2.3"
-    },
-    {
-      "subject": "administration-justice",
-      "law": "c-25.01-r.9"
-    },
-    {
-      "subject": "administration-justice",
       "law": "t-16"
     },
     {
@@ -307,16 +291,8 @@
       "law": "i-16"
     },
     {
-      "subject": "administration-justice",
-      "law": "c-25.01-r.0.2.4"
-    },
-    {
       "subject": "famille",
       "law": "c-25.01-r.0.2.4"
-    },
-    {
-      "subject": "administration-justice",
-      "law": "c-25.01-r.0.2.1"
     },
     {
       "subject": "droit-administratif",
@@ -551,10 +527,6 @@
     },
     {
       "subject": "procedure-civile",
-      "law": "cpc"
-    },
-    {
-      "subject": "administration-justice",
       "law": "cpc"
     },
     {
