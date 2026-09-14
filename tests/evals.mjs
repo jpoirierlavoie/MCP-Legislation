@@ -56,11 +56,24 @@ const EVALS = [
     present: [{ law: "ccq", pathPrefix: "ga:l_sixieme" }],
   },
   {
+    // AMENDÉ le 2026-09-13, sur décision éditoriale de Jason — pas pour faire passer le test.
+    //
+    // `d-9.2` (Loi sur la distribution de produits et services financiers) a quitté la
+    // matière `assurances` pour ne plus relever que du `secteur-financier` : elle régit des
+    // INTERMÉDIAIRES, pas le contrat d'assurance. Sur « assurance responsabilité », la
+    // réponse juste est donc le chapitre du C.c.Q., et `d-9.2` n'est plus attendue.
+    //
+    // Mesuré avant de trancher : le retrait fait tomber `d-9.2` hors du top 8, parce qu'elle
+    // perdait DEUX choses à la fois — les points S1 d'`assurances`, et l'échappatoire au
+    // plafond que procurait la double appartenance (`relevance.ts:325`, `matieres.every`).
+    // Elle concourt désormais pour 3 places parmi les 12 entités du secteur financier.
+    //
+    // Une variante conservant `d-9.2` dans `assurances` a été éprouvée et passait ; elle a
+    // été ÉCARTÉE parce qu'elle contredisait la décision, non parce qu'elle échouait.
     query: "assurance responsabilité",
-    attendu: "chapitre des assurances du C.c.Q. + d-9.2",
+    attendu: "chapitre des assurances du C.c.Q.",
     present: [
       { law: "ccq", pathPrefix: "ga:l_cinquieme-gb:l_deuxieme-gc:l_quinzieme" },
-      { law: "d-9.2" },
     ],
   },
   {
