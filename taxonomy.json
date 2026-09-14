@@ -335,6 +335,14 @@
       "kind": "specialise",
       "description_fr": "Lettre de change, chèque, chèque barré, billet, effet cambiaire : tireur, endosseur, endossement, protêt, complaisance, grâce.",
       "description_en": "Bill of exchange, cheque, crossed cheque, promissory note, negotiable instrument: drawer, endorser, endorsement, protest, accommodation, grace."
+    },
+    {
+      "id": "pratiques-commerciales-restrictives",
+      "label_fr": "Pratiques commerciales restrictives",
+      "label_en": "Restrictive Trade Practices",
+      "kind": "specialise",
+      "description_fr": "Complot entre concurrents, cartel, fixation des prix, truquage des offres, abus de position dominante, fusionnement, préavis de fusion, maintien des prix, exclusivité, indications fausses ou trompeuses, télémarketing trompeur.",
+      "description_en": "Conspiracy among competitors, cartel, price fixing, bid rigging, abuse of dominant position, merger, pre-merger notification, price maintenance, exclusive dealing, false or misleading representations, deceptive telemarketing."
     }
   ],
   "mappings": [
@@ -867,6 +875,10 @@
     {
       "subject": "effets-negociables",
       "law": "ca-b-4"
+    },
+    {
+      "subject": "pratiques-commerciales-restrictives",
+      "law": "ca-c-34"
     }
   ]
 }
