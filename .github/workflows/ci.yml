@@ -65,9 +65,19 @@ jobs:
 
       # discovery/load.py ne doit pas DETRUIRE ce que l'ingestion a ecrit. Mesure du
       # 2026-09-14 : `seed_laws` remettait a NULL la date de consolidation des 18 textes
-      # federaux — leur config n'en porte pas, elle vient du XML — A CHAQUE chargement de
-      # la couche de decouverte. Silencieux, et rejoue apres chaque reparation.
+      # federaux — leur config n'en porte pas, elle est lue sur la page officielle — A
+      # CHAQUE chargement de la couche de decouverte. Silencieux, et rejoue apres chaque
+      # reparation.
       - run: python -m unittest pipeline.tests.test_discovery_load -v
+
+      # Moitie PYTHON du miroir de date federale. `consol_date_*` des 18 textes vient de
+      # la page de Justice Canada depuis le 2026-09-14 : `lims:current-date` sous-declarait
+      # la fraicheur de pres d'un an, et n'etait pas ce que la veille compare. Le bloc
+      # `<p id="assentedDate">` porte DEUX dates — « a jour » et « derniere modification » —
+      # donc borner la portee ne suffit pas, c'est l'ancrage sur la phrase qui les
+      # distingue. L'autre moitie du miroir est `extractConsolidationFederale`
+      # (scripts/check-consolidation.test.mjs). Aucun reseau.
+      - run: python -m unittest pipeline.tests.test_consolidation_federale -v
 
       # PORTE DE LA PHASE 0 du corpus fédéral : le classement des balises LIMS est une
       # liste BLANCHE. Une balise absente du classement doit ARRÊTER l'ingestion, pas

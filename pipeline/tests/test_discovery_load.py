@@ -6,8 +6,14 @@ métadonnées de loi depuis `laws.config.json`, et posait inconditionnellement :
     consol_date_fr = <config.consolidation.fr>,  consol_date_en = <config.consolidation.en>
 
 Or les 18 entrées FÉDÉRALES de `laws.config.json` ne portent aucune clé `consolidation` :
-leur date vient du XML (`lims:current-date`), écrite par `pipeline/ingest.py`. L'UPDATE la
-remettait donc à NULL — **à chaque chargement de la couche de découverte**.
+leur date est LUE SUR LA PAGE OFFICIELLE de Justice Canada par `pipeline/ingest.py`
+(`fetch_consolidation_federale`). L'UPDATE la remettait donc à NULL — **à chaque
+chargement de la couche de découverte**.
+
+(Jusqu'au 2026-09-14 cette date venait du XML, `lims:current-date`. Elle en a été retirée
+parce qu'elle sous-déclarait la fraîcheur de près d'un an sur certains textes et qu'elle
+n'était pas celle que la veille compare. Le défaut gardé ici est INCHANGÉ : la config ne
+porte toujours aucune date fédérale.)
 
 Conséquence servie : `qclaw_list_laws` et la page publique annonçaient 18 textes sans date
 « à jour au ». Et le défaut se rejouait à chaque passe éditoriale sur `taxonomy.json`, donc
@@ -70,7 +76,8 @@ class TestSeedLawsNeDetruitPas(unittest.TestCase):
             self.assertNotIn(
                 "consol_date_", sql,
                 f"{lid} : `seed_laws` écrase la date de consolidation, que l'ingestion "
-                "avait tirée du XML (lims:current-date). Elle repasserait à NULL.",
+                "avait lue sur la page officielle de Justice Canada. Elle repasserait "
+                "à NULL.",
             )
 
     def test_une_loi_quebecoise_voit_bien_sa_date_synchronisee(self):
@@ -112,7 +119,8 @@ class TestLaConfigFederaleNePorteAucuneDate(unittest.TestCase):
         self.assertEqual(
             fautives, [],
             "des entrées fédérales déclarent une `consolidation` en configuration : elle "
-            "primerait sur `lims:current-date` du XML, qui est la source vivante.",
+            "primerait sur la date lue sur la page officielle de Justice Canada, qui "
+            "est la source vivante.",
         )
 
 

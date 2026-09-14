@@ -37,8 +37,8 @@ ORDRE_ATTENDU = [
     # --- CORPUS FÉDÉRAL (2026-09-11) : 16 lois + 2 règlements, ajoutés EN FIN ------------
     # L'ordre suit le tableau du SPEC §9. Ces 18 entrées portent `source: "lims"` et sont
     # lues en XML depuis le dépôt de Justice Canada, donc SANS `epub` ni `consolidation` :
-    # leur date est DÉRIVÉE du fichier (`lims:current-date`), ce qui vaut mieux qu'une date
-    # recopiée en config (R10). `test_champs_obligatoires` branche sur `source`.
+    # leur date est LUE SUR LA PAGE OFFICIELLE (`official_source`), ce qui vaut mieux qu'une
+    # date recopiée en config (R10). `test_champs_obligatoires` branche sur `source`.
     "ca-b-3", "ca-c-36", "ca-d-3.4", "ca-c-44", "ca-c-34", "ca-c-42", "ca-t-13", "ca-l-2",
     "ca-p-8.6", "ca-i-21", "ca-c-5", "ca-f-7", "ca-s-26", "ca-c-50", "ca-i-15", "ca-b-4",
     "ca-dors-98-106", "ca-crc-368",
@@ -69,8 +69,10 @@ class ConfigTest(unittest.TestCase):
         Les entrées québécoises arrivent en EPUB depuis LégisQuébec : `epub`,
         `consolidation` et `consolidation_source` y sont indispensables. Les entrées
         fédérales arrivent en XML depuis un dépôt git et n'ont AUCUN de ces trois champs —
-        leur date de consolidation est DÉRIVÉE du fichier (`lims:current-date`), ce qui est
-        strictement mieux qu'une date recopiée en config (R10).
+        leur date de consolidation est LUE SUR LA PAGE OFFICIELLE que désigne
+        `official_source`, ce qui est strictement mieux qu'une date recopiée en config
+        (R10) et, surtout, c'est la MÊME observation que celle à laquelle la veille la
+        compare — sans quoi les 36 contrôles fédéraux seraient faux à perpétuité.
 
         On BRANCHE donc, on n'assouplit pas : le test reste aussi strict pour chaque source.
         Le laisser exiger `epub` de tout le monde rendrait la CI rouge sur 18 entrées ; le

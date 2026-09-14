@@ -277,6 +277,29 @@ tout numéro non numérique, ce qui enverrait le préambule **à la fin** du cor
 | `laws.last_amended` | `lims:lastAmendedDate` | « Dernière modification » : I-15 2008-06-18 |
 | — | `LastConsolidationDate` du lookup | **NE PAS UTILISER** : uniforme à `20260622` pour les 1 788 entrées. C'est la date du site, pas celle de la loi. L'employer donnerait la même date à toutes les lois, et personne ne le verrait |
 
+> **AMENDEMENT DU 2026-09-14 — `consol_date_*` vient désormais de la PAGE, pas du XML.**
+>
+> La mise en garde ci-dessus contre `LastConsolidationDate` du lookup **tient** : mesurée à
+> `20260722` au SHA ingéré alors que la page affiche `2026-07-21`, elle n'est pas la valeur
+> que la veille compare. Ce qui est amendé est la CONCLUSION qu'on en avait tirée —
+> « donc prendre `lims:current-date` ».
+>
+> Trois mesures l'ont renversée : (1) `lims:current-date` **sous-déclare la fraîcheur** —
+> la *Loi sur le droit d'auteur* était annoncée à jour au `2025-07-24` quand Justice Canada
+> la donne à jour au `2026-07-21`, près d'un an d'écart ; (2) la veille compare cette
+> colonne à ce que la **page** affiche, donc y stocker une valeur d'une autre provenance
+> rendrait les 36 contrôles fédéraux faux **à perpétuité** (en `retard` avec le XML, en
+> `anomalie` avec le lookup), sans qu'aucune réingestion ne les éteigne ; (3) la date est
+> **uniforme** — une seule valeur sur les 9 588 entrées du lookup **et** sur les 36 pages :
+> c'est une propriété de l'INSTANTANÉ, pas de la loi, et l'objection « la même date pour
+> toutes les lois » décrit donc la réalité publiée plutôt qu'un défaut.
+>
+> `laws.consol_date_*` ← `fetch_consolidation_federale(official_source[lang])`, borné au
+> bloc `<p id="assentedDate">` de la page, miroir de `extractConsolidationFederale`
+> (`scripts/check-consolidation.mjs`). `laws.last_amended` ← `lims:lastAmendedDate`,
+> **inchangé**. L'échec de lecture est **fatal** : un repli mettrait deux sémantiques dans
+> une même colonne, sans étiquette.
+
 `in_force = 0` doit voyager dans `structuredContent` comme **champ obligatoire** de toute
 réponse portant sur cette loi (R4, corollaire structuré, décision 001) : un client qui
 jette la prose doit garder l'étiquette. Le pipeline **refuse** l'ingestion d'une loi

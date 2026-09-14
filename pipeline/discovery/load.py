@@ -59,8 +59,15 @@ def seed_laws(db) -> int:
         # Défaut mesuré le 2026-09-14, silencieux et RÉCURRENT. Ce `UPDATE` posait
         # inconditionnellement `consol_date_fr = consol.get('fr')`. Or les 18 entrées
         # FÉDÉRALES de `laws.config.json` ne portent aucune clé `consolidation` : leur date
-        # vient du XML (`lims:current-date`), écrite par `pipeline/ingest.py`. L'UPDATE la
+        # est LUE SUR LA PAGE OFFICIELLE de Justice Canada par `pipeline/ingest.py`
+        # (`fetch_consolidation_federale`, le bloc `<p id="assentedDate">`). L'UPDATE la
         # remettait donc à NULL — À CHAQUE CHARGEMENT de la couche de découverte.
+        #
+        # (Cette date venait du XML — `lims:current-date` — jusqu'au 2026-09-14. Elle en a
+        # été retirée parce qu'elle sous-déclarait la fraîcheur de près d'un an sur certains
+        # textes et qu'elle n'était pas celle que la veille compare. Le défaut d'écrasement
+        # décrit ici, lui, est INCHANGÉ : la config ne porte toujours aucune date fédérale,
+        # donc l'UPDATE inconditionnel détruirait toujours ce que l'ingestion a écrit.)
         #
         # Conséquence servie : `qclaw_list_laws` et la page publique annonçaient 18 textes
         # SANS date « à jour au ». Sur un outil juridique, servir du droit sans dire de

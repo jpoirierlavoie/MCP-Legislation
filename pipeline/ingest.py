@@ -85,6 +85,56 @@ def fetch_consolidation(url: str) -> str | None:
     return None
 
 
+class DateDeConsolidationIntrouvable(Exception):
+    """La page officielle n'a pas rendu sa date « à jour ». L'ingestion s'arrête."""
+
+
+# Ancrage sur la PHRASE, jamais sur la première date du bloc : `<p id="assentedDate">` en
+# porte DEUX — « à jour AAAA-MM-JJ » puis « dernière modification AAAA-MM-JJ ». Mesuré le
+# 2026-09-14 : les 36 pages portent le bloc, la phrase, et au moins deux dates, donc
+# l'ancrage distingue réellement les deux au lieu de tomber juste par ordre d'apparition.
+# Le « à » arrive tantôt en entité (`&agrave;`, pages de lois) tantôt en littéral (pages de
+# règlements) : on s'ancre sur « jour », qui n'apparaît nulle part ailleurs dans ce bloc.
+# C'est aussi ce qui permet au miroir JavaScript de la veille — qui dépouille les balises
+# par expression régulière et NE DÉCODE PAS les entités — de rendre exactement la même
+# valeur que BeautifulSoup ici.
+_DATE_FEDERALE = re.compile(r"(?:jour|current\s+to)\s*(\d{4}-\d{2}-\d{2})", re.I)
+
+
+def extrait_consolidation_federale(html: str) -> str | None:
+    """Date « à jour AAAA-MM-JJ » / « current to AAAA-MM-JJ » d'une page de Justice Canada.
+
+    **Miroir** de `extractConsolidationFederale` (`scripts/check-consolidation.mjs`) : même
+    portée (le seul `<p id="assentedDate">`), même ancrage, même sortie. La date y est DÉJÀ
+    en ISO — aucune table de mois n'est requise, contrairement au couple québécois.
+
+    Séparée du téléchargement précisément pour être éprouvable HORS RÉSEAU, comme l'est son
+    miroir JavaScript. Le couple québécois n'a cette séparation que du côté JS, et
+    `fetch_consolidation` n'a donc aucun test Python — on ne reproduit pas ce trou ici,
+    d'autant que cette moitié-ci peut désormais REFUSER une ingestion.
+
+    Portée bornée au bloc, comme le couple québécois l'est aux blocs `text-end` : la page
+    porte d'autres dates (dernière modification, historique), et les lire serait un faux
+    silencieux. `None` = bloc absent ou phrase introuvable, c'est-à-dire « le miroir a
+    peut-être cassé » — jamais « la page est à jour ».
+    """
+    bloc = BeautifulSoup(html, "html.parser").find("p", id="assentedDate")
+    if bloc is None:
+        return None
+    m = _DATE_FEDERALE.search(re.sub(r"\s+", " ", bloc.get_text()))
+    return m.group(1) if m else None
+
+
+def fetch_consolidation_federale(url: str) -> str | None:
+    """Frère fédéral de `fetch_consolidation` : télécharge, puis délègue l'extraction."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
+        html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    return extrait_consolidation_federale(html)
+
+
 def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
                        show: list[str], strict: bool,
                        apply_local: bool, apply_remote: bool) -> int:
@@ -170,9 +220,42 @@ def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
         law.name_fr = titre
     else:
         law.name_en = titre
-    consol = racine.get("{http://justice.gc.ca/lims}current-date")
-    if consol:
-        setattr(law, f"consol_date_{lang}", consol)
+    # ⚠️ LA DATE SERVIE VIENT DE LA PAGE OFFICIELLE, PAS DU XML.
+    #
+    # Elle venait de `lims:current-date`. Mesuré le 2026-09-14, ce choix nous faisait
+    # SOUS-DÉCLARER la fraîcheur du droit : la Loi sur le droit d'auteur était annoncée
+    # « à jour au 2025-07-24 » alors que Justice Canada la donne à jour au 2026-07-21 —
+    # près d'un an d'écart, sur un outil juridique.
+    #
+    # Trois raisons de préférer la page, dans cet ordre :
+    #  1. C'est ce que le PUBLIEUR OFFICIEL affirme du texte. `consol_date_*` répond à
+    #     « à jour au ? » ; `lims:current-date` répond à autre chose, et la page porte
+    #     séparément la dernière modification, qui vit déjà dans `last_amended`.
+    #  2. La veille COMPARE cette colonne à ce que la page affiche. Stocker une valeur
+    #     issue d'une autre observation rendrait les 36 contrôles fédéraux faux À
+    #     PERPÉTUITÉ — en `retard` avec `lims:current-date` (plus ancienne), et en
+    #     `anomalie` avec `lookup.xml` (20260722 contre 2026-07-21 affiché). Aucune
+    #     réingestion ne les éteindrait.
+    #  3. La date est uniforme : une seule valeur sur les 9 588 entrées de `lookup.xml`,
+    #     et sur les 36 pages. C'est une propriété de l'INSTANTANÉ, pas de la loi.
+    #
+    # Et l'échec est FATAL, à dessein. Se replier sur `lims:current-date` mettrait DEUX
+    # sémantiques dans une même colonne, sans étiquette et sans moyen de savoir laquelle a
+    # servi : exactement le faux silencieux que ce dépôt refuse. Une ingestion refusée
+    # coûte une reprise ; elle est manuelle et surveillée (CLAUDE.md, « Rafraîchissement
+    # semestriel »), donc quelqu'un lit ce message à l'instant où il tombe.
+    consol = fetch_consolidation_federale(cfg_law["official_source"][lang])
+    if not consol:
+        raise DateDeConsolidationIntrouvable(
+            f"{law.id}/{lang} : la page officielle "
+            f"({cfg_law['official_source'][lang]}) n'a pas rendu sa date « à jour ». "
+            f"Causes possibles : page injoignable, ou Justice Canada a changé le bloc "
+            f"`<p id=\"assentedDate\">` dont `fetch_consolidation_federale` est le miroir. "
+            f"Ingestion REFUSÉE : servir un texte sans dire de quand il date, ou avec une "
+            f"date d'une autre provenance que celle que la veille compare, est un faux "
+            f"silencieux. Corriger la source, pas le repli."
+        )
+    setattr(law, f"consol_date_{lang}", consol)
 
     if not law.in_force and not allow_not_in_force:
         raise parser_lims.BalisageIncoherent(
