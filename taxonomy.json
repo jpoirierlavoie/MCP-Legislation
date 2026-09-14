@@ -696,6 +696,46 @@
     {
       "subject": "procedure-penale",
       "law": "c-52.2"
+    },
+    {
+      "subject": "droit-international-prive",
+      "law": "cpc",
+      "division_path": "ga:l_v-gb:l_iv"
+    },
+    {
+      "subject": "famille",
+      "law": "cpc",
+      "division_path": "ga:l_v-gb:l_ii"
+    },
+    {
+      "subject": "personnes",
+      "law": "cpc",
+      "division_path": "ga:l_v-gb:l_i"
+    },
+    {
+      "subject": "successions",
+      "law": "cpc",
+      "division_path": "ga:l_v-gb:l_iii"
+    },
+    {
+      "subject": "biens",
+      "law": "cpc",
+      "division_path": "ga:l_v-gb:l_iii"
+    },
+    {
+      "subject": "suretes",
+      "law": "cpc",
+      "division_path": "ga:l_v-gb:l_iii"
+    },
+    {
+      "subject": "administration-justice",
+      "law": "cpc",
+      "division_path": "ga:l_i-gb:l_iii"
+    },
+    {
+      "subject": "administration-justice",
+      "law": "cpc",
+      "division_path": "ga:l_iv-gb:l_ii"
     }
   ]
 }
