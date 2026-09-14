@@ -9,6 +9,7 @@ D'où l'ordre épinglé ci-dessous.
 from __future__ import annotations
 
 import unittest
+from urllib.parse import unquote, urlsplit
 
 from pipeline import config
 from pipeline.ingest import _id_base
@@ -90,6 +91,38 @@ class ConfigTest(unittest.TestCase):
                 self.assertEqual(law["jurisdiction"], "ca")
                 self.assertNotIn("epub", law,
                                  f"{law['id']} : un texte LIMS n'a pas d'EPUB")
+
+                # `official_source` est PORTANTE, et rien ne l'exigeait.
+                #
+                # Elle sert trois choses à la fois : l'ingestion y lit la date « à jour »
+                # affichée par le site (qui alimente `consol_date_*`), la veille de
+                # consolidation y lit sa date live, et la page publique en fait le lien vers
+                # la source officielle. Un champ qui porte autant et que rien ne contrôle
+                # finit par mentir — et il avait déjà menti : les DEUX entrées de règlement
+                # portaient l'identifiant ANGLAIS dans le chemin français (`SOR-98-106` au
+                # lieu de `DORS-98-106`, `C.R.C.,_c._368` au lieu de `C.R.C.,_ch._368`), donc
+                # 404 sur les deux, MESURÉ le 2026-09-14 — pendant que les chemins `xml` des
+                # mêmes entrées, eux, étaient justes.
+                #
+                # La cohérence est contrôlable SANS RÉSEAU parce qu'elle est structurelle :
+                # sur les 36 couples, le chemin de l'URL vaut EXACTEMENT
+                # `/<chemin xml privé de .xml>/`. C'est le seul contrôle qui aurait attrapé
+                # les deux 404 depuis la CI, où aucun appel sortant n'est fait.
+                self.assertIn("official_source", law,
+                              f"{law['id']} : champ 'official_source' manquant (source lims)")
+                for lang in ("fr", "en"):
+                    url = law["official_source"].get(lang)
+                    self.assertTrue(url, f"{law['id']} : URL de source {lang} manquante")
+                    chemin_xml = law["xml"][lang]
+                    self.assertTrue(chemin_xml.endswith(".xml"),
+                                    f"{law['id']}/{lang} : chemin XML sans extension .xml")
+                    attendu = "/" + chemin_xml.removesuffix(".xml") + "/"
+                    self.assertEqual(
+                        unquote(urlsplit(url).path), attendu,
+                        f"{law['id']}/{lang} : l'URL de source ne désigne pas le même texte "
+                        f"que le chemin XML (attendu '{attendu}'). C'est exactement ainsi que "
+                        f"l'identifiant anglais s'est retrouvé dans le chemin français.",
+                    )
             else:
                 for champ in ("epub", "consolidation", "consolidation_source"):
                     self.assertIn(champ, law, f"{law.get('id')} : champ '{champ}' manquant")
