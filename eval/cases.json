@@ -30,7 +30,10 @@
       "query": "défendeur étranger cautionnement frais",
       "law_scope": "cpc",
       "must_include": [{ "law": "cpc", "article": "492" }],
-      "nice_to_have": [{ "law": "cpc", "article": "493" }]
+      "nice_to_have": [
+        { "law": "cpc", "article": "493" },
+        { "law": "ca-b-3", "article": "43" }
+      ]
     },
     {
       "id": 5,
@@ -165,6 +168,16 @@
         { "law": "ccq", "article": "2119" },
         { "law": "ccq", "article": "2124" }
       ]
+    },
+    {
+      "id": 21,
+      "query": "cassation d'un règlement municipal pour illégalité",
+      "law_scope": null,
+      "must_include": [
+        { "law": "c-19", "article": "397" },
+        { "law": "c-27.1", "article": "689" }
+      ],
+      "nice_to_have": [{ "law": "c-19", "article": "407" }]
     }
   ]
 }
