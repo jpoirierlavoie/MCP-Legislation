@@ -245,8 +245,8 @@
       "label_fr": "Bâtiment et construction",
       "label_en": "Building and Construction",
       "kind": "specialise",
-      "description_fr": "Loi sur le bâtiment et Régie du bâtiment : Code de construction, Code de sécurité, licence d'entrepreneur, permis, qualification, plan de garantie des bâtiments résidentiels neufs, inspection préachat, sécurité des installations et des équipements.",
-      "description_en": "Building Act and Régie du bâtiment: Construction Code, Safety Code, contractor's licence, permits, qualification, guarantee plan for new residential buildings, pre-purchase inspection, safety of installations and equipment."
+      "description_fr": "Licence, construction et sécurité des bâtiments, inspection.",
+      "description_en": "Licence, building construction and safety, inspection."
     },
     {
       "id": "contrats-publics",

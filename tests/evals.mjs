@@ -137,8 +137,26 @@ const EVALS = [
   // le top 8 à elles seules. Cf. MAX_PER_SUBJECT (src/relevance.ts).
   {
     query: "perte de l'ouvrage cinq ans entrepreneur",
-    attendu: "ouvrages immobiliers du C.c.Q. présents malgré la matière « bâtiment » à 7 lois",
+    attendu: "ouvrages immobiliers du C.c.Q. presents (la matiere « batiment » ne se declenche plus ici)",
     present: [{ law: "ccq", pathPrefix: "ga:l_cinquieme-gb:l_deuxieme-gc:l_huitieme" }],
+  },
+  {
+    // LA GARDE DE L'INVARIANT 15 A ÉTÉ DÉPLACÉE ICI, le 2026-09-14, et ce n'est pas cosmétique.
+    //
+    // Elle vivait sur « perte de l'ouvrage cinq ans entrepreneur », où elle s'exerçait parce
+    // que le mot « entrepreneur » figurait dans la description de la matière. Ce mot en a été
+    // RETIRÉ (il déclenchait les 7 textes de la famille sur toute requête d'entrepreneur), et
+    // plus aucun candidat de cette requête ne porte « matière : Bâtiment et construction ».
+    //
+    // La garde y serait donc devenue VIDE : la boucle ne compte rien et passe au vert sans
+    // s'exercer — pire qu'une garde absente, parce qu'elle a l'air de veiller.
+    //
+    // Repointée après MESURE sur une requête où le plafond mord réellement : au 2026-09-14,
+    // trois candidats y portent la matière (b-1.1-r.2, b-1.1, b-1.1-r.1), soit exactement
+    // MAX_PER_SUBJECT, et le Code de construction sort premier par son nom.
+    query: "licence d'entrepreneur en construction et cautionnement",
+    attendu: "Code de construction en tête, et la matière « bâtiment » plafonnée à 3 candidats",
+    present: [{ law: "b-1.1-r.2" }],
     maxParMatiere: 3,
   },
   {
