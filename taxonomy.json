@@ -101,8 +101,8 @@
       "label_fr": "Administration de la justice",
       "label_en": "Administration of Justice",
       "kind": "specialise",
-      "description_fr": "Organisation des tribunaux, compétences, frais de justice, fonctionnement des instances.",
-      "description_en": "Organization of the courts, jurisdiction, judicial fees and court costs, conduct of proceedings."
+      "description_fr": "Organisation des tribunaux, compétences, frais de justice.",
+      "description_en": "Organization of the courts, jurisdiction, judicial fees and court costs."
     },
     {
       "id": "droit-administratif",
@@ -157,8 +157,8 @@
       "label_fr": "Assurances",
       "label_en": "Insurance",
       "kind": "specialise",
-      "description_fr": "Contrat d'assurance (C.c.Q.) et distribution de produits d'assurance : représentant en assurance, cabinet, société et représentant autonome, planificateur financier.",
-      "description_en": "Contract of insurance (C.C.Q.) and distribution of insurance products: insurance representative, firm, independent partnership and representative, financial planner."
+      "description_fr": "Contrat d'assurance (C.c.Q.) et assureurs.",
+      "description_en": "Contract of insurance (C.C.Q.) and insurers."
     },
     {
       "id": "travail-emploi",
