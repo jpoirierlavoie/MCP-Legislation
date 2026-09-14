@@ -129,12 +129,20 @@
       "description_en": "Consumer contracts, warranties, business practices (Consumer Protection Act)."
     },
     {
-      "id": "societes-entreprises",
-      "label_fr": "Sociétés et entreprises",
-      "label_en": "Business Corporations and Enterprises",
+      "id": "societes-par-actions",
+      "label_fr": "Sociétés par actions et compagnies",
+      "label_en": "Business Corporations and Companies",
       "kind": "specialise",
-      "description_fr": "Sociétés par actions, compagnies, publicité légale, société civile du C.c.Q.",
-      "description_en": "Business corporations, companies, legal publicity of enterprises, contract of partnership under the C.C.Q."
+      "description_fr": "Sociétés par actions et compagnies : actionnaires, administrateurs, oppression.",
+      "description_en": "Business corporations and companies: shareholders, directors, oppression."
+    },
+    {
+      "id": "registraire-entreprises",
+      "label_fr": "Registraire des entreprises",
+      "label_en": "Enterprise Registrar",
+      "kind": "specialise",
+      "description_fr": "Registraire des entreprises.",
+      "description_en": "Registrar of enterprises."
     },
     {
       "id": "valeurs-mobilieres",
@@ -363,7 +371,7 @@
       "law": "c-26"
     },
     {
-      "subject": "societes-entreprises",
+      "subject": "societes-par-actions",
       "law": "c-38"
     },
     {
@@ -395,11 +403,7 @@
       "law": "p-39.1"
     },
     {
-      "subject": "societes-entreprises",
-      "law": "p-44.1"
-    },
-    {
-      "subject": "societes-entreprises",
+      "subject": "societes-par-actions",
       "law": "s-31.1"
     },
     {
@@ -475,11 +479,6 @@
       "division_path": "ga:l_cinquieme-gb:l_deuxieme-gc:l_septieme"
     },
     {
-      "subject": "societes-entreprises",
-      "law": "ccq",
-      "division_path": "ga:l_cinquieme-gb:l_deuxieme-gc:l_dixieme"
-    },
-    {
       "subject": "assurances",
       "law": "ccq",
       "division_path": "ga:l_cinquieme-gb:l_deuxieme-gc:l_quinzieme"
@@ -542,7 +541,7 @@
       "law": "f-2.1"
     },
     {
-      "subject": "societes-entreprises",
+      "subject": "societes-par-actions",
       "law": "a-33.01"
     },
     {
@@ -736,6 +735,10 @@
       "subject": "administration-justice",
       "law": "cpc",
       "division_path": "ga:l_iv-gb:l_ii"
+    },
+    {
+      "subject": "registraire-entreprises",
+      "law": "p-44.1"
     }
   ]
 }
