@@ -16,6 +16,8 @@ Aucun appel réseau : ces tests lisent `laws.config.json` sur disque.
 """
 from __future__ import annotations
 
+import pathlib
+import tempfile
 import unittest
 
 from pipeline import config
@@ -173,6 +175,34 @@ class TestPorteDuCorpusEpub(unittest.TestCase):
     disque. Sans porte, la commande aurait supprimé 1 319 relations et n'en aurait recréé
     que 33 plus une poignée — sans lever la moindre erreur.
     """
+
+    # ⚠️ LA PRÉMISSE EST IMPOSÉE, ELLE N'EST PLUS SUBIE.
+    #
+    # Ces deux contrôles supposent un corpus d'EPUB INCOMPLET. Ils le LISAIENT sur le
+    # disque, dans `pipeline/samples/`, qui est gitignoré — donc leur résultat dépendait
+    # d'un état non versionné de la machine. Ils passaient en CI (qui ne télécharge
+    # jamais) et sur un poste à 4 EPUB sur 158 ; ils ÉCHOUAIENT dès que le corpus était
+    # complet — c'est-à-dire précisément dans l'état où l'on fait tourner `build()` pour
+    # de vrai. Constaté le 2026-09-14, après le téléchargement des 158 EPUB.
+    #
+    # Un test dont la prémisse dépend de l'ambiance ne garde rien : il rougit ou verdit
+    # selon la machine, et personne ne sait lequel des deux est la vérité. On pointe donc
+    # `SAMPLES_DIR` vers un répertoire VIDE le temps du contrôle.
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._ancien = config.SAMPLES_DIR
+        config.SAMPLES_DIR = pathlib.Path(self._tmp.name)
+
+    def tearDown(self):
+        config.SAMPLES_DIR = self._ancien
+        self._tmp.cleanup()
+
+    def test_la_premisse_du_corpus_vide_tient(self):
+        """Épingle le montage lui-même : sans lui, les deux contrôles suivants sont muets."""
+        manquants = R.epubs_manquants(config.load_all_laws())
+        qc = [l for l in config.load_all_laws() if (l.get("jurisdiction") or "qc") == "qc"]
+        self.assertEqual(len(manquants), len(qc),
+                         "le répertoire d'EPUB doit être vu comme VIDE pendant ces contrôles")
 
     def test_arret_avant_toute_ecriture_quand_des_epub_manquent(self):
         db = _FausseBase()
