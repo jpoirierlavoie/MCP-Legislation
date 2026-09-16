@@ -171,8 +171,18 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
    Sous-arbres = intervalle lexicographique `[path+'-', path+'.')` (`subtreeClause`).
 6. **D1 refuse toute instruction > 100 Ko** : lots SQL plafonnés en OCTETS UTF-8
    (pas en caractères), lignes surdimensionnées via INSERT + `UPDATE …||` par morceaux
-   (`pipeline/load.py`). `wrangler d1 export` est BLOQUÉ par la table virtuelle
+   (`pipeline/load.py`). `wrangler d1 export` SANS argument est BLOQUÉ par la table virtuelle
    `articles_fts` → sauvegarde = **Time Travel** (bookmark consigné avant migration).
+   **Nuance mesurée le 2026-09-16** : `d1 export --table <t> --no-schema` PASSE, table par
+   table — c'est ce qui a permis de copier la base vers `legislation` sans réingérer
+   (74 Mo pour la seule table `articles`). Deux pièges alors, tous deux rencontrés :
+   l'export émet UN `INSERT` par ligne, donc une ligne >100 Ko produit une instruction que D1
+   refuse (une seule dans le corpus, 148 297 octets) ; et il sort en ordre d'`id` CROISSANT,
+   or `divisions.parent_id` se référence elle-même et deux lignes ont un parent d'id PLUS
+   GRAND — le `PRAGMA defer_foreign_keys` de l'export ne couvrant qu'UNE transaction et
+   wrangler découpant en lots, l'import échoue en clé étrangère. Remède dans les deux cas :
+   `INSERT` court puis `UPDATE … ||` / `UPDATE … SET parent_id` en fin de fichier.
+   Migration destructive : voir « Répéter une migration DESTRUCTIVE », plus bas.
 7. **Échelle de recherche (ordre tranché par l'éval, ne pas réordonner sans re-mesurer)** :
    exact → élargissement corpus → leave-one-out → OU+bm25, PUIS fusion RRF avec les
    vecteurs ; le sémantique SEUL est l'ultime barreau, sous plancher
@@ -328,6 +338,39 @@ client : écrit ici précisément parce que c'est sous pression qu'on viendra le
 sur une session qu'il ne détient plus. Le client de Pallas Athéna purge sa session sur 404,
 donc un jeton révoqué s'y présente comme un battement de session — visible (refus en
 français à chaque tour), jamais silencieux, mais mal diagnostiqué. Trancher au curl.
+
+**Répéter une migration DESTRUCTIVE avant de la jouer en production.** Une migration qui
+`DROP` quoi que ce soit — au premier chef `articles_fts`, table virtuelle à CONTENU EXTERNE —
+se répète d'abord sur une base D1 **distante** jetable. **Un vert local ne prouve rien** :
+miniflare accepte du DDL que le D1 distant REFUSE (il filtre des fonctions, `sqlite_version()`
+entre autres). C'est mesuré, et c'est ce constat qui a fait créer une base de recette le
+2026-09-11 avant d'appliquer 0004 sur 49 255 articles.
+
+1. **L'approvisionner par `schema.sql` + TOUTES les migrations + `schema-decouverte.sql`.**
+   Sans le troisième, ce N'EST PAS un miroir et son vert est FAUX. Mesuré le 2026-09-16 sur
+   la recette de 2026-09-11 : son `laws` portait **12 colonnes au lieu de 17** (`fonction`,
+   `forum`, `scope_fr`, `parent_law_id`, `name_norm` manquaient — ce sont des ALTER de
+   `schema-decouverte.sql`). La répétition avait donc tourné sur une table amputée, et son
+   `rebuild` + `integrity-check` sur ZÉRO ligne quand la production en avait 49 255.
+2. **Comparer la recette à la production AVANT de conclure** : `pragma_table_info` table par
+   table, pas le texte de `sqlite_master` (qui porte les commentaires du schéma et diverge
+   sans conséquence). C'est le seul contrôle qui aurait vu l'amputation ci-dessus.
+3. **La supprimer DANS LA MÊME SESSION.** Créer coûte une seconde ; c'est l'oubli du ménage
+   qui laisse des orphelins. Celle de 2026-09-11 a servi 46 secondes, survécu cinq jours et
+   n'a été supprimée que le 2026-09-16 ; son second but déclaré (« la phase 4 en aura
+   besoin ») n'a jamais eu lieu.
+4. **La supprimer PAR UUID, et JAMAIS depuis un agent.** `wrangler d1 delete` affiche
+   « About to delete… » puis appelle `confirm2("Ok to proceed?")` SANS options
+   (`cli.js:238608`) ; `confirm2` pose `fallbackValue = true` et le renvoie hors contexte
+   interactif (`cli.js:129876`), « interactif » valant `stdin.isTTY && stdout.isTTY`
+   (`cli.js:36753`). Un agent, un `| tee`, une redirection : **la confirmation s'auto-répond
+   OUI** — constaté en vrai le 2026-09-16. L'UUID supprime en plus le risque de frappe : un
+   nom de recette n'est qu'à quelques caractères du nom de production, et `d1 delete DB`
+   résout le binding depuis `wrangler.jsonc`, donc vise la PRODUCTION.
+
+**Prochain déclencheur, déjà écrit dans le dépôt** : indexer une headnote suppose une SECONDE
+colonne pondérée dans `articles_fts`, donc `DROP` + `CREATE VIRTUAL TABLE` (en-tête de
+`migrations/0003_curation.sql`, §3). C'est la prochaine fois que cette procédure servira.
 
 **Reconstruire une base à partir de rien** (nouvel environnement, D1 de CI, dev local
 vierge). `schema.sql` décrit l'ÉTAT INITIAL et les migrations s'appliquent PAR-DESSUS :
