@@ -137,7 +137,7 @@ docs/           Notes d'architecture, rapports de phase, format EPUB ; archive d
 ```
 
 Démarrage : `npm install`, puis `npx wrangler dev --var MCP_TOKEN:local-a --var
-MCP_TOKEN_ATHENA:local-b` — **les `--var` sont requis** : l'endpoint est fermé par défaut,
+MCP_TOKEN_VEILLE:local-b` — **les `--var` sont requis** : l'endpoint est fermé par défaut,
 sans secret il refuse tout. Puis `MCP_TOKEN=local-a npm run evals` contre
 `http://127.0.0.1:8787/mcp`. **Avant toute modification, lire [CLAUDE.md](CLAUDE.md)** —
 les invariants critiques du dépôt y sont consignés (ordre de la config, miroirs de clés

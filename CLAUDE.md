@@ -101,7 +101,7 @@ fasse calculer au chargement, il est supprimé.
 ## Commandes
 
 ```bash
-npx wrangler dev --var MCP_TOKEN:a --var MCP_TOKEN_ATHENA:b   # dev local (D1 local ; PAS Vectorize)
+npx wrangler dev --var MCP_TOKEN:a --var MCP_TOKEN_VEILLE:b   # dev local (D1 local ; PAS Vectorize)
 #   ^ les --var sont REQUIS depuis le défaut fermé (2026-08-27) : sans secret, /mcp refuse TOUT
 npx tsc --noEmit                                   # type-check (toujours avant commit)
 npm run evals                                      # contrôles bout-en-bout (le harnais imprime son total ; MCP_URL=… pour cibler)
@@ -135,16 +135,23 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
   À savoir : `?key=` voyage dans l'URL, donc dans le journal de requêtes de
   l'observabilité — traiter `MCP_TOKEN` comme **déjà vu** par le pipeline de logs du
   compte. Un jeton employé uniquement en `Authorization: Bearer` n'y apparaît jamais.
-- `mcp-athena.token` (racine, gitignoré) : jeton du **clavardage de Pallas Athéna**,
-  miroir du secret Worker `MCP_TOKEN_ATHENA`. Droits IDENTIQUES au premier — il n'ouvre
-  aucun outil de plus ; il n'existe QUE pour que les deux clients se révoquent
-  SÉPARÉMENT (même modèle que le connecteur jumeau `jurisprudence`, §19 de sa spec).
-  **DEUX copies seulement** (fichier local, Secret Manager de Pallas Athéna sous
-  `legislation-worker-token`) — **jamais de secret GitHub** : un jeton détenu à trois
-  endroits n'est plus révocable seul. **Ne jamais réutiliser la valeur de `MCP_TOKEN`** :
-  deux secrets de même valeur ne sont plus révocables séparément, ce qui annule tout
-  l'objet du découpage. Révocation = `wrangler secret delete MCP_TOKEN_ATHENA`, une
-  commande, sans effet sur le connecteur claude.ai.
+- `mcp-veille.token` (racine, gitignoré) : jeton de la **veille de consolidation en CI**,
+  miroir du secret Worker `MCP_TOKEN_VEILLE` et du secret GitHub du même nom. Droits
+  IDENTIQUES au premier — il n'ouvre aucun outil de plus ; il n'existe QUE pour que les
+  deux clients se révoquent SÉPARÉMENT (même modèle que le connecteur jumeau
+  `jurisprudence`, §19 de sa spec). **DEUX porteurs seulement** (secret GitHub, fichier
+  local) — **et `MCP_TOKEN` n'est plus, lui non plus, un secret GitHub** : il en avait
+  TROIS (fichier local, secret GitHub, URL du connecteur) et n'était donc plus révocable
+  seul, ce que le découpage existait précisément pour éviter. **Ne jamais réutiliser la
+  valeur de `MCP_TOKEN`** : deux secrets de même valeur ne sont plus révocables
+  séparément, ce qui annule tout l'objet du découpage. Révocation =
+  `wrangler secret delete MCP_TOKEN_VEILLE`, une commande, sans effet sur le connecteur
+  claude.ai — au prix de la surveillance mensuelle jusqu'au remplacement.
+  **Précédent, 2026-09-16** : `MCP_TOKEN_ATHENA` occupait cette place et a été retiré. Le
+  clavardage de Pallas Athéna, son unique destinataire, avait été supprimé le 2026-09-02
+  (passage à un compte Claude for Work sous DPA) : c'était un identifiant de production
+  actif pour un appelant qui n'existait plus. Retenir la leçon plutôt que la date : un
+  jeton survit à son client sans que rien ne le signale.
 - Commits **signés** (gpgsign actif), footer `Co-Authored-By: Claude <noreply@anthropic.com>`
   adapté au modèle courant. Un commit par sous-tâche ; arrêt pour revue humaine à chaque
   fin de phase.
@@ -275,7 +282,7 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
 changé — **porte : aucune régression sur les 21 cas**.
 
 **Contrôle d'accès de `/mcp`** (`src/auth.ts`) : **DEUX jetons** (`MCP_TOKEN` pour le
-connecteur claude.ai, `MCP_TOKEN_ATHENA` pour le clavardage de Pallas Athéna), aux droits
+connecteur claude.ai, `MCP_TOKEN_VEILLE` pour la veille de consolidation en CI), aux droits
 IDENTIQUES, chacun accepté sous les TROIS mêmes formes. Tableau LITTÉRAL dans `secretsOf`,
 pas de convention de nom balayée sur `env` : un nom mal orthographié se poserait sans
 erreur et n'ouvrirait rien. Appariement SANS COURT-CIRCUIT (un `.some()` dirait par le
@@ -310,7 +317,7 @@ est refusé. **Rouvrir n'est donc PLUS une seule commande** : c'est `npx wrangle
 PUIS supprimer TOUS les `MCP_TOKEN*`. En oublier un laisse l'endpoint FERMÉ pendant qu'on
 croit l'avoir rouvert — et le connecteur continue de creuser son trou OAuth pendant qu'on
 cherche ailleurs. Remède de niveau code, souvent plus rapide : `npx wrangler rollback`.
-Corollaire : `wrangler dev` exige désormais `--var MCP_TOKEN:… --var MCP_TOKEN_ATHENA:…`.
+Corollaire : `wrangler dev` exige désormais `--var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…`.
 Ordre de bascule :
 **mettre le connecteur claude.ai sur son URL FINALE (`…/mcp?key=<jeton>`) AVANT de poser le
 secret**, puis déployer, puis `wrangler secret put`. Cet ordre est contre-intuitif mais
@@ -329,7 +336,7 @@ rouvert, le connecteur s'est réparé tout seul au retry suivant. Retenir : une 
 client.
 
 **Amendement du 2026-08-27 — ce remède n'est plus une seule commande.** Depuis l'ajout de
-`MCP_TOKEN_ATHENA` et le passage au défaut fermé, l'endpoint ne se rouvre qu'en supprimant
+`MCP_TOKEN_VEILLE` et le passage au défaut fermé, l'endpoint ne se rouvre qu'en supprimant
 **TOUS** les secrets `MCP_TOKEN*` ; les lister d'abord (`npx wrangler secret list`).
 Supprimer `MCP_TOKEN` seul laisse la porte close. C'est le coût assumé du découpage par
 client : écrit ici précisément parce que c'est sous pression qu'on viendra le lire.

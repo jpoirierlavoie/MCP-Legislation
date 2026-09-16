@@ -43,7 +43,16 @@ jobs:
           MCP_URL: https://legislation.poirierlavoie.ca/mcp
           # Jeton d'accès de l'endpoint MCP (src/auth.ts). Ce n'est PAS un jeton Cloudflare :
           # il n'ouvre que la lecture MCP, aucun droit sur le compte ni sur la base.
-          MCP_TOKEN: ${{ secrets.MCP_TOKEN }}
+          #
+          # LA CI A SON PROPRE JETON depuis le 2026-09-16, et c'est tout l'objet du
+          # découpage : `MCP_TOKEN` vivait ici, dans le fichier local ET dans l'URL du
+          # connecteur claude.ai — trois porteurs, donc plus révocable seul. Révoquer la
+          # veille (`wrangler secret delete MCP_TOKEN_VEILLE`) n'éteint désormais plus le
+          # connecteur, ni l'inverse.
+          #
+          # Le NOM DE LA VARIABLE reste `MCP_TOKEN` : c'est ce que lit `resolveMcpToken()`
+          # (eval/mcp-client.mjs), partagé avec l'usage local. Seule la SOURCE change.
+          MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
         run: node scripts/check-consolidation.mjs
 
       # Deux signaux SÉPARÉS depuis le 2026-07-23 (scripts/check-consolidation.mjs) :

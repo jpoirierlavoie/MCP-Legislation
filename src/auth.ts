@@ -5,7 +5,7 @@
 //     segment de chemin a ÉCHOUÉ en pratique (« Impossible de joindre ») alors qu'une
 //     session complète y passe en curl, tandis que `?key=` a fonctionné du premier coup ;
 //   - `Authorization: Bearer <jeton>` — clients maîtrisés : Claude Code, évals, veille CI,
-//     et tout backend qui ouvre LUI-MÊME sa session MCP (le clavardage de Pallas Athéna) ;
+//     et tout backend qui ouvrirait LUI-MÊME sa session MCP ;
 //   - segment de chemin `/mcp/<jeton>` — conservé et testé, mais la forme de PERSONNE
 //     aujourd'hui. Le slash final DOIT rester toléré : son 404 a déjà poussé le
 //     connecteur vers la découverte OAuth, où il s'est coincé irréversiblement.
@@ -13,12 +13,22 @@
 // que le chemin de montage exact.
 //
 // DEUX SECRETS, DES DROITS IDENTIQUES, ET UNE SEULE RAISON : LA RÉVOCATION.
-// `MCP_TOKEN` sert le connecteur claude.ai ; `MCP_TOKEN_ATHENA` sert le clavardage de
-// Pallas Athéna. Le second n'ouvre AUCUN outil de plus — les dix répondent aux deux. Ils
-// sont distincts pour qu'un porteur se retire SEUL : faire tourner celui de claude.ai ne
-// doit pas éteindre le cabinet, ni l'inverse. Même modèle que le connecteur jumeau
-// (jurisprudence, §19 de sa spécification), et même discipline : on ne journalise ni ne
-// renvoie JAMAIS lequel des deux a servi — les deux refus sont le même 404.
+// `MCP_TOKEN` sert le connecteur claude.ai ; `MCP_TOKEN_VEILLE` sert la veille de
+// consolidation en CI. Le second n'ouvre AUCUN outil de plus — les dix répondent aux deux.
+// Ils sont distincts pour qu'un porteur se retire SEUL : faire tourner celui de claude.ai
+// ne doit pas éteindre la surveillance mensuelle du corpus, ni l'inverse. Même modèle que
+// le connecteur jumeau (jurisprudence, §19 de sa spécification), et même discipline : on ne
+// journalise ni ne renvoie JAMAIS lequel des deux a servi — les deux refus sont le même 404.
+//
+// CHAQUE JETON A DEUX PORTEURS, ET PAS TROIS (2026-09-16). C'est la règle qui manquait
+// d'application : `MCP_TOKEN` vivait dans le fichier local, dans un secret GitHub ET dans
+// l'URL du connecteur — donc plus révocable seul, ce que le découpage existait précisément
+// pour éviter. La CI a désormais SON jeton (secret GitHub + fichier local), et `MCP_TOKEN`
+// est redescendu à deux porteurs (fichier local + URL du connecteur).
+// `MCP_TOKEN_ATHENA` l'a précédé et a été RETIRÉ le 2026-09-16 : le clavardage de Pallas
+// Athéna, son unique destinataire, avait été supprimé le 2026-09-02 (le cabinet est passé à
+// un compte Claude for Work sous DPA). C'était un identifiant de production actif pour un
+// appelant qui n'existait plus — le pire des deux mondes.
 //
 // FERMÉ PAR DÉFAUT (2026-08-27, aligné sur le jumeau). Aucun secret configuré ⇒ TOUT est
 // refusé. La tentation serait de lire « rien à comparer, donc on laisse passer » : c'est le
@@ -30,7 +40,7 @@
 //     un seul laisse l'endpoint FERMÉ pendant qu'on croit l'avoir rouvert, et le connecteur
 //     continue de creuser son trou OAuth pendant qu'on cherche ailleurs ;
 //   - `npx wrangler dev` seul ne sert plus /mcp : il faut désormais
-//     `npx wrangler dev --var MCP_TOKEN:… --var MCP_TOKEN_ATHENA:…` ;
+//     `npx wrangler dev --var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…` ;
 //   - remède de niveau code, plus rapide que tout le reste : `npx wrangler rollback`.
 //
 // UN REFUS RÉPOND 404, JAMAIS 401 : un 401 (a fortiori avec `WWW-Authenticate`) annonce
@@ -42,14 +52,16 @@
 // refusé OU session périmée. Le client de Pallas Athéna purge sa session sur 404 ; un jeton
 // révoqué s'y présentera donc comme un battement de session, visible mais mal diagnostiqué.
 // Trancher au curl, jamais au jugé. (Le connecteur jumeau, lui, refuse en 401 et n'a pas
-// cette ambiguïté — c'est la contrepartie assumée de la posture 404.)
+// cette ambiguïté — c'est la contrepartie assumée de la posture 404.) Pour la veille CI,
+// l'ambiguïté ne se pose pas : elle ouvre une session neuve à chaque exécution, donc un 404
+// y signifie TOUJOURS un jeton refusé.
 //
 // La vérification est faite dans le handler de module, donc AVANT toute instanciation du
 // Durable Object : un appel non autorisé ne coûte ni session DO, ni D1, ni Workers AI.
 
 interface EnvWithSecrets extends Env {
   MCP_TOKEN?: string;
-  MCP_TOKEN_ATHENA?: string;
+  MCP_TOKEN_VEILLE?: string;
 }
 
 const MOUNT = "/mcp";
@@ -123,7 +135,7 @@ function decodeOrNull(segment: string): string | null {
  */
 function secretsOf(env: Env): string[] {
   const e = env as EnvWithSecrets;
-  return [e.MCP_TOKEN, e.MCP_TOKEN_ATHENA]
+  return [e.MCP_TOKEN, e.MCP_TOKEN_VEILLE]
     .map((s) => s?.trim())
     .filter((s): s is string => s !== undefined && s.length > 0);
 }

@@ -773,7 +773,7 @@ async function smokeTests() {
   // l'endpoint serait légitimement ouvert : un POST nu DOIT recevoir 404, toujours.
   // On vise le point de montage nu, jamais MCP_URL : celle-ci peut déjà porter /mcp/<jeton>.
   const jeton = resolveMcpToken();
-  const jetonAthena = resolveClientToken("athena");
+  const jetonVeille = resolveClientToken("veille");
   if (jeton) {
     const bare = new URL(MCP_URL);
     bare.pathname = "/mcp";
@@ -849,23 +849,24 @@ async function smokeTests() {
       );
     }
 
-    // SECOND PORTEUR (Pallas Athéna). Ce qui est vérifié n'est pas un privilège mais une
+    // SECOND PORTEUR (la veille de consolidation en CI). Ce qui est vérifié n'est pas un
+    // privilège mais une
     // INDÉPENDANCE : il ouvre par les mêmes formes, aux mêmes droits. La révocation SÉPARÉE
     // (retirer l'un laisse l'autre debout) ne s'éprouve qu'en faisant varier l'env du
     // Worker : elle ne peut pas se tester ici, seulement par deux `wrangler dev --var`
     // distincts — c'est écrit dans le plan, et ce n'est PAS couvert par la CI.
-    if (jetonAthena) {
+    if (jetonVeille) {
       for (const [nom, u, auth] of [
-        ["en-tête Bearer", `${bare}`, jetonAthena],
-        ["paramètre ?key=", `${bare}?key=${jetonAthena}`, null],
+        ["en-tête Bearer", `${bare}`, jetonVeille],
+        ["paramètre ?key=", `${bare}?key=${jetonVeille}`, null],
       ]) {
         const code = auth ? await probeBearer(u, auth) : await probe(u, false);
-        add(`accès : 2e jeton (athena) par ${nom} -> 200`, code === 200, `status=${code}`);
+        add(`accès : 2e jeton (veille) par ${nom} -> 200`, code === 200, `status=${code}`);
       }
     } else {
       skip(
-        "accès : 2e jeton (athena) -> 200",
-        "aucun jeton de client secondaire ici (ni MCP_TOKEN_ATHENA, ni mcp-athena.token)",
+        "accès : 2e jeton (veille) -> 200",
+        "aucun jeton de client secondaire ici (ni MCP_TOKEN_VEILLE, ni mcp-veille.token)",
       );
     }
 
@@ -896,8 +897,8 @@ async function smokeTests() {
     // UNE SEULE session supplémentaire pour tout le bloc (invariant 10), refermée à la fin.
     // On éprouve le TRANSPORT et la PORTE, pas le corpus : le contenu est le rôle de la fumée.
     {
-      const porteur = jetonAthena ?? jeton;
-      const quel = jetonAthena ? "jeton athena" : "jeton principal, faute de mieux";
+      const porteur = jetonVeille ?? jeton;
+      const quel = jetonVeille ? "jeton veille" : "jeton principal, faute de mieux";
       const entetes = (sid) => ({
         "Content-Type": "application/json",
         Accept: "application/json, text/event-stream",
@@ -1092,7 +1093,7 @@ main().catch((e) => {
   if (/HTTP 404/.test(e.message) && !resolveMcpToken()) {
     console.error("Aucun jeton résolu (ni MCP_TOKEN, ni mcp.token) — et /mcp est FERMÉ");
     console.error("par défaut : sans jeton, un serveur en parfait état répond 404.");
-    console.error("  local  : npx wrangler dev --var MCP_TOKEN:… --var MCP_TOKEN_ATHENA:…");
+    console.error("  local  : npx wrangler dev --var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…");
     console.error("           puis MCP_TOKEN=… npm run evals");
     console.error("  distant: poser mcp.token à la racine, ou exporter MCP_TOKEN.");
   } else {

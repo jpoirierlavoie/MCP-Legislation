@@ -129,7 +129,7 @@ export default {
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
       // Avant la porte : un flot non authentifié est coupé lui aussi. 429 et non 404 —
       // ici on ne cache pas l'endpoint, on refuse une cadence, et un client doit pouvoir
-      // distinguer les deux (le client de Pallas Athéna en fait deux `reason` distincts).
+      // distinguer les deux : « trop vite » se réessaie, « pas trouvé » non.
       if (!(await debitAcceptable(request, env))) {
         return new Response("Too many requests", {
           status: 429,
