@@ -78,7 +78,7 @@ inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
 ## Architecture (3 morceaux)
 
 1. **Worker Cloudflare** (`src/`, TypeScript) — McpAgent (Durable Object) + 10 outils
-   `legislation_*`, D1 (`qclaw`), Workers AI (bge-m3) + Vectorize (`qclaw-articles`) pour la
+   `legislation_*`, D1 (`legislation`), Workers AI (bge-m3) + Vectorize (`legislation-articles`) pour la
    recherche hybride. Config : `wrangler.jsonc` (PAS .toml).
 2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours
    `PYTHONUTF8=1`) — télécharge/parse les EPUB Irosoft, charge D1 par
@@ -109,11 +109,13 @@ npm run eval                                       # harnais d'éval : 21 cas, r
 node eval/run.mjs --refresh-paths                  # revalide eval/cases.resolved.json et SORT — diff à VIDER avant de mesurer
 node scripts/journal.mjs [--local|--jours N|--tout] # dépouille search_log (lecture seule) : replis et reformulations
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # 131 tests
-node --test scripts/check-consolidation.test.mjs   # 26 contrôles du détecteur de veille (sans réseau, en CI)
-node --test tests/catalogue.test.mjs               # garde anti-dérive doc (R10 ; sans réseau, en CI)
-node --test tests/page-client.test.mjs             # JS client de la page (sans réseau ni navigateur, en CI)
+npm test                                           # vitest, DEUX projets : 8 fichiers, 94 contrôles (sans réseau, en CI)
+#   ^ « workerd » (test/**/*.test.ts, via wrangler.test.jsonc) et « node » (tests/**, scripts/**) :
+#     garde anti-dérive doc (R10), JS client de la page, détecteur de veille, plages, chemins…
+#     NE PLUS lancer ces fichiers avec `node --test` : ils sont passés à vitest le 2026-09-16
+#     et le lanceur de Node y répond « pass 0, fail 1 » sans rien dire du pourquoi.
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.ingest --law X --lang fr --apply-local
-npx wrangler d1 migrations apply qclaw --local|--remote   # bookmark Time Travel AVANT --remote
+npx wrangler d1 migrations apply legislation --local|--remote   # bookmark Time Travel AVANT --remote
 npx wrangler deploy                                # jeton requis (voir Secrets)
 ```
 
@@ -335,9 +337,9 @@ COURANT : SQLite n'a pas de « DROP COLUMN IF EXISTS », donc une colonne retir�
 côtés rend la migration injouable sur une base neuve (arrivé avec 0002, vu à l'audit).
 
 ```bash
-npx wrangler d1 execute qclaw --local --file=./schema.sql   # 1. état initial
+npx wrangler d1 execute legislation --local --file=./schema.sql   # 1. état initial
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.migrate --target local
-npx wrangler d1 migrations apply qclaw --local              # 3. 0001, 0002, …
+npx wrangler d1 migrations apply legislation --local              # 3. 0001, 0002, …
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.ingest --all --apply-local
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.load --target local
 ```

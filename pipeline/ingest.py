@@ -28,7 +28,7 @@ _FR_MONTHS = {
 }
 
 OUT_DIR = config.REPO_ROOT / "pipeline" / "out"
-DB_NAME = "qclaw"
+DB_NAME = "legislation"
 
 
 def _sample_path(law_id: str, lang: str) -> Path:

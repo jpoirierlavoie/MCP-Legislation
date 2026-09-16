@@ -117,10 +117,10 @@ jobs:
         run: |
           set -euo pipefail
           T=$(mktemp -d)
-          npx wrangler d1 execute qclaw --local --persist-to "$T" --file=./schema.sql -y
-          npx wrangler d1 migrations apply qclaw --local --persist-to "$T"
+          npx wrangler d1 execute legislation --local --persist-to "$T" --file=./schema.sql -y
+          npx wrangler d1 migrations apply legislation --local --persist-to "$T"
           for t in search_log division_links concept_gazetteer article_headnotes; do
-            npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+            npx wrangler d1 execute legislation --local --persist-to "$T" --json \
               --command "SELECT COUNT(*) AS n FROM pragma_table_info('$t')" \
               | grep -q '"n": *[1-9]' || { echo "$t absente après migrations"; exit 1; }
           done
@@ -128,7 +128,7 @@ jobs:
           # du droit relu par un avocat. Une colonne perdue ou renommée le ferait tomber en
           # silence : les requêtes filtrent dessus, elles ne le déclarent pas.
           for t in division_links concept_gazetteer article_headnotes; do
-            npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+            npx wrangler d1 execute legislation --local --persist-to "$T" --json \
               --command "SELECT COUNT(*) AS n FROM pragma_table_info('$t') WHERE name='validated'" \
               | grep -q '"n": *1' || { echo "$t sans colonne validated"; exit 1; }
           done
@@ -137,19 +137,19 @@ jobs:
           # echouer le RENAME. Il laisserait passer l'INVERSE, qui est le vrai danger :
           # renommer dans schema.sql ET retirer l'ALTER de 0004 laisse cette CI VERTE et la
           # production avec l'ancienne colonne. L'assertion NEGATIVE est celle qui compte.
-          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='official_cite'" \
             | grep -q '"n": *1' || { echo "laws.official_cite absente apres 0004"; exit 1; }
-          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='rlrq_cite'" \
             | grep -q '"n": *0' || { echo "laws.rlrq_cite SUBSISTE : 0004 n a pas renomme"; exit 1; }
-          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('article_numbers')" \
             | grep -q '"n": *4' || { echo "article_numbers absente ou incomplete"; exit 1; }
           # `text` EN POSITION 0 : src/lib.ts code en dur snippet(articles_fts, 0, ...), donc
           # une inversion ferait rendre une NOTE MARGINALE comme extrait du texte officiel —
           # or l art. 14 de la Loi d interpretation dit qu elle n en fait pas partie (R4).
-          npx wrangler d1 execute qclaw --local --persist-to "$T" --json \
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT name AS n FROM pragma_table_info('articles_fts') WHERE cid=0" \
             | grep -q '"n": *"text"' || { echo "articles_fts : text pas en position 0"; exit 1; }
           rm -rf "$T"

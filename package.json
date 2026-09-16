@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
     "type-check": "tsc --noEmit",
-    "db:schema:local": "wrangler d1 execute qclaw --local --file=./schema.sql",
+    "db:schema:local": "wrangler d1 execute legislation --local --file=./schema.sql",
     "evals": "node tests/evals.mjs",
     "eval": "node eval/run.mjs",
     "lint": "biome check .",

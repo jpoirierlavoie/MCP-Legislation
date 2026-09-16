@@ -47,7 +47,7 @@ function lire() {
       wrangler,
       "d1",
       "execute",
-      "qclaw",
+      "legislation",
       LOCAL ? "--local" : "--remote",
       "--json",
       "--command",

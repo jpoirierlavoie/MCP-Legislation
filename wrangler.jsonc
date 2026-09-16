@@ -23,10 +23,10 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "qclaw",
+      "database_name": "legislation",
       // Base D1 réelle (compte « Jason Poirier Lavoie », région ENAM), créée via
-      // `wrangler d1 create qclaw`. Le dev local utilise quand même un SQLite local.
-      "database_id": "b707af5a-8807-4a02-805d-13e5b0de033e"
+      // `wrangler d1 create legislation`. Le dev local utilise quand même un SQLite local.
+      "database_id": "82779d59-480f-4847-9716-6f4d7c62af5b"
     }
   ],
 
@@ -60,7 +60,7 @@
 
   // Couche sémantique (plan v2, phase 2) : embeddings bge-m3 + index Vectorize.
   "ai": { "binding": "AI" },
-  "vectorize": [{ "binding": "VECTORS", "index_name": "qclaw-articles" }],
+  "vectorize": [{ "binding": "VECTORS", "index_name": "legislation-articles" }],
 
   // DÉCLENCHEUR INERTE : aucun handler `scheduled` n'existe dans src/ — ce cron ne
   // lance RIEN. Le rafraîchissement semestriel est VOLONTAIREMENT manuel et supervisé

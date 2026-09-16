@@ -20,7 +20,7 @@ from pathlib import Path
 from . import config
 
 ACCOUNT_ID = "6276df02799535c0e96225fdf6184023"
-DB_NAME = "qclaw"
+DB_NAME = "legislation"
 
 
 class D1Error(Exception):
@@ -71,7 +71,7 @@ class LocalD1:
     name = "local"
 
     def run(self, sql: str) -> list[dict]:
-        tmp = Path(tempfile.gettempdir()) / "qclaw_d1_stmt.sql"
+        tmp = Path(tempfile.gettempdir()) / "legislation_d1_stmt.sql"
         tmp.write_text(sql, encoding="utf-8", newline="\n")
         cmd = f'npx wrangler d1 execute {DB_NAME} --local --file="{tmp}" --json'
         p = subprocess.run(cmd, shell=True, cwd=config.REPO_ROOT,

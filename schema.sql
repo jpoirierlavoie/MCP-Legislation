@@ -1,4 +1,4 @@
--- Schéma D1 du serveur MCP « Lois du Québec » (qclaw).
+-- Schéma D1 du serveur MCP « Lois du Québec » (legislation).
 -- Transcription du PLAN.md §2 tel que révisé en phase 0 (voir §12 : décisions arrêtées,
 -- et docs/phase0-structure-epub.md pour la justification de chaque colonne).
 -- Ordre : laws -> divisions -> articles -> index -> articles_fts (la table FTS externe

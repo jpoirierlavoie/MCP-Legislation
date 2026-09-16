@@ -1,6 +1,6 @@
 -- ============================================================
 -- Couche de découverte / pertinence — migration additive
--- À appliquer sur la base D1 « qclaw » existante.
+-- À appliquer sur la base D1 « legislation » existante.
 -- NB : les ALTER TABLE ne sont pas idempotents en SQLite
 -- (échec si la colonne existe) — exécuter UNE fois, ou via un
 -- script de migration qui vérifie PRAGMA table_info d'abord.
