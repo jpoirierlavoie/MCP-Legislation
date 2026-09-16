@@ -137,7 +137,6 @@ function secretsOf(env: Env): string[] {
 export function gateMcp(request: Request, url: URL, env: Env): Request | null {
   const attendus = secretsOf(env);
   const path = trimTrailingSlash(url.pathname);
-  const onMount = path === MOUNT;
   // Un SEUL segment après le point de montage : /mcp/<jeton>, rien de plus profond.
   const segment =
     path.startsWith(PREFIX) && !path.slice(PREFIX.length).includes("/")
