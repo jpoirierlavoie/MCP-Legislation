@@ -1,0 +1,61 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────────────────
+  // WORKER DE TRANSIT — JETABLE. Existe le temps de la bascule « qclaw » → « legislation »
+  // (2026-09-16) et se supprime ensuite (`wrangler delete -c wrangler.transit.jsonc`),
+  // avec ce fichier.
+  //
+  // POURQUOI UN FICHIER SÉPARÉ, ET PAS UN `env.transit` DANS wrangler.jsonc — deux raisons,
+  // chacune suffisante :
+  //
+  //  1. UN `env.*` NOMMÉ HÉRITE DES `routes` DE TÊTE. `wrangler deploy --env transit`
+  //     réassignerait `legislation.poirierlavoie.ca` à CE Worker, qui n'a pas le MCP_TOKEN
+  //     du connecteur claude.ai — donc 404 soutenu sur /mcp, donc exactement l'incident du
+  //     2026-07-25 qui a détruit le connecteur de façon irréversible côté client. Wrangler
+  //     ne fait qu'AVERTIR, il ne bloque pas.
+  //  2. `pipeline/d1_api.py:_database_id()` prend le PREMIER `"database_id"` trouvé dans
+  //     wrangler.jsonc, par expression régulière. Un second bloc D1 dans ce fichier-là
+  //     redirigerait TOUT le pipeline Python vers la mauvaise base, en silence.
+  //
+  // Ce fichier n'est donc JAMAIS la cible de `wrangler deploy` sans `-c`, et wrangler.jsonc
+  // reste à une seule entrée D1 jusqu'à la bascule.
+  // ─────────────────────────────────────────────────────────────────────────────────────
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "legislation-transit",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // AUCUNE clé "routes" : ce Worker ne doit jamais toucher au domaine personnalisé.
+  // workers.dev OUVERT à dessein : le rattrapage des vecteurs passe par lui, ce qui
+  // satisfait l'invariant 9 (le WAF de la zone bloque les rafales de POST) SANS jamais
+  // ouvrir workers_dev sur la production.
+  "workers_dev": true,
+
+  // Espace de noms DO distinct de celui de la production — d'où le `tag: v1` propre.
+  "durable_objects": {
+    "bindings": [{ "name": "MCP_OBJECT", "class_name": "QclawMCP" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QclawMCP"] }],
+
+  // LES RESSOURCES VERTES, et elles seules.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "legislation",
+      "database_id": "82779d59-480f-4847-9716-6f4d7c62af5b"
+    }
+  ],
+
+  "vars": { "RELAX_SEARCH": "1", "HYBRID_SEARCH": "1", "FEDERAL_CORPUS": "1" },
+
+  // PAS de "ratelimits" : sans le binding, le Worker laisse passer (src/index.ts), et
+  // `npm run evals` émet 61 requêtes en 3 s. Un seuil ici ferait lire une régression là
+  // où il n'y aurait qu'un compteur.
+
+  "ai": { "binding": "AI" },
+  "vectorize": [{ "binding": "VECTORS", "index_name": "legislation-articles" }]
+
+  // Pas de "triggers" : le cron de la production est déjà inerte, en dupliquer un ici
+  // n'aurait aucun sens.
+}
