@@ -5,7 +5,7 @@
 // de code que la requête de production, aucun scope de jeton supplémentaire. Idempotent :
 // upsert par id stable (art:{law}:{num} / div:{law}:{path}) — relançable sans doublons.
 
-import { EMBED_MODEL, breadcrumbChains } from "./lib";
+import { breadcrumbChains, EMBED_MODEL } from "./lib";
 
 /** Fenêtre bge-m3 : 60 K tokens PAR REQUÊTE, consommés comme lot × (texte le plus
  * long) — le moteur REMBOURRE tous les textes à la longueur du plus long (constaté :
@@ -80,35 +80,49 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
   const count = Math.min(MAX_COUNT, Math.max(1, body.count ?? MAX_COUNT));
 
   const db = env.DB;
-  const lawRow = await db.prepare("SELECT id, name_fr FROM laws WHERE id = ?")
-    .bind(law).first<{ id: string; name_fr: string }>();
+  const lawRow = await db
+    .prepare("SELECT id, name_fr FROM laws WHERE id = ?")
+    .bind(law)
+    .first<{ id: string; name_fr: string }>();
   if (!lawRow) return json({ error: `loi inconnue : ${law}` }, 404);
 
   // --- construire les textes canoniques FR ------------------------------------
-  const items: { id: string; text: string; metadata: Record<string, VectorizeVectorMetadataValue> }[] = [];
+  const items: {
+    id: string;
+    text: string;
+    metadata: Record<string, VectorizeVectorMetadataValue>;
+  }[] = [];
   let overruns = 0;
 
   if (kind === "articles") {
-    const rows = (await db
-      .prepare(
-        // Départage par `id` : le rattrapage pagine par LIMIT/OFFSET, or deux articles
-        // peuvent partager une clé de tri (cf. `boundRef` dans src/lib.ts). Sans ordre
-        // total, un lot pouvait sauter un article ou en embarquer deux fois — invisible
-        // depuis l'API, puisque seul le compte `embedded` est rendu.
-        `SELECT number, division_path, text FROM articles
+    const rows = (
+      await db
+        .prepare(
+          // Départage par `id` : le rattrapage pagine par LIMIT/OFFSET, or deux articles
+          // peuvent partager une clé de tri (cf. `boundRef` dans src/lib.ts). Sans ordre
+          // total, un lot pouvait sauter un article ou en embarquer deux fois — invisible
+          // depuis l'API, puisque seul le compte `embedded` est rendu.
+          `SELECT number, division_path, text FROM articles
          WHERE law_id = ? AND lang = 'fr' ORDER BY sort_key, id LIMIT ? OFFSET ?`,
-      )
-      .bind(law, count, offset)
-      .all<{ number: string; division_path: string; text: string }>()).results;
-    const chains = await breadcrumbChains(db, "fr",
-      rows.map((r) => ({ law_id: law, division_path: r.division_path })));
+        )
+        .bind(law, count, offset)
+        .all<{ number: string; division_path: string; text: string }>()
+    ).results;
+    const chains = await breadcrumbChains(
+      db,
+      "fr",
+      rows.map((r) => ({ law_id: law, division_path: r.division_path })),
+    );
     for (const r of rows) {
       const chain = chains.get(`${law}|${r.division_path}`) ?? [];
       const crumb = chain
         .map((n) => [n.kind, n.number, n.heading].filter(Boolean).join(" "))
         .join(" › ");
       let text = `${lawRow.name_fr} — ${crumb} — art. ${r.number}. ${r.text}`;
-      if (text.length > MAX_CHARS) { text = text.slice(0, MAX_CHARS); overruns++; }
+      if (text.length > MAX_CHARS) {
+        text = text.slice(0, MAX_CHARS);
+        overruns++;
+      }
       const heading = [...chain].reverse().find((n) => n.heading)?.heading ?? "";
       items.push({
         id: `art:${law}:${r.number}`,
@@ -117,15 +131,20 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
       });
     }
   } else {
-    const rows = (await db
-      .prepare(
-        `SELECT path, heading FROM divisions
+    const rows = (
+      await db
+        .prepare(
+          `SELECT path, heading FROM divisions
          WHERE law_id = ? AND lang = 'fr' ORDER BY sort_order LIMIT ? OFFSET ?`,
-      )
-      .bind(law, count, offset)
-      .all<{ path: string; heading: string | null }>()).results;
-    const chains = await breadcrumbChains(db, "fr",
-      rows.map((r) => ({ law_id: law, division_path: r.path })));
+        )
+        .bind(law, count, offset)
+        .all<{ path: string; heading: string | null }>()
+    ).results;
+    const chains = await breadcrumbChains(
+      db,
+      "fr",
+      rows.map((r) => ({ law_id: law, division_path: r.path })),
+    );
     for (const r of rows) {
       const chain = chains.get(`${law}|${r.path}`) ?? [];
       const crumb = chain
@@ -140,7 +159,7 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
   }
 
   // --- embed (lots bornés en items ET en caractères) puis upsert ---------------
-  const batches: typeof items[] = [];
+  const batches: (typeof items)[] = [];
   let cur: typeof items = [];
   let curMaxChars = 0;
   for (const it of items) {
@@ -148,7 +167,8 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
     const cost = (cur.length + 1) * estTokens(nextMax); // rembourrage au plus long
     if (cur.length && (cur.length >= EMBED_BATCH || cost > EMBED_TOKEN_BUDGET)) {
       batches.push(cur);
-      cur = []; curMaxChars = 0;
+      cur = [];
+      curMaxChars = 0;
     }
     cur.push(it);
     curMaxChars = Math.max(curMaxChars, it.text.length);
@@ -188,20 +208,34 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
       data = await embedSplit(batch.map((b) => b.text));
     } catch (e) {
       // JAMAIS de page HTML : le pilote a besoin d'un JSON actionnable.
-      return json({
-        error: `AI.run a échoué (${(e as Error).message?.slice(0, 200)})`,
-        law, kind, offset, batch_size: batch.length,
-        batch_chars: batch.reduce((a, b) => a + b.text.length, 0),
-      }, 502);
+      return json(
+        {
+          error: `AI.run a échoué (${(e as Error).message?.slice(0, 200)})`,
+          law,
+          kind,
+          offset,
+          batch_size: batch.length,
+          batch_chars: batch.reduce((a, b) => a + b.text.length, 0),
+        },
+        502,
+      );
     }
-    await env.VECTORS.upsert(batch.map((b, j) => ({
-      id: b.id, values: data[j], metadata: b.metadata,
-    })));
+    await env.VECTORS.upsert(
+      batch.map((b, j) => ({
+        id: b.id,
+        values: data[j],
+        metadata: b.metadata,
+      })),
+    );
     embedded += batch.length;
   }
 
   return json({
-    kind, law, offset, embedded, overruns,
+    kind,
+    law,
+    offset,
+    embedded,
+    overruns,
     done: items.length < count,
     next: offset + items.length,
   });

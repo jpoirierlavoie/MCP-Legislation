@@ -8,7 +8,7 @@
 // Reprenable : journal local scripts/.backfill-progress.json ; les upserts étant
 // idempotents, une reprise grossière ne crée aucun doublon.
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,9 +29,7 @@ const allLaws = config.laws.map((l) => l.id);
 const laws = (arg("laws", "") || allLaws.join(",")).split(",").filter(Boolean);
 const kinds = (arg("kind", "") || "articles,divisions").split(",").filter(Boolean);
 
-const progress = RESUME && existsSync(PROGRESS)
-  ? JSON.parse(readFileSync(PROGRESS, "utf-8"))
-  : {};
+const progress = RESUME && existsSync(PROGRESS) ? JSON.parse(readFileSync(PROGRESS, "utf-8")) : {};
 
 // Cadence : le WAF de la zone bloque les rafales de POST non-navigateur (constaté :
 // page HTML de blocage après ~20 appels serrés). On espace les appels, on se présente
@@ -72,7 +70,10 @@ let totalOverruns = 0;
 for (const kind of kinds) {
   for (const law of laws) {
     const key = `${kind}|${law}`;
-    if (progress[key] === "done") { console.log(`— ${key} déjà fait —`); continue; }
+    if (progress[key] === "done") {
+      console.log(`— ${key} déjà fait —`);
+      continue;
+    }
     let offset = typeof progress[key] === "number" ? progress[key] : 0;
     for (;;) {
       const r = await post({ kind, law, offset });
@@ -91,5 +92,7 @@ for (const kind of kinds) {
 }
 
 const dt = Math.round((Date.now() - t0) / 1000);
-console.log(`\nTerminé : ${totalEmbedded} vecteurs upsertés en ${dt}s ; ` +
-  `${totalOverruns} texte(s) tronqué(s) à ~1500 tokens.`);
+console.log(
+  `\nTerminé : ${totalEmbedded} vecteurs upsertés en ${dt}s ; ` +
+    `${totalOverruns} texte(s) tronqué(s) à ~1500 tokens.`,
+);

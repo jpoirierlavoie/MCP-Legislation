@@ -30,12 +30,19 @@ jobs:
       - run: npm ci
       - run: npx wrangler types # génère worker-configuration.d.ts (pas d'auth requise)
       - run: npx tsc --noEmit
-      - run: node --test scripts/check-consolidation.test.mjs
-      - run: node --test tests/catalogue.test.mjs # garde anti-dérive de la documentation (R10)
-      - run: node --test tests/page-client.test.mjs # comportement du JS client de la page
-      - run: node --test tests/ranges.test.mjs # mode plage : sort_key n'est pas un ordre total
-      - run: node --test tests/paths.test.mjs # deux familles de chemins, un seul decoupeur
-      - run: node --test tests/federal-switch.test.mjs # FEDERAL_CORPUS : aucune lecture du corpus non masquee
+      - run: npx biome check .
+
+      # Une seule commande pour DEUX projets (cf. vitest.config.mts) :
+      #   « node »    — gardes de provenance, qui lisent le TypeScript comme du texte
+      #                 (catalogue source unique des titres, littéraux SQL du commutateur
+      #                 fédéral, porte d'accès analysée dans src/auth.ts, JS client).
+      #   « workerd » — ce qui exige une vraie D1 et de vraies liaisons.
+      # Aucun réseau, aucune clef : le projet workerd lit wrangler.test.jsonc, d'où les
+      # liaisons `ai` et `vectorize` sont retirées — sans quoi le greffon ouvrirait une
+      # session mandataire distante et réclamerait CLOUDFLARE_API_TOKEN.
+      # `npm test`, non `npx vitest run` : le script `pretest` engendre d'abord
+      # wrangler.test.jsonc, qui n'est pas versionné.
+      - run: npm test
 
       # INVARIANT 1 : l'ordre de laws.config.json porte les plages d'id. Le réordonner
       # fait écraser les articles d'autres lois à la prochaine ingestion, EN SILENCE.

@@ -11,7 +11,12 @@
     "type-check": "tsc --noEmit",
     "db:schema:local": "wrangler d1 execute qclaw --local --file=./schema.sql",
     "evals": "node tests/evals.mjs",
-    "eval": "node eval/run.mjs"
+    "eval": "node eval/run.mjs",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pretest": "node scripts/wrangler-test-config.mjs --ecrire"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -19,7 +24,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
     "typescript": "^5.9.2",
+    "vitest": "^4.1.11",
     "wrangler": "^4.112.0"
   }
 }

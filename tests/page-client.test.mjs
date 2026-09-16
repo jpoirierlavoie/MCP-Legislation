@@ -17,9 +17,9 @@
 
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { test } from "vitest";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = readFileSync(join(RACINE, "src", "site.ts"), "utf8");
@@ -67,11 +67,23 @@ function scene({ langStockee = null, themeStocke = null, langue = "fr-CA", large
     const e = { id, className: "", lang: "", open: undefined, _h: {} };
     e.classList = {
       contains: (c) => e.className.split(/\s+/).filter(Boolean).includes(c),
-      add(c) { if (!this.contains(c)) e.className = `${e.className} ${c}`.trim(); },
-      remove(c) { e.className = e.className.split(/\s+/).filter((x) => x && x !== c).join(" "); },
-      toggle(c, on) { if (on) this.add(c); else this.remove(c); },
+      add(c) {
+        if (!this.contains(c)) e.className = `${e.className} ${c}`.trim();
+      },
+      remove(c) {
+        e.className = e.className
+          .split(/\s+/)
+          .filter((x) => x && x !== c)
+          .join(" ");
+      },
+      toggle(c, on) {
+        if (on) this.add(c);
+        else this.remove(c);
+      },
     };
-    e.addEventListener = (t, f) => { (e._h[t] ??= []).push(f); };
+    e.addEventListener = (t, f) => {
+      (e._h[t] ??= []).push(f);
+    };
     e.click = () => (e._h.click ?? []).forEach((f) => f());
     e.querySelectorAll = () => [];
     return e;
@@ -90,8 +102,13 @@ function scene({ langStockee = null, themeStocke = null, langue = "fr-CA", large
     innerHeight: 800,
     pageYOffset: 0,
     _h: {},
-    addEventListener(t, f) { (this._h[t] ??= []).push(f); },
-    defiler(y) { this.pageYOffset = y; (this._h.scroll ?? []).forEach((f) => f()); },
+    addEventListener(t, f) {
+      (this._h[t] ??= []).push(f);
+    },
+    defiler(y) {
+      this.pageYOffset = y;
+      (this._h.scroll ?? []).forEach((f) => f());
+    },
   };
 
   const globaux = {
@@ -107,23 +124,25 @@ function scene({ langStockee = null, themeStocke = null, langue = "fr-CA", large
       requetes.push(q);
       return {
         matches: /min-width/.test(q) ? large : false,
-        addEventListener() {}, addListener() {},
+        addEventListener() {},
+        addListener() {},
       };
     },
-    IntersectionObserver: class { observe() {} },
+    IntersectionObserver: class {
+      observe() {}
+    },
     window: fenetre,
     document: {
       documentElement: html,
-      getElementById: (i) => ({ bascule, theme }[i] ?? null),
-      querySelector: (s) => ({ ".tdm": tdm, ".haut": haut }[s] ?? null),
+      getElementById: (i) => ({ bascule, theme })[i] ?? null,
+      querySelector: (s) => ({ ".tdm": tdm, ".haut": haut })[s] ?? null,
     },
   };
 
   // Exécution des deux blocs avec les globaux injectés en paramètres — pas de fuite dans
   // l'environnement du test, et aucune dépendance à un navigateur.
   const noms = Object.keys(globaux);
-  const lancer = (code) =>
-    new Function(...noms, code)(...noms.map((n) => globaux[n]));
+  const lancer = (code) => new Function(...noms, code)(...noms.map((n) => globaux[n]));
 
   lancer(BOOT);
   const demarrerJs = () => lancer(jsClient());
@@ -210,7 +229,10 @@ test("une seule classe de thème à la fois", () => {
   for (let i = 0; i < 4; i++) {
     s.theme.click();
     const c = s.html.className.split(/\s+/).filter(Boolean);
-    assert.ok(c.filter((x) => x === "t-light" || x === "t-dark").length <= 1, `après ${i + 1} clic(s)`);
+    assert.ok(
+      c.filter((x) => x === "t-light" || x === "t-dark").length <= 1,
+      `après ${i + 1} clic(s)`,
+    );
   }
 });
 
@@ -221,7 +243,8 @@ test("la préférence de langue survit à un rechargement", () => {
   s.bascule.click();
   const attendu = s.classes();
   const s2 = scene({
-    langStockee: s.store.get("qclawLang"), themeStocke: s.store.get("qclawTheme"),
+    langStockee: s.store.get("qclawLang"),
+    themeStocke: s.store.get("qclawTheme"),
   });
   s2.demarrerJs(); // rechargement RÉEL : BOOT puis le script de fin de page
   assert.equal(s2.classes(), attendu, "l'état rechargé diffère de l'état quitté");
@@ -233,8 +256,10 @@ test("TDM : dépliée au-dessus du point de rupture, repliée en dessous", () =>
   const large = scene({ large: true });
   large.demarrerJs();
   assert.equal(large.tdm.open, true);
-  assert.ok(large.requetes.some((q) => q.includes(`min-width:${LARGE}`)),
-    `aucune requête média sur ${LARGE}`);
+  assert.ok(
+    large.requetes.some((q) => q.includes(`min-width:${LARGE}`)),
+    `aucune requête média sur ${LARGE}`,
+  );
 
   const etroit = scene({ large: false });
   etroit.demarrerJs();
@@ -246,8 +271,10 @@ test("TDM : dépliée au-dessus du point de rupture, repliée en dessous", () =>
 test("pastille : masquée en haut de page, visible après un écran défilé", () => {
   const s = scene();
   s.demarrerJs();
-  assert.ok(s.html.classList.contains("js"),
-    "la classe js n'est pas posée : le CSS ne masquera jamais la pastille");
+  assert.ok(
+    s.html.classList.contains("js"),
+    "la classe js n'est pas posée : le CSS ne masquera jamais la pastille",
+  );
   assert.equal(s.haut.classList.contains("on"), false, "visible alors qu'on est en haut");
   s.fenetre.defiler(900);
   assert.ok(s.haut.classList.contains("on"), "invisible après un écran défilé");
@@ -277,8 +304,10 @@ test("pastille : le lien reste utilisable sans JavaScript", () => {
   // #top est le repli SPÉCIFIÉ par HTML (fragment « top » sans élément portant cet id).
   // Un href="#" ou un onclick ferait dépendre la remontée du JavaScript.
   assert.ok(SRC.includes(`href="#top"`), "la pastille doit être une ancre vers #top");
-  assert.ok(/class="sr"/.test(SRC),
-    "la pastille a besoin d'un libellé accessible : le contenu d'un <a> prime sur title");
+  assert.ok(
+    /class="sr"/.test(SRC),
+    "la pastille a besoin d'un libellé accessible : le contenu d'un <a> prime sur title",
+  );
 });
 
 // --- structure des sections --------------------------------------------------
@@ -292,7 +321,7 @@ test("SECTIONS : aucun identifiant en double", () => {
 test("RENDU couvre exactement les sections, sans trou ni surplus", () => {
   // `Record<SectionId, …>` le vérifie déjà à la compilation ; ce contrôle-ci garde le
   // dispositif visible et attrape un renommage qui aurait désactivé le typage.
-  const bloc = SRC.match(/const RENDU: Record<SectionId, \(\) => string> = \{([\s\S]*?)\n  \};/);
+  const bloc = SRC.match(/const RENDU: Record<SectionId, \(\) => string> = \{([\s\S]*?)\n {2}\};/);
   assert.ok(bloc, "RENDU introuvable — le garde de typage a-t-il été retiré ?");
   const cles = [...bloc[1].matchAll(/^\s*([a-z]+):/gm)].map((m) => m[1]).sort();
   const ids = [...SRC.matchAll(/\{ id: "([a-z]+)",/g)].map((m) => m[1]).sort();
@@ -303,11 +332,15 @@ test("l'avertissement est RENDU, pas seulement défini", () => {
   // Contrôler `SRC.includes('<section id="limites"')` serait vide : la définition existe
   // indépendamment de tout appel. C'est l'APPEL qu'il faut vérifier — sur un outil
   // juridique, une clause de non-conseil qui cesse d'être rendue est le pire cas.
-  assert.ok(/function reperage\(\)[\s\S]*?\$\{limites\(\)\}/.test(SRC),
-    "reperage() n'appelle plus limites() : l'avertissement a disparu de la page");
+  assert.ok(
+    /function reperage\(\)[\s\S]*?\$\{limites\(\)\}/.test(SRC),
+    "reperage() n'appelle plus limites() : l'avertissement a disparu de la page",
+  );
   assert.ok(SRC.includes(`<section id="limites"`), "l'ancre #limites doit survivre");
-  assert.ok(/Aucun conseil juridique/.test(SRC) && /No legal advice/.test(SRC),
-    "la clause de non-conseil doit rester au pied de page, dans les deux langues");
+  assert.ok(
+    /Aucun conseil juridique/.test(SRC) && /No legal advice/.test(SRC),
+    "la clause de non-conseil doit rester au pied de page, dans les deux langues",
+  );
 });
 
 test("la TDM couvre exactement les sections de premier niveau", () => {
@@ -341,7 +374,11 @@ test("les deux jeux de thème déclarent exactement les mêmes variables", () =>
   // Une variable présente dans un seul jeu hérite de l'autre thème : contraste cassé,
   // texte clair sur fond clair. Silencieux, et seulement dans UN des deux modes.
   const vars = (nom) => {
-    const m = SRC.match(new RegExp(`const ${nom} = ([\\s\\S]*?);\\r?\\n`));
+    // `\s*` autour du `=` : le formateur rejette la valeur à la ligne suivante quand
+    // la déclaration dépasse 100 colonnes. Un motif exigeant « = » suivi d'une espace ne
+    // trouvait alors plus rien, et la garde tombait sur « jeu CLAIR introuvable » alors
+    // que les deux jeux étaient intacts.
+    const m = SRC.match(new RegExp(`const ${nom}\\s*=\\s*([\\s\\S]*?);\\r?\\n`));
     assert.ok(m, `jeu ${nom} introuvable`);
     return [...m[1].matchAll(/(--[a-z-]+):/g)].map((x) => x[1]).sort();
   };

@@ -17,10 +17,23 @@
 
 import catalogue from "../catalogue.json";
 import config from "../laws.config.json";
-import { LawSummary, SubjectSummary, citeOf, listLaws, listSubjects, masqueLawId } from "./lib";
 import {
-  MAX_PER_SUBJECT, MAX_SUFFIX, RRF_K, SEMANTIC_MIN_SCORE, SPECIFIC_TOKEN_FACTOR,
-  SPECIFIC_TOKEN_MAX_REACH, VECTOR_TOP_K, WEIGHTS,
+  citeOf,
+  type LawSummary,
+  listLaws,
+  listSubjects,
+  masqueLawId,
+  type SubjectSummary,
+} from "./lib";
+import {
+  MAX_PER_SUBJECT,
+  MAX_SUFFIX,
+  RRF_K,
+  SEMANTIC_MIN_SCORE,
+  SPECIFIC_TOKEN_FACTOR,
+  SPECIFIC_TOKEN_MAX_REACH,
+  VECTOR_TOP_K,
+  WEIGHTS,
 } from "./relevance";
 
 const CONTACT = "jason@poirierlavoie.ca";
@@ -40,8 +53,11 @@ const SOURCES = new Map(
 /** Échappement HTML — obligatoire sur TOUT champ venu de D1 (intitulés à apostrophes). */
 function esc(s: unknown): string {
   return String(s ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /** Bloc bilingue : les deux langues sont émises, le CSS n'en montre qu'une. */
@@ -51,8 +67,10 @@ function bi(fr: string, en: string): string {
 
 /** Suite de paragraphes bilingues. */
 function biP(fr: string[], en: string[]): string {
-  return `<div data-l="fr">${fr.map((p) => `<p>${esc(p)}</p>`).join("")}</div>` +
-    `<div data-l="en">${en.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`;
+  return (
+    `<div data-l="fr">${fr.map((p) => `<p>${esc(p)}</p>`).join("")}</div>` +
+    `<div data-l="en">${en.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`
+  );
 }
 
 const FONCTION: Record<string, [string, string]> = {
@@ -118,18 +136,21 @@ function h2(id: SectionId): string {
  * calcule et ne se recopie pas.
  */
 export async function renderSite(
-  db: D1Database, env: { FEDERAL_CORPUS?: string } = {},
+  db: D1Database,
+  env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<string> {
   // lang="fr" DÉLIBÉRÉMENT : listLaws en "en" déclenche translatePaths par loi (N+1) pour
   // un bénéfice nul — la ligne `laws` porte déjà name_fr ET name_en, consol_date_fr ET _en.
   const [laws, subjects, map, counts] = await Promise.all([
     listLaws(db, {}, "fr", env),
     listSubjects(db, env),
-    db.prepare(`SELECT subject_id, law_id FROM subject_map WHERE 1=1 ${masqueLawId(env, "law_id")}`)
+    db
+      .prepare(`SELECT subject_id, law_id FROM subject_map WHERE 1=1 ${masqueLawId(env, "law_id")}`)
       .all<{ subject_id: string; law_id: string }>(),
-    db.prepare(
-      `SELECT lang, COUNT(*) AS n FROM articles WHERE 1=1 ${masqueLawId(env, "law_id")} GROUP BY lang`,
-    )
+    db
+      .prepare(
+        `SELECT lang, COUNT(*) AS n FROM articles WHERE 1=1 ${masqueLawId(env, "law_id")} GROUP BY lang`,
+      )
       .all<{ lang: string; n: number }>(),
   ]);
 
@@ -141,7 +162,10 @@ export async function renderSite(
   }
   const parId = new Map(laws.map((l) => [l.id, l]));
   const totalArticles = counts.results.reduce((n, r) => n + r.n, 0);
-  const dates = laws.map((l) => l.consol_date_fr).filter(Boolean).sort();
+  const dates = laws
+    .map((l) => l.consol_date_fr)
+    .filter(Boolean)
+    .sort();
   const consol = dates[dates.length - 1] ?? "—";
 
   // L'ordre du corps est DÉRIVÉ de SECTIONS, il n'est plus recopié à côté. `Record<
@@ -197,8 +221,7 @@ ${haut()}
  * dégradé mais jamais cassé.
  */
 function tdm(): string {
-  const items = SECTIONS
-    .map((s) => `<li><a href="#${s.id}">${bi(s.fr, s.en)}</a></li>`).join("");
+  const items = SECTIONS.map((s) => `<li><a href="#${s.id}">${bi(s.fr, s.en)}</a></li>`).join("");
   return `<details class="tdm" open>
   <summary>${bi("Sommaire", "Contents")}</summary>
   <nav><ul>${items}</ul></nav>
@@ -218,8 +241,10 @@ function tdm(): string {
  * d'écran n'en annoncent qu'une.
  */
 function haut(): string {
-  return `<a href="#top" class="haut"><span aria-hidden="true">${FLECHE}</span>` +
-    `<span class="sr">${bi("Haut de page", "Back to top")}</span></a>`;
+  return (
+    `<a href="#top" class="haut"><span aria-hidden="true">${FLECHE}</span>` +
+    `<span class="sr">${bi("Haut de page", "Back to top")}</span></a>`
+  );
 }
 
 /**
@@ -243,16 +268,25 @@ function entete(): string {
   <div class="bar">
     <h1>${bi("Lois du Québec et du Canada", "Laws of Québec and Canada")}</h1>
     <div class="btns">
-      <button id="theme" type="button" title="Thème / Theme">${
-        etat("auto", "◐ Auto", "◐ Auto")}${
-        etat("light", `${SOLEIL} Clair`, `${SOLEIL} Light`)}${
-        etat("dark", "☾ Sombre", "☾ Dark")}</button>
+      <button id="theme" type="button" title="Thème / Theme">${etat(
+        "auto",
+        "◐ Auto",
+        "◐ Auto",
+      )}${etat("light", `${SOLEIL} Clair`, `${SOLEIL} Light`)}${etat(
+        "dark",
+        "☾ Sombre",
+        "☾ Dark",
+      )}</button>
       <button id="bascule" type="button" title="Français / English">FR&nbsp;·&nbsp;EN</button>
     </div>
   </div>
   ${biP(
-    ["Serveur MCP donnant aux assistants IA un accès en lecture seule au texte officiel de la législation du Québec et des lois fédérales que le litige civil québécois convoque, en français et en anglais. Le texte des articles provient des EPUB officiels de LégisQuébec et des fichiers XML du ministère de la Justice du Canada ; il est restitué verbatim : le serveur n'altère jamais le contenu officiel."],
-    ["An MCP server giving AI assistants read-only access to the official text of Québec legislation and of the federal statutes that Québec civil litigation relies on, in French and English. Article text comes from the official LégisQuébec EPUBs and from the Department of Justice Canada XML files; it is returned verbatim: the server never alters official content."],
+    [
+      "Serveur MCP donnant aux assistants IA un accès en lecture seule au texte officiel de la législation du Québec et des lois fédérales que le litige civil québécois convoque, en français et en anglais. Le texte des articles provient des EPUB officiels de LégisQuébec et des fichiers XML du ministère de la Justice du Canada ; il est restitué verbatim : le serveur n'altère jamais le contenu officiel.",
+    ],
+    [
+      "An MCP server giving AI assistants read-only access to the official text of Québec legislation and of the federal statutes that Québec civil litigation relies on, in French and English. Article text comes from the official LégisQuébec EPUBs and from the Department of Justice Canada XML files; it is returned verbatim: the server never alters official content.",
+    ],
   )}
 </header>`;
 }
@@ -267,27 +301,34 @@ function chiffres(nLois: number, nMat: number, nArt: number, consol: string): st
 }
 
 function corpus(laws: LawSummary[]): string {
-  const lignes = laws.map((l) => {
-    const [ffr, fen] = FONCTION[l.fonction ?? ""] ?? [l.fonction ?? "", l.fonction ?? ""];
-    const src = SOURCES.get(l.id);
-    const hay = `${citeOf(l)} ${l.name_fr} ${l.name_en} ${ffr} ${fen}`.toLowerCase();
-    const lien = (u: string | undefined, t: string, lg: string) => u
-      ? `<a data-l="${lg}" href="${esc(u)}" rel="noopener">${esc(t)}</a>`
-      : `<span data-l="${lg}">${esc(t)}</span>`;
-    return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}" data-h="${esc(hay)}">
+  const lignes = laws
+    .map((l) => {
+      const [ffr, fen] = FONCTION[l.fonction ?? ""] ?? [l.fonction ?? "", l.fonction ?? ""];
+      const src = SOURCES.get(l.id);
+      const hay = `${citeOf(l)} ${l.name_fr} ${l.name_en} ${ffr} ${fen}`.toLowerCase();
+      const lien = (u: string | undefined, t: string, lg: string) =>
+        u
+          ? `<a data-l="${lg}" href="${esc(u)}" rel="noopener">${esc(t)}</a>`
+          : `<span data-l="${lg}">${esc(t)}</span>`;
+      return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}" data-h="${esc(hay)}">
       <td class="cite">${esc(citeOf(l))}</td>
       <td>${lien(src?.fr, l.name_fr, "fr")}${lien(src?.en, l.name_en, "en")}</td>
       <td>${bi(ffr, fen)}</td>
       <td class="n">${nb(l.article_count ?? 0)}</td>
       <td class="n">${esc(l.consol_date_fr ?? "—")}</td>
     </tr>`;
-  }).join("\n");
+    })
+    .join("\n");
 
   return `<section id="corpus">
   ${h2("corpus")}
   ${biP(
-    ["Tous les textes sont chargés dans les deux langues officielles, avec leur hiérarchie complète et leur date de consolidation. Les chiffres de cette page sont lus en base au moment du rendu : ils ne peuvent pas dériver de ce qui est réellement servi. Chaque titre renvoie au texte officiel, sur LégisQuébec ou sur le site Web de la législation (Justice) du Canada."],
-    ["Every text is loaded in both official languages, with its full hierarchy and consolidation date. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text, on LégisQuébec or on the Justice Laws Website of Canada."],
+    [
+      "Tous les textes sont chargés dans les deux langues officielles, avec leur hiérarchie complète et leur date de consolidation. Les chiffres de cette page sont lus en base au moment du rendu : ils ne peuvent pas dériver de ce qui est réellement servi. Chaque titre renvoie au texte officiel, sur LégisQuébec ou sur le site Web de la législation (Justice) du Canada.",
+    ],
+    [
+      "Every text is loaded in both official languages, with its full hierarchy and consolidation date. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text, on LégisQuébec or on the Justice Laws Website of Canada.",
+    ],
   )}
   <div class="ctl">
     <input id="q" type="search" placeholder="Filtrer / Filter">
@@ -324,32 +365,45 @@ function corpus(laws: LawSummary[]): string {
  */
 function matieres(
   subjects: SubjectSummary[],
-  parMatiere: Map<string, string[]>, parId: Map<string, LawSummary>,
+  parMatiere: Map<string, string[]>,
+  parId: Map<string, LawSummary>,
 ): string {
   // <h3> et non <h4> : le titre parent est passé de <h3> à <h2> en devenant une section,
   // et un niveau sauté s'entend dans la navigation par titres d'un lecteur d'écran.
   const groupe = (kind: string, tfr: string, ten: string) => {
-    const items = subjects.filter((s) => s.kind === kind).map((s) => {
-      const ids = parMatiere.get(s.id) ?? [];
-      const lois = ids.map((id) => parId.get(id)).filter(Boolean).map((x) => {
-        const l = x as LawSummary;
-        return `<li>${bi(l.name_fr, l.name_en)} <span class="m">${esc(citeOf(l))} · ${
-          nb(l.article_count ?? 0)}&nbsp;art.</span></li>`;
-      }).join("");
-      return `<details>
+    const items = subjects
+      .filter((s) => s.kind === kind)
+      .map((s) => {
+        const ids = parMatiere.get(s.id) ?? [];
+        const lois = ids
+          .map((id) => parId.get(id))
+          .filter(Boolean)
+          .map((x) => {
+            const l = x as LawSummary;
+            return `<li>${bi(l.name_fr, l.name_en)} <span class="m">${esc(citeOf(l))} · ${nb(
+              l.article_count ?? 0,
+            )}&nbsp;art.</span></li>`;
+          })
+          .join("");
+        return `<details>
         <summary>${bi(s.label_fr, s.label_en || s.label_fr)} <span class="m">(${ids.length})</span></summary>
         ${biP([s.description_fr ?? ""], [s.description_en ?? ""])}
         <ul class="lois">${lois}</ul>
       </details>`;
-    }).join("\n");
+      })
+      .join("\n");
     return `<h3>${bi(tfr, ten)}</h3>${items}`;
   };
 
   return `<section id="matieres">
   ${h2("matieres")}
   ${biP(
-    ["La taxonomie range les textes en matières de droit privé, calquées sur les Livres du Code civil, et en matières spécialisées. Un même texte peut relever de plusieurs matières."],
-    ["The taxonomy sorts texts into private-law subjects, mapped onto the Books of the Civil Code, and specialized subjects. A single text may belong to several subjects."],
+    [
+      "La taxonomie range les textes en matières de droit privé, calquées sur les Livres du Code civil, et en matières spécialisées. Un même texte peut relever de plusieurs matières.",
+    ],
+    [
+      "The taxonomy sorts texts into private-law subjects, mapped onto the Books of the Civil Code, and specialized subjects. A single text may belong to several subjects.",
+    ],
   )}
   ${groupe("prive-ccq", "Droit privé (C.c.Q.)", "Private law (C.C.Q.)")}
   ${groupe("specialise", "Matières spécialisées", "Specialized subjects")}
@@ -357,19 +411,27 @@ function matieres(
 }
 
 function outils(): string {
-  const bloc = (g: string) => Object.entries(catalogue.tools)
-    .filter(([, t]) => t.groupe === g)
-    .map(([nom, t]) => `<article>
+  const bloc = (g: string) =>
+    Object.entries(catalogue.tools)
+      .filter(([, t]) => t.groupe === g)
+      .map(
+        ([nom, t]) => `<article>
       <h4><code>${esc(nom)}</code></h4>
       <p class="titre">${bi(t.title_fr, t.title_en)}</p>
       ${biP(t.page_fr, t.page_en)}
-    </article>`).join("\n");
+    </article>`,
+      )
+      .join("\n");
 
   return `<section id="outils">
   ${h2("outils")}
   ${biP(
-    ["Le patron d'usage est en deux temps : s'orienter, puis extraire. Les premiers outils servent à trouver où regarder ; les suivants rendent le texte officiel. Tous sont en lecture seule — aucun n'écrit quoi que ce soit."],
-    ["The usage pattern has two beats: orient yourself, then extract. The first tools find where to look; the rest return the official text. All are read-only — none writes anything."],
+    [
+      "Le patron d'usage est en deux temps : s'orienter, puis extraire. Les premiers outils servent à trouver où regarder ; les suivants rendent le texte officiel. Tous sont en lecture seule — aucun n'écrit quoi que ce soit.",
+    ],
+    [
+      "The usage pattern has two beats: orient yourself, then extract. The first tools find where to look; the rest return the official text. All are read-only — none writes anything.",
+    ],
   )}
   <h3>${bi("S'orienter", "Orient")}</h3>
   ${bloc("orientation")}
@@ -388,11 +450,15 @@ function reperage(): string {
     <li>${bi("voisin de graphe", "graph neighbour")} <b>+${WEIGHTS.S4_GRAPH_NEIGHBOUR}</b></li>
     <li>${bi("candidats max par matière", "max candidates per subject")} <b>${MAX_PER_SUBJECT}</b></li>
     <li>${bi("suffixe max apparié", "max matched suffix")} <b>${MAX_SUFFIX}</b></li>
-    <li>${bi("facteur de spécificité", "specificity factor")} <b>×${SPECIFIC_TOKEN_FACTOR}</b> ${
-      bi(`jusqu'à ${SPECIFIC_TOKEN_MAX_REACH} textes`, `up to ${SPECIFIC_TOKEN_MAX_REACH} texts`)}</li>
+    <li>${bi("facteur de spécificité", "specificity factor")} <b>×${SPECIFIC_TOKEN_FACTOR}</b> ${bi(
+      `jusqu'à ${SPECIFIC_TOKEN_MAX_REACH} textes`,
+      `up to ${SPECIFIC_TOKEN_MAX_REACH} texts`,
+    )}</li>
     <li>${bi("plancher sémantique", "semantic floor")} <b>${SEMANTIC_MIN_SCORE}</b></li>
-    <li>${bi("fusion RRF", "RRF fusion")} <b>k&nbsp;=&nbsp;${RRF_K}</b>, ${
-      bi(`profondeur ${VECTOR_TOP_K}`, `depth ${VECTOR_TOP_K}`)}</li>
+    <li>${bi("fusion RRF", "RRF fusion")} <b>k&nbsp;=&nbsp;${RRF_K}</b>, ${bi(
+      `profondeur ${VECTOR_TOP_K}`,
+      `depth ${VECTOR_TOP_K}`,
+    )}</li>
   </ul>`;
 
   const sec = (s: { titre_fr: string; titre_en: string; corps_fr: string[]; corps_en: string[] }) =>
@@ -434,10 +500,14 @@ function acces(): string {
   return `<section id="acces">
   ${h2("acces")}
   ${biP(
-    [`Ce serveur est une instance privée. L'endpoint MCP n'est ouvert qu'aux clients autorisés : chacun reçoit son propre jeton, révocable séparément, et une requête qui n'en porte pas de valide n'obtient rien — pas même la confirmation que l'endpoint existe. Pour en demander l'accès, écrire à ${CONTACT}.`,
-      "Le code source est public et le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés."],
-    [`This server is a private instance. The MCP endpoint is open to authorized clients only: each one gets its own token, revocable on its own, and a request that does not carry a valid one gets nothing — not even confirmation that the endpoint exists. To request access, write to ${CONTACT}.`,
-      "The source code is public and the corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled."],
+    [
+      `Ce serveur est une instance privée. L'endpoint MCP n'est ouvert qu'aux clients autorisés : chacun reçoit son propre jeton, révocable séparément, et une requête qui n'en porte pas de valide n'obtient rien — pas même la confirmation que l'endpoint existe. Pour en demander l'accès, écrire à ${CONTACT}.`,
+      "Le code source est public et le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés.",
+    ],
+    [
+      `This server is a private instance. The MCP endpoint is open to authorized clients only: each one gets its own token, revocable on its own, and a request that does not carry a valid one gets nothing — not even confirmation that the endpoint exists. To request access, write to ${CONTACT}.`,
+      "The source code is public and the corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
+    ],
   )}
   <p><a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
 </section>`;
@@ -450,8 +520,12 @@ function pied(consol: string): string {
     // « Aucun conseil juridique » vit AUSSI ici, et pas seulement dans l'avertissement :
     // celui-ci est désormais une sous-section des aides au repérage, alors que la clause
     // porte sur tout le service. Le pied, lui, est sous chaque écran de la page.
-    [`Données : EPUB officiels de LégisQuébec (Éditeur officiel du Québec) et XML du ministère de la Justice du Canada, contenant de l'information publiée sous la Licence du gouvernement ouvert – Canada ; consolidation la plus récente chargée : ${consol}. La version officielle fait foi : celle de l'Éditeur officiel du Québec, et pour le fédéral celle publiée par le ministre (art. 31 de la Loi sur la révision et la codification des textes législatifs). Ce site n'est pas une version officielle. Aucun conseil juridique.`],
-    [`Data: official LégisQuébec EPUBs (Québec Official Publisher) and Department of Justice Canada XML, containing information licensed under the Open Government Licence – Canada; most recent consolidation loaded: ${consol}. The official version prevails: that of the Québec Official Publisher, and for federal texts the one published by the Minister (s. 31, Legislation Revision and Consolidation Act). This is not an official version. No legal advice.`],
+    [
+      `Données : EPUB officiels de LégisQuébec (Éditeur officiel du Québec) et XML du ministère de la Justice du Canada, contenant de l'information publiée sous la Licence du gouvernement ouvert – Canada ; consolidation la plus récente chargée : ${consol}. La version officielle fait foi : celle de l'Éditeur officiel du Québec, et pour le fédéral celle publiée par le ministre (art. 31 de la Loi sur la révision et la codification des textes législatifs). Ce site n'est pas une version officielle. Aucun conseil juridique.`,
+    ],
+    [
+      `Data: official LégisQuébec EPUBs (Québec Official Publisher) and Department of Justice Canada XML, containing information licensed under the Open Government Licence – Canada; most recent consolidation loaded: ${consol}. The official version prevails: that of the Québec Official Publisher, and for federal texts the one published by the Minister (s. 31, Legislation Revision and Consolidation Act). This is not an official version. No legal advice.`,
+    ],
   )}
   <p><a href="${LEGISQUEBEC}" rel="noopener">legisquebec.gouv.qc.ca</a> · <a href="${DEPOT}" rel="noopener">GitHub</a></p>
 </footer>`;
@@ -465,9 +539,11 @@ function pied(consol: string): string {
 // plus une seule couleur : c'est ce qui permet trois états (auto / clair / sombre) sans
 // tripler la feuille. Toute couleur ajoutée plus tard doit passer par ici, sinon elle ne
 // bascule pas — et ne bascule pas EN SILENCE, la page restant lisible dans un seul thème.
-const CLAIR = "--f:#111;--m:#666;--b:#e2e0da;--a:#7a2e1d;--bg:#fdfcfa;--card:#fff;" +
+const CLAIR =
+  "--f:#111;--m:#666;--b:#e2e0da;--a:#7a2e1d;--bg:#fdfcfa;--card:#fff;" +
   "--th:#f7f5f1;--code:#f2efe9;--hover:#faf8f4;--avert-bg:#fbf7f1;--avert-b:#e6d9c6";
-const SOMBRE = "--f:#e8e6e1;--m:#a09a90;--b:#3a372f;--a:#e08b6a;--bg:#16150f;--card:#1e1c16;" +
+const SOMBRE =
+  "--f:#e8e6e1;--m:#a09a90;--b:#3a372f;--a:#e08b6a;--bg:#16150f;--card:#1e1c16;" +
   "--th:#252219;--code:#252219;--hover:#242118;--avert-bg:#211d15;--avert-b:#3d3527";
 
 // Point de rupture de la barre latérale : 13rem + 2.5rem de gouttière + 60rem de colonne

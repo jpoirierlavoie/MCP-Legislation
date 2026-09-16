@@ -2,14 +2,21 @@
 // Le schéma est décrit dans schema.sql / PLAN.md §2 et schema-decouverte.sql.
 
 import {
-  SEG_SPLIT, depthOf, isFederalPath, segmentsOf, subtreeBinds, subtreeClause, truncatePath,
+  depthOf,
+  isFederalPath,
+  segmentsOf,
+  subtreeBinds,
+  subtreeClause,
+  truncatePath,
 } from "./paths";
+import type { DivisionLite, LawLite, RelationLite, SubjectLite, SubjectMapLite } from "./relevance";
 import {
-  DIVISION_MATCH_MAX, DIVISION_MATCH_MIN_SCORE, RRF_K, SEMANTIC_MIN_SCORE, VECTOR_TOP_K,
+  DIVISION_MATCH_MAX,
+  DIVISION_MATCH_MIN_SCORE,
   normalize,
-} from "./relevance";
-import type {
-  DivisionLite, LawLite, RelationLite, SubjectLite, SubjectMapLite,
+  RRF_K,
+  SEMANTIC_MIN_SCORE,
+  VECTOR_TOP_K,
 } from "./relevance";
 
 export interface LawRow {
@@ -44,9 +51,9 @@ export interface LawRow {
   consol_date_en: string | null;
   // colonnes de la couche découverte (schema-decouverte.sql)
   fonction: string | null;
-  forum: string | null;          // multi-valeurs jointes par ' ; '
-  scope_fr: string | null;       // repli d'affichage : name_fr
-  parent_law_id: string | null;  // loi habilitante d'un règlement
+  forum: string | null; // multi-valeurs jointes par ' ; '
+  scope_fr: string | null; // repli d'affichage : name_fr
+  parent_law_id: string | null; // loi habilitante d'un règlement
   name_norm: string | null;
 }
 
@@ -222,7 +229,9 @@ export function paginate(limit?: number, offset?: number, def = 50, max = 200): 
  * que quatre autres portes servaient du fédéral.
  */
 export async function getLaw(
-  db: D1Database, lawId: string, env: { FEDERAL_CORPUS?: string } = {},
+  db: D1Database,
+  lawId: string,
+  env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<LawRow | null> {
   const masque = federalOuvert(env) ? "" : " AND jurisdiction = 'qc'";
   return db.prepare(`SELECT * FROM laws WHERE id = ?${masque}`).bind(lawId).first<LawRow>();
@@ -233,9 +242,7 @@ export async function getLaw(
  * Vide quand l'interrupteur est ouvert.
  */
 export function masqueLawId(env: { FEDERAL_CORPUS?: string }, col: string): string {
-  return federalOuvert(env)
-    ? ""
-    : `AND ${col} IN (SELECT id FROM laws WHERE jurisdiction = 'qc')`;
+  return federalOuvert(env) ? "" : `AND ${col} IN (SELECT id FROM laws WHERE jurisdiction = 'qc')`;
 }
 
 /**
@@ -330,7 +337,9 @@ export function clauseJuridiction(env: { FEDERAL_CORPUS?: string }, alias = "l")
 }
 
 export async function listLaws(
-  db: D1Database, filters: LawFilters = {}, lang: Lang = "fr",
+  db: D1Database,
+  filters: LawFilters = {},
+  lang: Lang = "fr",
   env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<LawSummary[]> {
   const where: string[] = [];
@@ -351,34 +360,48 @@ export async function listLaws(
     binds.push(`%${filters.forum}%`);
   }
   if (filters.subject) {
-    where.push("EXISTS (SELECT 1 FROM subject_map sm WHERE sm.law_id = l.id AND sm.subject_id = ?)");
+    where.push(
+      "EXISTS (SELECT 1 FROM subject_map sm WHERE sm.law_id = l.id AND sm.subject_id = ?)",
+    );
     binds.push(filters.subject);
   }
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const laws = (await db.prepare(`SELECT l.* FROM laws l ${clause} ORDER BY l.id`)
-    .bind(...binds).all<LawRow>()).results;
+  const laws = (
+    await db
+      .prepare(`SELECT l.* FROM laws l ${clause} ORDER BY l.id`)
+      .bind(...binds)
+      .all<LawRow>()
+  ).results;
 
-  const counts = (await db
-    .prepare("SELECT law_id, lang, COUNT(*) AS n FROM articles GROUP BY law_id, lang")
-    .all<{ law_id: string; lang: string; n: number }>()).results;
-  const maps = (await db
-    .prepare(
-      `SELECT sm.law_id, sm.division_path, s.label_fr, s.label_en, d.heading
+  const counts = (
+    await db
+      .prepare("SELECT law_id, lang, COUNT(*) AS n FROM articles GROUP BY law_id, lang")
+      .all<{ law_id: string; lang: string; n: number }>()
+  ).results;
+  const maps = (
+    await db
+      .prepare(
+        `SELECT sm.law_id, sm.division_path, s.label_fr, s.label_en, d.heading
        FROM subject_map sm
        JOIN subjects s ON s.id = sm.subject_id
        LEFT JOIN divisions d ON d.law_id = sm.law_id AND d.path = sm.division_path AND d.lang = 'fr'
        ORDER BY sm.law_id, sm.division_path`,
-    )
-    .all<{
-      law_id: string; division_path: string;
-      label_fr: string; label_en: string | null; heading: string | null;
-    }>()).results;
+      )
+      .all<{
+        law_id: string;
+        division_path: string;
+        label_fr: string;
+        label_en: string | null;
+        heading: string | null;
+      }>()
+  ).results;
 
   // subject_map ne contient que des chemins FR : on les traduit si une autre langue est demandée
   const traduits = new Map<string, Map<string, TranslatedPath>>();
   if (lang !== "fr") {
     for (const law of laws) {
-      const paths = maps.filter((m) => m.law_id === law.id && m.division_path)
+      const paths = maps
+        .filter((m) => m.law_id === law.id && m.division_path)
         .map((m) => m.division_path);
       if (paths.length) traduits.set(law.id, await translatePaths(db, law.id, lang, paths));
     }
@@ -416,7 +439,6 @@ export async function listLaws(
 
 // --- pont entre les chemins de divisions FR et EN -----------------------------
 
-
 export interface TranslatedPath {
   path: string;
   heading: string | null;
@@ -434,21 +456,26 @@ export interface TranslatedPath {
  * profondeur (un Livre est à la profondeur 1, un Titre à 2, etc.).
  */
 export async function translatePaths(
-  db: D1Database, lawId: string, lang: Lang, frPaths: string[],
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  frPaths: string[],
 ): Promise<Map<string, TranslatedPath>> {
   const out = new Map<string, TranslatedPath>();
   if (lang === "fr" || frPaths.length === 0) return out;
 
-  const pairs = (await db
-    .prepare(
-      `SELECT afr.division_path AS fr_path, MIN(aen.division_path) AS other_path
+  const pairs = (
+    await db
+      .prepare(
+        `SELECT afr.division_path AS fr_path, MIN(aen.division_path) AS other_path
        FROM articles afr
        JOIN articles aen ON aen.law_id = afr.law_id AND aen.number = afr.number AND aen.lang = ?
        WHERE afr.law_id = ? AND afr.lang = 'fr'
        GROUP BY afr.division_path`,
-    )
-    .bind(lang, lawId)
-    .all<{ fr_path: string; other_path: string }>()).results;
+      )
+      .bind(lang, lawId)
+      .all<{ fr_path: string; other_path: string }>()
+  ).results;
 
   const wanted = new Map<string, string>(); // chemin traduit -> chemin FR d'origine
   for (const p of frPaths) {
@@ -460,13 +487,15 @@ export async function translatePaths(
   if (wanted.size === 0) return out;
 
   const keys = [...wanted.keys()];
-  const rows = (await db
-    .prepare(
-      `SELECT path, heading FROM divisions
+  const rows = (
+    await db
+      .prepare(
+        `SELECT path, heading FROM divisions
        WHERE law_id = ? AND lang = ? AND path IN (${keys.map(() => "?").join(",")})`,
-    )
-    .bind(lawId, lang, ...keys)
-    .all<{ path: string; heading: string | null }>()).results;
+      )
+      .bind(lawId, lang, ...keys)
+      .all<{ path: string; heading: string | null }>()
+  ).results;
   for (const r of rows) {
     const fr = wanted.get(r.path);
     if (fr) out.set(fr, { path: r.path, heading: r.heading });
@@ -486,7 +515,10 @@ export async function translatePaths(
  * d'intitulé `[fr]` quand la cible n'en a pas.
  */
 export async function translateDivisionPath(
-  db: D1Database, lawId: string, path: string, toLang: Lang,
+  db: D1Database,
+  lawId: string,
+  path: string,
+  toLang: Lang,
 ): Promise<{ path: string; heading: string | null } | null> {
   // Un chemin fédéral est POSITIONNEL, donc identique dans les deux langues (mesuré sur
   // les 19 textes : docs/phase0-structure-lims.md §3.1). Il n'y a RIEN à traduire, et le
@@ -494,10 +526,12 @@ export async function translateDivisionPath(
   // fausse, pas vide. Le no-op est donc EXPLICITE, au lieu d'être espéré d'une
   // segmentation juste.
   if (isFederalPath(path)) {
-    return (await db
-      .prepare("SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND path = ?")
-      .bind(lawId, toLang, path)
-      .first<{ path: string; heading: string | null }>()) ?? null;
+    return (
+      (await db
+        .prepare("SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND path = ?")
+        .bind(lawId, toLang, path)
+        .first<{ path: string; heading: string | null }>()) ?? null
+    );
   }
   const fromLang: Lang = toLang === "fr" ? "en" : "fr";
   const bridge = await db
@@ -521,7 +555,10 @@ export async function translateDivisionPath(
 
 /** Intitulé de la même division dans l'autre langue (repli `[fr]` du plan v2, 1.5). */
 export async function headingInOtherLang(
-  db: D1Database, lawId: string, path: string, lang: Lang,
+  db: D1Database,
+  lawId: string,
+  path: string,
+  lang: Lang,
 ): Promise<string | null> {
   const other: Lang = lang === "fr" ? "en" : "fr";
   const t = await translateDivisionPath(db, lawId, path, other);
@@ -546,17 +583,21 @@ export interface OutlineNode {
  * pas concernées.
  */
 export async function lawOutlines(
-  db: D1Database, lang: Lang, lawIds: string[],
+  db: D1Database,
+  lang: Lang,
+  lawIds: string[],
 ): Promise<Map<string, OutlineNode[]>> {
   if (!lawIds.length) return new Map();
-  const livres = (await db
-    .prepare(
-      `SELECT id, law_id, path, kind, number, heading FROM divisions
+  const livres = (
+    await db
+      .prepare(
+        `SELECT id, law_id, path, kind, number, heading FROM divisions
        WHERE lang = ? AND kind = 'livre' AND law_id IN (${lawIds.map(() => "?").join(",")})
        ORDER BY law_id, sort_order`,
-    )
-    .bind(lang, ...lawIds)
-    .all<DivisionRow>()).results;
+      )
+      .bind(lang, ...lawIds)
+      .all<DivisionRow>()
+  ).results;
   const out = new Map<string, OutlineNode[]>();
   if (!livres.length) return out;
 
@@ -564,26 +605,33 @@ export async function lawOutlines(
   const ids = livres.map((l) => l.id);
   for (let i = 0; i < ids.length; i += 90) {
     const chunk = ids.slice(i, i + 90);
-    const rows = (await db
-      .prepare(
-        `SELECT parent_id, path, kind, number, heading FROM divisions
+    const rows = (
+      await db
+        .prepare(
+          `SELECT parent_id, path, kind, number, heading FROM divisions
          WHERE parent_id IN (${chunk.map(() => "?").join(",")}) ORDER BY sort_order`,
-      )
-      .bind(...chunk)
-      .all<DivisionRow>()).results;
+        )
+        .bind(...chunk)
+        .all<DivisionRow>()
+    ).results;
     for (const r of rows) {
       const arr = byParent.get(r.parent_id!);
       const node = { kind: r.kind, number: r.number, heading: r.heading, path: r.path };
-      if (arr) arr.push(node); else byParent.set(r.parent_id!, [node]);
+      if (arr) arr.push(node);
+      else byParent.set(r.parent_id!, [node]);
     }
   }
   for (const l of livres) {
     const node: OutlineNode = {
-      kind: l.kind, number: l.number, heading: l.heading, path: l.path,
+      kind: l.kind,
+      number: l.number,
+      heading: l.heading,
+      path: l.path,
       children: byParent.get(l.id) ?? [],
     };
     const arr = out.get(l.law_id);
-    if (arr) arr.push(node); else out.set(l.law_id, [node]);
+    if (arr) arr.push(node);
+    else out.set(l.law_id, [node]);
   }
   return out;
 }
@@ -602,7 +650,8 @@ export interface SubjectSummary {
 }
 
 export async function listSubjects(
-  db: D1Database, env: { FEDERAL_CORPUS?: string } = {},
+  db: D1Database,
+  env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<SubjectSummary[]> {
   // Le masque va dans le ON du LEFT JOIN, PAS dans le WHERE : au WHERE, une matière mappée
   // uniquement à des textes masqués DISPARAÎTRAIT de la taxonomie, alors qu'au ON elle reste
@@ -610,17 +659,19 @@ export async function listSubjects(
   // absent. `laws_count` est un fait VIVANT (R10) : non masqué, il annoncerait « 8 lois » pour
   // une matière dont `list_laws` n'en rend que 6, sans qu'aucun test ne le voie.
   const m = masqueLawId(env, "sm.law_id");
-  return (await db
-    .prepare(
-      `SELECT s.id, s.label_fr, s.label_en, s.kind, s.description_fr, s.description_en,
+  return (
+    await db
+      .prepare(
+        `SELECT s.id, s.label_fr, s.label_en, s.kind, s.description_fr, s.description_en,
               COUNT(DISTINCT sm.law_id) AS laws_count,
               COALESCE(SUM(CASE WHEN sm.division_path <> '' THEN 1 ELSE 0 END), 0) AS divisions_count
        FROM subjects s
        LEFT JOIN subject_map sm ON sm.subject_id = s.id ${m}
        GROUP BY s.id, s.label_fr, s.label_en, s.kind, s.description_fr, s.description_en
        ORDER BY s.kind, s.id`,
-    )
-    .all<SubjectSummary>()).results;
+      )
+      .all<SubjectSummary>()
+  ).results;
 }
 
 export interface RelationRow {
@@ -643,8 +694,12 @@ export interface RelationEdge extends RelationRow {
 }
 
 export async function relatedLaws(
-  db: D1Database, lawId: string, relType: string | undefined, direction: "out" | "in" | "both",
-  lang: Lang = "fr", env: { FEDERAL_CORPUS?: string } = {},
+  db: D1Database,
+  lawId: string,
+  relType: string | undefined,
+  direction: "out" | "in" | "both",
+  lang: Lang = "fr",
+  env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<RelationEdge[]> {
   const typeClause = relType ? "AND rel_type = ?" : "";
   // Le bout SUJET est déjà gardé : `legislation_related_laws` passe par `getLaw(db, law, env)` et
@@ -654,18 +709,40 @@ export async function relatedLaws(
   // est pire que ne pas la servir.
   const edges: RelationEdge[] = [];
   if (direction === "out" || direction === "both") {
-    const rows = (await db
-      .prepare(`SELECT * FROM law_relations WHERE from_law_id = ? ${typeClause} ${masqueAutreBout(env, "to_law_id")}`)
-      .bind(...(relType ? [lawId, relType] : [lawId]))
-      .all<RelationRow>()).results;
-    edges.push(...rows.map((r) => ({ ...r, direction: "out" as const, other_id: r.to_law_id, other_name: null })));
+    const rows = (
+      await db
+        .prepare(
+          `SELECT * FROM law_relations WHERE from_law_id = ? ${typeClause} ${masqueAutreBout(env, "to_law_id")}`,
+        )
+        .bind(...(relType ? [lawId, relType] : [lawId]))
+        .all<RelationRow>()
+    ).results;
+    edges.push(
+      ...rows.map((r) => ({
+        ...r,
+        direction: "out" as const,
+        other_id: r.to_law_id,
+        other_name: null,
+      })),
+    );
   }
   if (direction === "in" || direction === "both") {
-    const rows = (await db
-      .prepare(`SELECT * FROM law_relations WHERE to_law_id = ? ${typeClause} ${masqueAutreBout(env, "from_law_id")}`)
-      .bind(...(relType ? [lawId, relType] : [lawId]))
-      .all<RelationRow>()).results;
-    edges.push(...rows.map((r) => ({ ...r, direction: "in" as const, other_id: r.from_law_id, other_name: null })));
+    const rows = (
+      await db
+        .prepare(
+          `SELECT * FROM law_relations WHERE to_law_id = ? ${typeClause} ${masqueAutreBout(env, "from_law_id")}`,
+        )
+        .bind(...(relType ? [lawId, relType] : [lawId]))
+        .all<RelationRow>()
+    ).results;
+    edges.push(
+      ...rows.map((r) => ({
+        ...r,
+        direction: "in" as const,
+        other_id: r.from_law_id,
+        other_name: null,
+      })),
+    );
   }
   // Noms des extrémités présentes au corpus, DANS LA LANGUE DEMANDÉE. `name_en` est
   // NOT NULL (schema.sql) ; le repli sur le français ne sert donc qu'en cas de ligne
@@ -675,21 +752,27 @@ export async function relatedLaws(
   // verrou coûte un nom de loi servi par un outil qui la déclare invisible.
   const ids = [...new Set(edges.filter((e) => e.in_corpus).map((e) => e.other_id))];
   if (ids.length) {
-    const rows = (await db
-      .prepare(
-        `SELECT id, name_fr, name_en FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) ` +
-        `${masqueLawId(env, "id")}`,
-      )
-      .bind(...ids)
-      .all<{ id: string; name_fr: string; name_en: string | null }>()).results;
-    const byId = new Map(rows.map((r) => [r.id, (lang === "en" ? r.name_en : r.name_fr) || r.name_fr]));
+    const rows = (
+      await db
+        .prepare(
+          `SELECT id, name_fr, name_en FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) ` +
+            `${masqueLawId(env, "id")}`,
+        )
+        .bind(...ids)
+        .all<{ id: string; name_fr: string; name_en: string | null }>()
+    ).results;
+    const byId = new Map(
+      rows.map((r) => [r.id, (lang === "en" ? r.name_en : r.name_fr) || r.name_fr]),
+    );
     for (const e of edges) e.other_name = byId.get(e.other_id) ?? null;
   }
   // les plus significatives d'abord : curées, puis poids décroissant
-  return edges.sort((a, b) =>
-    (a.source === "cure" ? 0 : 1) - (b.source === "cure" ? 0 : 1) ||
-    b.weight - a.weight ||
-    a.other_id.localeCompare(b.other_id));
+  return edges.sort(
+    (a, b) =>
+      (a.source === "cure" ? 0 : 1) - (b.source === "cure" ? 0 : 1) ||
+      b.weight - a.weight ||
+      a.other_id.localeCompare(b.other_id),
+  );
 }
 
 export interface ArticleJoined extends ArticleRow {
@@ -699,7 +782,10 @@ export interface ArticleJoined extends ArticleRow {
 }
 
 export async function getArticle(
-  db: D1Database, lawId: string, lang: Lang, article: string,
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  article: string,
 ): Promise<ArticleJoined | null> {
   return db
     .prepare(
@@ -711,7 +797,9 @@ export async function getArticle(
       // bruyamment — et la jointure `laws` doublonnait un `getLaw` que les deux appelants
       // font déjà (src/tools.ts, get_article et resolve_reference). Ils passent désormais
       // la loi à `citationOf`, ce qui rend aussi la forme anglaise et l'unité accessibles.
-      `SELECT ${ARTICLE_COLS.split(", ").map((c) => `a.${c}`).join(", ")},
+      `SELECT ${ARTICLE_COLS.split(", ")
+        .map((c) => `a.${c}`)
+        .join(", ")},
               d.kind AS d_kind, d.number AS d_number, d.heading AS d_heading
        FROM articles a
        LEFT JOIN divisions d ON a.division_id = d.id
@@ -723,15 +811,21 @@ export async function getArticle(
 
 /** Numéros d'articles voisins (par clé de tri) — pour les erreurs actionnables. */
 export async function nearestArticles(
-  db: D1Database, lawId: string, lang: Lang, key: number, limit = 5,
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  key: number,
+  limit = 5,
 ): Promise<string[]> {
-  const rows = (await db
-    .prepare(
-      `SELECT number FROM articles WHERE law_id = ? AND lang = ?
+  const rows = (
+    await db
+      .prepare(
+        `SELECT number FROM articles WHERE law_id = ? AND lang = ?
        ORDER BY ABS(sort_key - ?) LIMIT ?`,
-    )
-    .bind(lawId, lang, key, limit)
-    .all<{ number: string }>()).results;
+      )
+      .bind(lawId, lang, key, limit)
+      .all<{ number: string }>()
+  ).results;
   return rows.map((r) => r.number);
 }
 
@@ -767,7 +861,10 @@ export interface BoundRef {
  * plus un).
  */
 export async function boundRef(
-  db: D1Database, lawId: string, lang: Lang, number: string,
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  number: string,
 ): Promise<BoundRef> {
   const row = await db
     .prepare("SELECT sort_key, id FROM articles WHERE law_id=? AND lang=? AND number=?")
@@ -810,82 +907,115 @@ const ARTICLE_COLS = "id, law_id, lang, number, division_path, text, history, re
  *   inexistante retombe par calcul sur une clé partagée ; c'est pourquoi il est ÉTIQUETÉ.
  */
 export async function articlesByRange(
-  db: D1Database, lawId: string, lang: Lang, from: BoundRef, to: BoundRef, page: Page,
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  from: BoundRef,
+  to: BoundRef,
+  page: Page,
 ): Promise<{ rows: ArticleRow[]; total: number; resolution: "document" | "cle" }> {
   if (from.id != null && to.id != null) {
     const [lo, hi] = from.id <= to.id ? [from.id, to.id] : [to.id, from.id];
     // Les pseudo-articles dont l'`id` tombe DANS l'intervalle sont exclus : leur position
     // d'émission n'est pas leur position dans le document (cf. `boundRef`). Sans ce filtre,
     // une plage 3..4 de b-1-r.3.1 EN ramasserait `préliminaire`.
-    const filtre = `law_id=? AND lang=? AND id BETWEEN ? AND ?`
-      + ` AND sort_key > 0 AND sort_key < ${DISPOSITION_SORT_BASE}`;
+    const filtre =
+      `law_id=? AND lang=? AND id BETWEEN ? AND ?` +
+      ` AND sort_key > 0 AND sort_key < ${DISPOSITION_SORT_BASE}`;
     const total = (await db
       .prepare(`SELECT COUNT(*) AS n FROM articles WHERE ${filtre}`)
       .bind(lawId, lang, lo, hi)
       .first<{ n: number }>())!.n;
-    const rows = (await db
-      .prepare(`SELECT ${ARTICLE_COLS} FROM articles WHERE ${filtre} ORDER BY id LIMIT ? OFFSET ?`)
-      .bind(lawId, lang, lo, hi, page.limit, page.offset)
-      .all<ArticleRow>()).results;
+    const rows = (
+      await db
+        .prepare(
+          `SELECT ${ARTICLE_COLS} FROM articles WHERE ${filtre} ORDER BY id LIMIT ? OFFSET ?`,
+        )
+        .bind(lawId, lang, lo, hi, page.limit, page.offset)
+        .all<ArticleRow>()
+    ).results;
     return { rows, total, resolution: "document" };
   }
   const [lo, hi] = from.key <= to.key ? [from.key, to.key] : [to.key, from.key];
   const total = (await db
-    .prepare("SELECT COUNT(*) AS n FROM articles WHERE law_id=? AND lang=? AND sort_key BETWEEN ? AND ?")
+    .prepare(
+      "SELECT COUNT(*) AS n FROM articles WHERE law_id=? AND lang=? AND sort_key BETWEEN ? AND ?",
+    )
     .bind(lawId, lang, lo, hi)
     .first<{ n: number }>())!.n;
-  const rows = (await db
-    .prepare(
-      // `sort_key` n'est PAS projetée : SQLite trie sur une colonne non projetée sans
-      // difficulté (même patron que articlesInDivision, plus bas). Départage par `id` :
-      // sans lui, deux articles à clé identique s'ordonnent au hasard et la pagination
-      // peut en sauter ou en répéter un.
-      `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND sort_key BETWEEN ? AND ?
+  const rows = (
+    await db
+      .prepare(
+        // `sort_key` n'est PAS projetée : SQLite trie sur une colonne non projetée sans
+        // difficulté (même patron que articlesInDivision, plus bas). Départage par `id` :
+        // sans lui, deux articles à clé identique s'ordonnent au hasard et la pagination
+        // peut en sauter ou en répéter un.
+        `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND sort_key BETWEEN ? AND ?
        ORDER BY sort_key, id LIMIT ? OFFSET ?`,
-    )
-    .bind(lawId, lang, lo, hi, page.limit, page.offset)
-    .all<ArticleRow>()).results;
+      )
+      .bind(lawId, lang, lo, hi, page.limit, page.offset)
+      .all<ArticleRow>()
+  ).results;
   return { rows, total, resolution: "cle" };
 }
 
 export async function articlesByNumbers(
-  db: D1Database, lawId: string, lang: Lang, numbers: string[],
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  numbers: string[],
 ): Promise<ArticleRow[]> {
   if (numbers.length === 0) return [];
   const placeholders = numbers.map(() => "?").join(",");
-  const rows = (await db
-    .prepare(
-      // Départage par `id` : deux numéros demandés peuvent partager une clé de tri
-      // (cf. `boundRef`), et sans départage leur ordre serait arbitraire.
-      `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND number IN (${placeholders})
+  const rows = (
+    await db
+      .prepare(
+        // Départage par `id` : deux numéros demandés peuvent partager une clé de tri
+        // (cf. `boundRef`), et sans départage leur ordre serait arbitraire.
+        `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND number IN (${placeholders})
        ORDER BY sort_key, id`,
-    )
-    .bind(lawId, lang, ...numbers)
-    .all<ArticleRow>()).results;
+      )
+      .bind(lawId, lang, ...numbers)
+      .all<ArticleRow>()
+  ).results;
   return rows;
 }
 
 export async function getDivision(
-  db: D1Database, lawId: string, lang: Lang, by: { path?: string; id?: number },
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  by: { path?: string; id?: number },
 ): Promise<DivisionRow | null> {
   if (by.id != null) {
-    return db.prepare("SELECT * FROM divisions WHERE id=? AND law_id=? AND lang=?")
-      .bind(by.id, lawId, lang).first<DivisionRow>();
+    return db
+      .prepare("SELECT * FROM divisions WHERE id=? AND law_id=? AND lang=?")
+      .bind(by.id, lawId, lang)
+      .first<DivisionRow>();
   }
-  return db.prepare("SELECT * FROM divisions WHERE law_id=? AND lang=? AND path=?")
-    .bind(lawId, lang, by.path ?? "").first<DivisionRow>();
+  return db
+    .prepare("SELECT * FROM divisions WHERE law_id=? AND lang=? AND path=?")
+    .bind(lawId, lang, by.path ?? "")
+    .first<DivisionRow>();
 }
 
 export async function childDivisions(db: D1Database, parentId: number): Promise<DivisionRow[]> {
-  return (await db
-    .prepare("SELECT * FROM divisions WHERE parent_id=? ORDER BY sort_order")
-    .bind(parentId)
-    .all<DivisionRow>()).results;
+  return (
+    await db
+      .prepare("SELECT * FROM divisions WHERE parent_id=? ORDER BY sort_order")
+      .bind(parentId)
+      .all<DivisionRow>()
+  ).results;
 }
 
 /** Articles d'une division ET de tout son sous-arbre (division_path = path ou descendant). */
 export async function articlesInDivision(
-  db: D1Database, lawId: string, lang: Lang, path: string, page: Page, includeText: boolean,
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  path: string,
+  page: Page,
+  includeText: boolean,
 ): Promise<{ rows: Partial<ArticleRow>[]; total: number }> {
   const sub = subtreeClause("division_path");
   const subBinds = subtreeBinds(path);
@@ -896,15 +1026,17 @@ export async function articlesInDivision(
   const cols = includeText
     ? "number, division_path, text, history, repealed"
     : "number, division_path, repealed";
-  const rows = (await db
-    .prepare(
-      // Départage par `id` : la pagination doit être stable même quand deux articles
-      // partagent une clé de tri (cf. `boundRef`).
-      `SELECT ${cols} FROM articles WHERE law_id=? AND lang=? AND ${sub}
+  const rows = (
+    await db
+      .prepare(
+        // Départage par `id` : la pagination doit être stable même quand deux articles
+        // partagent une clé de tri (cf. `boundRef`).
+        `SELECT ${cols} FROM articles WHERE law_id=? AND lang=? AND ${sub}
        ORDER BY sort_key, id LIMIT ? OFFSET ?`,
-    )
-    .bind(lawId, lang, ...subBinds, page.limit, page.offset)
-    .all<Partial<ArticleRow>>()).results;
+      )
+      .bind(lawId, lang, ...subBinds, page.limit, page.offset)
+      .all<Partial<ArticleRow>>()
+  ).results;
   return { rows, total };
 }
 
@@ -921,7 +1053,11 @@ export interface StructureNode {
 }
 
 export async function getStructure(
-  db: D1Database, lawId: string, lang: Lang, rootPath?: string, depth?: number,
+  db: D1Database,
+  lawId: string,
+  lang: Lang,
+  rootPath?: string,
+  depth?: number,
 ): Promise<StructureNode[]> {
   // Les sept colonnes que l'arbre consomme, sur les douze de la table. `getStructure('ccq')`
   // sans root_path lit 802 divisions : les cinq non lues (law_id, lang, history, sort_order
@@ -932,23 +1068,32 @@ export async function getStructure(
   const COLS = "id, law_id, lang, path, kind, number, heading, repealed, parent_id";
   let rows: DivisionRow[];
   if (rootPath) {
-    rows = (await db
-      .prepare(
-        `SELECT ${COLS} FROM divisions WHERE law_id=? AND lang=? AND ${subtreeClause("path")} ORDER BY sort_order`,
-      )
-      .bind(lawId, lang, ...subtreeBinds(rootPath))
-      .all<DivisionRow>()).results;
+    rows = (
+      await db
+        .prepare(
+          `SELECT ${COLS} FROM divisions WHERE law_id=? AND lang=? AND ${subtreeClause("path")} ORDER BY sort_order`,
+        )
+        .bind(lawId, lang, ...subtreeBinds(rootPath))
+        .all<DivisionRow>()
+    ).results;
   } else {
-    rows = (await db
-      .prepare(`SELECT ${COLS} FROM divisions WHERE law_id=? AND lang=? ORDER BY sort_order`)
-      .bind(lawId, lang)
-      .all<DivisionRow>()).results;
+    rows = (
+      await db
+        .prepare(`SELECT ${COLS} FROM divisions WHERE law_id=? AND lang=? ORDER BY sort_order`)
+        .bind(lawId, lang)
+        .all<DivisionRow>()
+    ).results;
   }
   const byId = new Map<number, StructureNode>();
   for (const r of rows) {
     byId.set(r.id, {
-      path: r.path, division_id: r.id, kind: r.kind, number: r.number,
-      heading: r.heading, repealed: r.repealed, children: [],
+      path: r.path,
+      division_id: r.id,
+      kind: r.kind,
+      number: r.number,
+      heading: r.heading,
+      repealed: r.repealed,
+      children: [],
     });
   }
   const roots: StructureNode[] = [];
@@ -1002,7 +1147,8 @@ function chapterRegex(chapter: string): RegExp {
 }
 
 /** Mention explicite de chapitre (« c. B-1.1 », « chapitre T-16 »), pour refuser en le nommant. */
-const CHAPITRE_EXPLICITE = /\b(?:c\.|chapitres?|chapters?)\s*([A-Za-z]{1,6}-[0-9][0-9.]*(?:\s*,\s*r\.\s*[0-9][0-9.]*)?)/i;
+const CHAPITRE_EXPLICITE =
+  /\b(?:c\.|chapitres?|chapters?)\s*([A-Za-z]{1,6}-[0-9][0-9.]*(?:\s*,\s*r\.\s*[0-9][0-9.]*)?)/i;
 
 /**
  * Numéro d'article, introduit par un marqueur. « a. » est la forme courante au Québec, et
@@ -1027,7 +1173,9 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   let bestLen = 0;
   let motif: RegExp | null = null;
   for (const l of laws) {
-    const chap = citeOf(l).replace(/^RLRQ,\s*c\.\s*/i, "").trim();
+    const chap = citeOf(l)
+      .replace(/^RLRQ,\s*c\.\s*/i, "")
+      .trim();
     if (!chap || chap.length <= bestLen) continue;
     const re = chapterRegex(chap);
     if (re.test(citation)) {
@@ -1039,20 +1187,23 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   }
   // abréviations usuelles, seulement si aucun chapitre du corpus n'a été reconnu
   if (!law) {
-    if (/c\.?\s*p\.?\s*c\.?|cpc/i.test(citation)) { law = "cpc"; lawSource = "abreviation"; }
-    else if (/c\.?\s*c\.?\s*q\.?|ccq/i.test(citation)) { law = "ccq"; lawSource = "abreviation"; }
+    if (/c\.?\s*p\.?\s*c\.?|cpc/i.test(citation)) {
+      law = "cpc";
+      lawSource = "abreviation";
+    } else if (/c\.?\s*c\.?\s*q\.?|ccq/i.test(citation)) {
+      law = "ccq";
+      lawSource = "abreviation";
+    }
   }
 
   // On retire le chapitre reconnu AVANT de chercher le numéro d'article : sans quoi les
   // chiffres du chapitre (« T-16 ») sont pris pour l'article.
   const rest = motif ? citation.replace(motif, " ") : citation;
-  const article = rest.match(MARQUEUR_ARTICLE)?.[1]
-    ?? rest.match(/(\d+(?:\.\d+)*)/)?.[1]
-    ?? null;
+  const article = rest.match(MARQUEUR_ARTICLE)?.[1] ?? rest.match(/(\d+(?:\.\d+)*)/)?.[1] ?? null;
 
   // Chapitre explicitement cité mais inconnu du corpus : on le NOMME au lieu de retomber
   // sur une loi voisine (« c. B-1.1 » n'est pas « c. B-1 »).
-  const explicite = law ? null : citation.match(CHAPITRE_EXPLICITE)?.[1]?.trim() ?? null;
+  const explicite = law ? null : (citation.match(CHAPITRE_EXPLICITE)?.[1]?.trim() ?? null);
 
   return { law, article, law_source: law ? lawSource : null, chapitre_inconnu: explicite };
 }
@@ -1078,7 +1229,10 @@ export interface RelevanceData {
  * PRÉFILTRÉES en SQL par sous-chaîne ; l'ancrage au début de mot se fait ensuite en mémoire.
  */
 export async function loadRelevanceData(
-  db: D1Database, tokens: string[], lang: Lang, env: { FEDERAL_CORPUS?: string } = {},
+  db: D1Database,
+  tokens: string[],
+  lang: Lang,
+  env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<RelevanceData> {
   // Le masque de l'interrupteur, posé sur CHAQUE source du routeur. `find_relevant` ne
   // passe par aucun `getLaw`, donc le point d'étranglement ne le couvre pas : mesuré, il
@@ -1087,28 +1241,44 @@ export async function loadRelevanceData(
   const mId = federalOuvert(env) ? "" : "WHERE jurisdiction = 'qc'";
   const mFrom = masqueLawId(env, "from_law_id");
   const [subjects, subjectMap, laws, relations] = await Promise.all([
-    db.prepare("SELECT id, label_fr, label_en, label_norm, description_fr, description_en FROM subjects")
-      .all<{ id: string; label_fr: string; label_en: string | null; label_norm: string;
-             description_fr: string | null; description_en: string | null }>(),
-    db.prepare(`SELECT subject_id, law_id, division_path FROM subject_map WHERE 1=1 ${mLaw}`).all<SubjectMapLite>(),
-    db.prepare(`SELECT id, name_fr, name_en, name_norm FROM laws ${mId}`)
+    db
+      .prepare(
+        "SELECT id, label_fr, label_en, label_norm, description_fr, description_en FROM subjects",
+      )
+      .all<{
+        id: string;
+        label_fr: string;
+        label_en: string | null;
+        label_norm: string;
+        description_fr: string | null;
+        description_en: string | null;
+      }>(),
+    db
+      .prepare(`SELECT subject_id, law_id, division_path FROM subject_map WHERE 1=1 ${mLaw}`)
+      .all<SubjectMapLite>(),
+    db
+      .prepare(`SELECT id, name_fr, name_en, name_norm FROM laws ${mId}`)
       .all<{ id: string; name_fr: string; name_en: string; name_norm: string | null }>(),
-    db.prepare(
-      `SELECT from_law_id, to_law_id, rel_type, source, in_corpus, note FROM law_relations ` +
-      `WHERE (source = 'cure' OR rel_type = 'reglement-de') ${mFrom}`,
-    ).all<RelationLite>(),
+    db
+      .prepare(
+        `SELECT from_law_id, to_law_id, rel_type, source, in_corpus, note FROM law_relations ` +
+          `WHERE (source = 'cure' OR rel_type = 'reglement-de') ${mFrom}`,
+      )
+      .all<RelationLite>(),
   ]);
 
   let divisions: DivisionLite[] = [];
   if (tokens.length) {
     const ors = tokens.map(() => "heading_norm LIKE ?").join(" OR ");
-    divisions = (await db
-      .prepare(
-        `SELECT law_id, path, heading, heading_norm FROM divisions
+    divisions = (
+      await db
+        .prepare(
+          `SELECT law_id, path, heading, heading_norm FROM divisions
          WHERE lang = ? AND heading_norm IS NOT NULL AND (${ors}) ${mLaw} LIMIT ?`,
-      )
-      .bind(lang, ...tokens.map((t) => `%${t}%`), DIVISION_PREFILTER_LIMIT)
-      .all<DivisionLite>()).results;
+        )
+        .bind(lang, ...tokens.map((t) => `%${t}%`), DIVISION_PREFILTER_LIMIT)
+        .all<DivisionLite>()
+    ).results;
   }
 
   // Cibles des divisions citées par subject_map (pour nommer et ADRESSER les candidats S1).
@@ -1119,20 +1289,24 @@ export async function loadRelevanceData(
   for (const m of subjectMap.results) {
     if (!m.division_path) continue;
     const arr = parLoi.get(m.law_id);
-    if (arr) { if (!arr.includes(m.division_path)) arr.push(m.division_path); }
-    else parLoi.set(m.law_id, [m.division_path]);
+    if (arr) {
+      if (!arr.includes(m.division_path)) arr.push(m.division_path);
+    } else parLoi.set(m.law_id, [m.division_path]);
   }
   if (lang === "fr") {
     const paths = [...new Set([...parLoi.values()].flat())];
     if (paths.length) {
-      const rows = (await db
-        .prepare(
-          `SELECT law_id, path, heading FROM divisions
+      const rows = (
+        await db
+          .prepare(
+            `SELECT law_id, path, heading FROM divisions
            WHERE lang = 'fr' AND path IN (${paths.map(() => "?").join(",")})`,
-        )
-        .bind(...paths)
-        .all<{ law_id: string; path: string; heading: string | null }>()).results;
-      for (const r of rows) mappedHeadings.set(`${r.law_id}|${r.path}`, { path: r.path, heading: r.heading });
+          )
+          .bind(...paths)
+          .all<{ law_id: string; path: string; heading: string | null }>()
+      ).results;
+      for (const r of rows)
+        mappedHeadings.set(`${r.law_id}|${r.path}`, { path: r.path, heading: r.heading });
     }
   } else {
     for (const [lawId, paths] of parLoi) {
@@ -1145,7 +1319,7 @@ export async function loadRelevanceData(
   // était muet dès qu'une requête anglaise nommait la loi en anglais.
   const lawsLite: LawLite[] = laws.results.map((l) => ({
     id: l.id,
-    name_fr: lang === "en" ? (l.name_en || l.name_fr) : l.name_fr,
+    name_fr: lang === "en" ? l.name_en || l.name_fr : l.name_fr,
     name_norm: lang === "en" ? normalize(l.name_en || l.name_fr) : l.name_norm,
   }));
 
@@ -1153,9 +1327,9 @@ export async function loadRelevanceData(
   // lourd du routeur (+3) ne se déclenchait jamais sur une requête anglaise.
   const subjectsLite: SubjectLite[] = subjects.results.map((s) => ({
     id: s.id,
-    label_fr: lang === "en" ? (s.label_en || s.label_fr) : s.label_fr,
+    label_fr: lang === "en" ? s.label_en || s.label_fr : s.label_fr,
     label_norm: lang === "en" ? normalize(s.label_en || s.label_fr) : s.label_norm,
-    description_fr: lang === "en" ? (s.description_en || s.description_fr) : s.description_fr,
+    description_fr: lang === "en" ? s.description_en || s.description_fr : s.description_fr,
   }));
 
   return {
@@ -1169,7 +1343,6 @@ export async function loadRelevanceData(
 }
 
 // --- fils d'Ariane (plan v2, 1.3) ---------------------------------------------
-
 
 export interface CrumbNode {
   path: string;
@@ -1185,14 +1358,19 @@ export interface CrumbNode {
  * permet de RECONNAÎTRE la pertinence). Une requête IN par loi représentée.
  */
 export async function breadcrumbChains(
-  db: D1Database, lang: Lang, refs: { law_id: string; division_path: string }[],
+  db: D1Database,
+  lang: Lang,
+  refs: { law_id: string; division_path: string }[],
 ): Promise<Map<string, CrumbNode[]>> {
   const byLaw = new Map<string, Set<string>>();
   for (const r of refs) {
     if (!r.division_path) continue;
     const segs = segmentsOf(r.division_path);
     let set = byLaw.get(r.law_id);
-    if (!set) { set = new Set(); byLaw.set(r.law_id, set); }
+    if (!set) {
+      set = new Set();
+      byLaw.set(r.law_id, set);
+    }
     for (let i = 1; i <= segs.length; i++) set.add(segs.slice(0, i).join("-"));
   }
   const nodes = new Map<string, CrumbNode>();
@@ -1200,13 +1378,15 @@ export async function breadcrumbChains(
     const list = [...paths];
     for (let i = 0; i < list.length; i += 90) {
       const chunk = list.slice(i, i + 90);
-      const rows = (await db
-        .prepare(
-          `SELECT path, kind, number, heading FROM divisions
+      const rows = (
+        await db
+          .prepare(
+            `SELECT path, kind, number, heading FROM divisions
            WHERE law_id = ? AND lang = ? AND path IN (${chunk.map(() => "?").join(",")})`,
-        )
-        .bind(law, lang, ...chunk)
-        .all<CrumbNode>()).results;
+          )
+          .bind(law, lang, ...chunk)
+          .all<CrumbNode>()
+      ).results;
       for (const r of rows) nodes.set(`${law}|${r.path}`, r);
     }
   }
@@ -1225,13 +1405,18 @@ export async function breadcrumbChains(
 
 /** Noms des lois pour les en-têtes de groupes de résultats. */
 export async function lawNames(
-  db: D1Database, ids: string[],
+  db: D1Database,
+  ids: string[],
 ): Promise<Map<string, { name_fr: string; name_en: string }>> {
   if (!ids.length) return new Map();
-  const rows = (await db
-    .prepare(`SELECT id, name_fr, name_en FROM laws WHERE id IN (${ids.map(() => "?").join(",")})`)
-    .bind(...ids)
-    .all<{ id: string; name_fr: string; name_en: string }>()).results;
+  const rows = (
+    await db
+      .prepare(
+        `SELECT id, name_fr, name_en FROM laws WHERE id IN (${ids.map(() => "?").join(",")})`,
+      )
+      .bind(...ids)
+      .all<{ id: string; name_fr: string; name_en: string }>()
+  ).results;
   return new Map(rows.map((r) => [r.id, { name_fr: r.name_fr, name_en: r.name_en }]));
 }
 
@@ -1357,8 +1542,13 @@ interface MatchScope {
 }
 
 async function runMatch(
-  db: D1Database, match: string, lang: Lang, scope: MatchScope, page: Page,
-  withScore = false, env: { FEDERAL_CORPUS?: string } = {},
+  db: D1Database,
+  match: string,
+  lang: Lang,
+  scope: MatchScope,
+  page: Page,
+  withScore = false,
+  env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<{ hits: SearchHit[]; total: number }> {
   const clauses: string[] = [];
   // MATCH BORNÉ À LA COLONNE `text`, et c'est une décision de calibration, pas un détail.
@@ -1375,8 +1565,14 @@ async function runMatch(
   // de `marginal_note` en canal SÉPARÉ ET ÉTIQUETÉ reste à faire, avec des poids explicites
   // importés de src/relevance.ts et une mesure des 21 cas.
   const binds: unknown[] = [`{text} : (${match})`, lang];
-  if (scope.law) { clauses.push("AND articles_fts.law_id = ?"); binds.push(scope.law); }
-  if (scope.notLaw) { clauses.push("AND articles_fts.law_id <> ?"); binds.push(scope.notLaw); }
+  if (scope.law) {
+    clauses.push("AND articles_fts.law_id = ?");
+    binds.push(scope.law);
+  }
+  if (scope.notLaw) {
+    clauses.push("AND articles_fts.law_id <> ?");
+    binds.push(scope.notLaw);
+  }
   // `articles_fts` ne porte PAS de colonne `jurisdiction` (et lui en ajouter une exigerait
   // de recréer la table), donc le masque passe par une sous-requête sur `laws`.
   //
@@ -1396,16 +1592,18 @@ async function runMatch(
     .bind(...binds)
     .first<{ n: number }>();
   const scoreCol = withScore ? ", bm25(articles_fts) AS score" : "";
-  const hits = (await db
-    .prepare(
-      `SELECT a.law_id, a.number, a.division_path,
+  const hits = (
+    await db
+      .prepare(
+        `SELECT a.law_id, a.number, a.division_path,
               snippet(articles_fts, 0, '[', ']', '…', 30) AS snippet${scoreCol}
        FROM articles_fts JOIN articles a ON a.id = articles_fts.rowid
        WHERE ${where}
        ORDER BY rank LIMIT ? OFFSET ?`,
-    )
-    .bind(...binds, page.limit, page.offset)
-    .all<SearchHit>()).results;
+      )
+      .bind(...binds, page.limit, page.offset)
+      .all<SearchHit>()
+  ).results;
   return { hits, total: totalRow?.n ?? 0 };
 }
 
@@ -1448,7 +1646,9 @@ async function embedQuery(v: VectorBackend, query: string): Promise<number[] | n
 }
 
 async function queryVectors(
-  v: VectorBackend, values: number[], lawId: string | undefined,
+  v: VectorBackend,
+  values: number[],
+  lawId: string | undefined,
 ): Promise<VectorHits | null> {
   try {
     const res = await v.index.query(values, {
@@ -1463,7 +1663,12 @@ async function queryVectors(
         if (m.score < SEMANTIC_MIN_SCORE) continue; // plancher anti-bruit
         out.arts.push({ law: md.law, number: md.article, score: m.score });
       } else if (md.type === "division" && md.law && md.path) {
-        out.divs.push({ law_id: md.law, path: md.path, heading: md.heading || null, score: m.score });
+        out.divs.push({
+          law_id: md.law,
+          path: md.path,
+          heading: md.heading || null,
+          score: m.score,
+        });
       }
     }
     return out;
@@ -1495,17 +1700,21 @@ async function queryVectors(
  * Coût nul dans l'état visé : interrupteur ouvert, on rend `vec` sans toucher à D1.
  */
 async function filtreVecteurs(
-  db: D1Database, vec: VectorHits | null, env: { FEDERAL_CORPUS?: string },
+  db: D1Database,
+  vec: VectorHits | null,
+  env: { FEDERAL_CORPUS?: string },
 ): Promise<VectorHits | null> {
   if (!vec || federalOuvert(env)) return vec;
   const ids = [...new Set([...vec.arts.map((a) => a.law), ...vec.divs.map((d) => d.law_id)])];
   if (!ids.length) return vec;
-  const rows = (await db
-    .prepare(
-      `SELECT id FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) AND jurisdiction = 'qc'`,
-    )
-    .bind(...ids)
-    .all<{ id: string }>()).results;
+  const rows = (
+    await db
+      .prepare(
+        `SELECT id FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) AND jurisdiction = 'qc'`,
+      )
+      .bind(...ids)
+      .all<{ id: string }>()
+  ).results;
   // Liste BLANCHE : un id absent de `laws` (vecteur périmé) est écarté lui aussi, plutôt que
   // toléré par défaut. C'est le même choix que la liste blanche d'ancêtres du parseur.
   const permis = new Set(rows.map((r) => r.id));
@@ -1517,27 +1726,35 @@ async function filtreVecteurs(
 
 /** Matérialise des (law, number) en SearchHit dans la LANGUE DEMANDÉE (extrait ~240 car.). */
 async function articleBriefs(
-  db: D1Database, lang: Lang, keys: string[],
+  db: D1Database,
+  lang: Lang,
+  keys: string[],
 ): Promise<Map<string, SearchHit>> {
   const byLaw = new Map<string, string[]>();
   for (const k of keys) {
     const [law, number] = k.split("|");
     const arr = byLaw.get(law);
-    if (arr) arr.push(number); else byLaw.set(law, [number]);
+    if (arr) arr.push(number);
+    else byLaw.set(law, [number]);
   }
   const out = new Map<string, SearchHit>();
   for (const [law, numbers] of byLaw) {
-    const rows = (await db
-      .prepare(
-        `SELECT law_id, number, division_path, substr(text, 1, 240) AS t, length(text) AS len
+    const rows = (
+      await db
+        .prepare(
+          `SELECT law_id, number, division_path, substr(text, 1, 240) AS t, length(text) AS len
          FROM articles WHERE lang = ? AND law_id = ? AND number IN (${numbers.map(() => "?").join(",")})`,
-      )
-      .bind(lang, law, ...numbers)
-      .all<{ law_id: string; number: string; division_path: string; t: string; len: number }>()).results;
+        )
+        .bind(lang, law, ...numbers)
+        .all<{ law_id: string; number: string; division_path: string; t: string; len: number }>()
+    ).results;
     for (const r of rows) {
       out.set(`${r.law_id}|${r.number}`, {
-        law_id: r.law_id, number: r.number, division_path: r.division_path,
-        snippet: r.len > 240 ? `${r.t}…` : r.t, semantic: true,
+        law_id: r.law_id,
+        number: r.number,
+        division_path: r.division_path,
+        snippet: r.len > 240 ? `${r.t}…` : r.t,
+        semantic: true,
       });
     }
   }
@@ -1549,10 +1766,17 @@ async function articleBriefs(
  * sont matérialisés depuis D1 dans la langue demandée et marqués `semantic`.
  */
 async function fuseHybrid(
-  db: D1Database, lang: Lang, fts: { hits: SearchHit[]; total: number }, vec: VectorHits,
+  db: D1Database,
+  lang: Lang,
+  fts: { hits: SearchHit[]; total: number },
+  vec: VectorHits,
   limit: number,
 ): Promise<SearchHit[]> {
-  interface Entry { ftsRank?: number; vecRank?: number; hit?: SearchHit }
+  interface Entry {
+    ftsRank?: number;
+    vecRank?: number;
+    hit?: SearchHit;
+  }
   const entries = new Map<string, Entry>();
   fts.hits.forEach((h, i) => entries.set(`${h.law_id}|${h.number}`, { ftsRank: i + 1, hit: h }));
   vec.arts.forEach((a, i) => {
@@ -1563,12 +1787,15 @@ async function fuseHybrid(
   });
   const scored = [...entries.entries()]
     .map(([k, e]) => ({
-      k, e,
+      k,
+      e,
       score: (e.ftsRank ? 1 / (RRF_K + e.ftsRank) : 0) + (e.vecRank ? 1 / (RRF_K + e.vecRank) : 0),
     }))
     .sort((a, b) => b.score - a.score);
   const missing = scored.filter((s) => !s.e.hit).map((s) => s.k);
-  const briefs = missing.length ? await articleBriefs(db, lang, missing) : new Map<string, SearchHit>();
+  const briefs = missing.length
+    ? await articleBriefs(db, lang, missing)
+    : new Map<string, SearchHit>();
   // score cosine des correspondances vectorielles, pour l'observabilité (calibrage du plancher)
   const cosOf = new Map(vec.arts.map((a) => [`${a.law}|${a.number}`, a.score]));
   const hits: SearchHit[] = [];
@@ -1584,7 +1811,11 @@ async function fuseHybrid(
 }
 
 export async function searchText(
-  db: D1Database, query: string, lang: Lang, lawId: string | undefined, page: Page,
+  db: D1Database,
+  query: string,
+  lang: Lang,
+  lawId: string | undefined,
+  page: Page,
   opts: { relax?: boolean; vector?: VectorBackend; env?: { FEDERAL_CORPUS?: string } } = {},
 ): Promise<SearchOutcome> {
   const env = opts.env ?? {};
@@ -1601,7 +1832,9 @@ export async function searchText(
     useVector ? embedQuery(opts.vector!, query) : Promise.resolve(null),
   ]);
   const vec = await filtreVecteurs(
-    db, qVec ? await queryVectors(opts.vector!, qVec, lawId) : null, env,
+    db,
+    qVec ? await queryVectors(opts.vector!, qVec, lawId) : null,
+    env,
   );
   const semDivs = (vec?.divs ?? [])
     .filter((d) => d.score >= DIVISION_MATCH_MIN_SCORE)
@@ -1612,14 +1845,17 @@ export async function searchText(
     if (vecWideCache === undefined) {
       // Le barreau ELARGI repose le filtre : sans lawId, la requete Vectorize porte sur
       // tout l'index, donc c'est le chemin le PLUS expose au corpus federal.
-      vecWideCache = lawId && qVec
-        ? await filtreVecteurs(db, await queryVectors(opts.vector!, qVec, undefined), env)
-        : vec;
+      vecWideCache =
+        lawId && qVec
+          ? await filtreVecteurs(db, await queryVectors(opts.vector!, qVec, undefined), env)
+          : vec;
     }
     return vecWideCache;
   };
-  const fuse = async (fts: { hits: SearchHit[]; total: number }, v: Awaited<ReturnType<typeof queryVectors>>) =>
-    v?.arts.length ? await fuseHybrid(db, lang, fts, v, page.limit) : fts.hits;
+  const fuse = async (
+    fts: { hits: SearchHit[]; total: number },
+    v: Awaited<ReturnType<typeof queryVectors>>,
+  ) => (v?.arts.length ? await fuseHybrid(db, lang, fts, v, page.limit) : fts.hits);
 
   // ÉCHELLE (décision 2.4, tranchée par l'éval) : dérouler le LEXICAL jusqu'à sa meilleure
   // liste, PUIS fusionner avec les vecteurs. Le sémantique seul n'est que l'ultime barreau :
@@ -1632,12 +1868,23 @@ export async function searchText(
   if (exact.total > 0) {
     let elsewhere: SearchOutcome["elsewhere"] = null;
     if (lawId) {
-      const others = await runMatch(db, match, lang, { notLaw: lawId }, { limit: 3, offset: 0 }, false, env);
+      const others = await runMatch(
+        db,
+        match,
+        lang,
+        { notLaw: lawId },
+        { limit: 3, offset: 0 },
+        false,
+        env,
+      );
       if (others.total > 0) elsewhere = { total: others.total, hits: others.hits };
     }
     return {
-      hits: await fuse(exact, vec), total: exact.total,
-      fallback: null, elsewhere, divisions: semDivs,
+      hits: await fuse(exact, vec),
+      total: exact.total,
+      fallback: null,
+      elsewhere,
+      divisions: semDivs,
     };
   }
 
@@ -1646,8 +1893,11 @@ export async function searchText(
     const wide = await runMatch(db, match, lang, {}, page, false, env);
     if (wide.total > 0) {
       return {
-        hits: await fuse(wide, await vecWide()), total: wide.total,
-        fallback: "widened", elsewhere: null, divisions: semDivs,
+        hits: await fuse(wide, await vecWide()),
+        total: wide.total,
+        fallback: "widened",
+        elsewhere: null,
+        divisions: semDivs,
       };
     }
   }
@@ -1659,7 +1909,10 @@ export async function searchText(
   if (relaxable && tokens.length <= RELAX_MAX_LOO_TERMS) {
     let best: { hits: SearchHit[]; total: number; omitted: string; sum: number } | null = null;
     for (let i = 0; i < tokens.length; i++) {
-      const partial = tokens.filter((_, j) => j !== i).map(quoteTok).join(" ");
+      const partial = tokens
+        .filter((_, j) => j !== i)
+        .map(quoteTok)
+        .join(" ");
       const r = await runMatch(db, partial, lang, scope, page, true, env);
       if (r.total === 0) continue;
       const sum = r.hits.reduce((acc, h) => acc + (h.score ?? 0), 0);
@@ -1667,8 +1920,11 @@ export async function searchText(
     }
     if (best) {
       return {
-        hits: await fuse(best, vec), total: best.total,
-        fallback: { loo: best.omitted }, elsewhere: null, divisions: semDivs,
+        hits: await fuse(best, vec),
+        total: best.total,
+        fallback: { loo: best.omitted },
+        elsewhere: null,
+        divisions: semDivs,
       };
     }
   }
@@ -1676,22 +1932,30 @@ export async function searchText(
   // 4) OU + bm25 (plan v2, 1.2) : portée demandée, puis corpus. Termes composés éclatés
   //    (« non-concurrence » -> non, concurrence).
   if (relaxable) {
-    const orTerms = [...new Set(tokens.flatMap((t) => t.split(/[-.'’]/)).filter((t) => t.length >= 2))];
+    const orTerms = [
+      ...new Set(tokens.flatMap((t) => t.split(/[-.'’]/)).filter((t) => t.length >= 2)),
+    ];
     if (orTerms.length) {
       const matchOr = orTerms.map(quoteTok).join(" OR ");
       const scoped = await runMatch(db, matchOr, lang, scope, page, true, env);
       if (scoped.total > 0) {
         return {
-          hits: await fuse(scoped, vec), total: scoped.total,
-          fallback: "or_relax", elsewhere: null, divisions: semDivs,
+          hits: await fuse(scoped, vec),
+          total: scoped.total,
+          fallback: "or_relax",
+          elsewhere: null,
+          divisions: semDivs,
         };
       }
       if (lawId) {
         const wideOr = await runMatch(db, matchOr, lang, {}, page, true, env);
         if (wideOr.total > 0) {
           return {
-            hits: await fuse(wideOr, await vecWide()), total: wideOr.total,
-            fallback: "or_relax", elsewhere: null, divisions: semDivs,
+            hits: await fuse(wideOr, await vecWide()),
+            total: wideOr.total,
+            fallback: "or_relax",
+            elsewhere: null,
+            divisions: semDivs,
           };
         }
       }
@@ -1703,7 +1967,13 @@ export async function searchText(
     if (v?.arts.length) {
       const hits = await fuseHybrid(db, lang, { hits: [], total: 0 }, v, page.limit);
       if (hits.length) {
-        return { hits, total: hits.length, fallback: "semantic", elsewhere: null, divisions: semDivs };
+        return {
+          hits,
+          total: hits.length,
+          fallback: "semantic",
+          elsewhere: null,
+          divisions: semDivs,
+        };
       }
     }
   }

@@ -20,9 +20,9 @@
 // de tests/page-client.test.mjs : il n'existe aucune étape de compilation pour les tests
 // (tsconfig `noEmit`, pas d'`allowJs`), donc un test ne peut pas importer src/lib.ts.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { test } from "vitest";
 
 const lire = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const LIB = lire("src/lib.ts");
@@ -49,7 +49,12 @@ test("le mécanisme du défaut : le zéro de tête est perdu, donc deux articles
   // Les quatre paires MESURÉES en production. Si l'une cessait de collisionner, c'est que
   // la clé a changé d'échelle — auquel cas l'invariant 2 est engagé et le correctif de
   // plage doit être relu, pas seulement ce test.
-  for (const [a, b] of [["15.01", "15.1"], ["15.02", "15.2"], ["31.01", "31.1"], ["31.02", "31.2"]]) {
+  for (const [a, b] of [
+    ["15.01", "15.1"],
+    ["15.02", "15.2"],
+    ["31.01", "31.1"],
+    ["31.02", "31.2"],
+  ]) {
     assert.equal(ancienneCle(a), ancienneCle(b), `${a} et ${b} devraient partager une clé`);
   }
   assert.equal(parseInt("01", 10), parseInt("1", 10));
@@ -73,7 +78,11 @@ test("aucune lecture par composante ne satisfait les deux contraintes du corpus"
 
 test("tout ORDER BY sort_key porte un départage par id", () => {
   const fautifs = [];
-  for (const [nom, src] of [["src/lib.ts", LIB], ["src/tools.ts", TOOLS], ["src/backfill.ts", BACKFILL]]) {
+  for (const [nom, src] of [
+    ["src/lib.ts", LIB],
+    ["src/tools.ts", TOOLS],
+    ["src/backfill.ts", BACKFILL],
+  ]) {
     for (const m of src.matchAll(/ORDER BY sort_key(?!\s*,\s*id)([^\n]*)/g)) {
       fautifs.push(`${nom} : ORDER BY sort_key${m[1]}`);
     }

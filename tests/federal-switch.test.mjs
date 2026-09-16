@@ -23,9 +23,9 @@
 // une clause posée, pas une clause EFFICACE. Un masque sur la mauvaise colonne lui semblerait
 // bon. La preuve d'efficacité reste la sonde bout-en-bout contre un serveur (`tests/evals.mjs`).
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { test } from "vitest";
 
 const FICHIERS = ["src/lib.ts", "src/site.ts", "src/backfill.ts", "src/tools.ts"];
 
@@ -60,9 +60,20 @@ function requetes(src) {
         j++;
         let d2 = 0;
         while (j < src.length) {
-          if (src[j] === "\\") { j += 2; continue; }
-          if (src[j] === "$" && src[j + 1] === "{") { d2++; j += 2; continue; }
-          if (src[j] === "}" && d2 > 0) { d2--; j++; continue; }
+          if (src[j] === "\\") {
+            j += 2;
+            continue;
+          }
+          if (src[j] === "$" && src[j + 1] === "{") {
+            d2++;
+            j += 2;
+            continue;
+          }
+          if (src[j] === "}" && d2 > 0) {
+            d2--;
+            j++;
+            continue;
+          }
           if (src[j] === "`" && d2 === 0) break;
           j++;
         }
@@ -72,7 +83,10 @@ function requetes(src) {
       if (c === '"' || c === "'") {
         const q = c;
         j++;
-        while (j < src.length && src[j] !== q) { if (src[j] === "\\") j++; j++; }
+        while (j < src.length && src[j] !== q) {
+          if (src[j] === "\\") j++;
+          j++;
+        }
         j++;
         continue;
       }
@@ -91,7 +105,10 @@ function fonctionDe(src, pos) {
   let nom = "(module)";
   let debut = -1;
   for (const m of src.matchAll(DECL_FN)) {
-    if (m.index < pos && m.index > debut) { debut = m.index; nom = m[1]; }
+    if (m.index < pos && m.index > debut) {
+      debut = m.index;
+      nom = m[1];
+    }
   }
   return { nom, debut: debut < 0 ? 0 : debut };
 }
@@ -100,7 +117,11 @@ function fonctionDe(src, pos) {
 function portee(src, pos) {
   const { debut } = fonctionDe(src, pos);
   let fin = src.length;
-  for (const m of src.matchAll(DECL_FN)) if (m.index > pos) { fin = m.index; break; }
+  for (const m of src.matchAll(DECL_FN))
+    if (m.index > pos) {
+      fin = m.index;
+      break;
+    }
   return src.slice(debut, fin);
 }
 
@@ -154,6 +175,12 @@ function empreinte(fichier, fn, texte) {
     .replace(/[`"']/g, " ")
     .replace(/\s+/g, " ")
     .trim()
+    // Virgule finale de l'argument de `.prepare(…)`. Quand la requête tient sur sa propre
+    // ligne, le formateur (virgules finales « all ») en ajoute une, qui se retrouvait dans
+    // l'empreinte : `… IN () ,` cessait d'apparier `… IN ()` dans TOLERES, et la garde
+    // rougissait sur une lecture inchangée. L'en-tête promet une empreinte insensible aux
+    // déplacements de lignes ; elle ne l'était qu'à moitié.
+    .replace(/[\s,]+$/, "")
     .slice(0, 70);
   return `${fichier} :: ${fn} :: ${sql}`;
 }
@@ -175,72 +202,74 @@ function empreinte(fichier, fn, texte) {
  *
  * Une cinquième famille serait un défaut déguisé en tolérance : « ça n'arrive jamais ».
  */
-const TOLERES = new Map(Object.entries({
-  "src/lib.ts :: listLaws :: SELECT law_id, lang, COUNT(*) AS n FROM articles GROUP BY law_id, lang":
-    "jointe en mémoire : `listLaws` ne lit ces décomptes qu'à travers `counts.filter((c) => " +
-    "c.law_id === law.id)`, sur la liste de lois DÉJÀ masquée. Vérifié : aucune somme n'en " +
-    "est tirée — c'est exactement ce qui distinguait ce cas de `renderSite`, dont le total " +
-    "d'articles, lui, additionnait bel et bien les deux ordres de gouvernement.",
+const TOLERES = new Map(
+  Object.entries({
+    "src/lib.ts :: listLaws :: SELECT law_id, lang, COUNT(*) AS n FROM articles GROUP BY law_id, lang":
+      "jointe en mémoire : `listLaws` ne lit ces décomptes qu'à travers `counts.filter((c) => " +
+      "c.law_id === law.id)`, sur la liste de lois DÉJÀ masquée. Vérifié : aucune somme n'en " +
+      "est tirée — c'est exactement ce qui distinguait ce cas de `renderSite`, dont le total " +
+      "d'articles, lui, additionnait bel et bien les deux ordres de gouvernement.",
 
-  "src/lib.ts :: listLaws :: SELECT sm.law_id, sm.division_path, s.label_fr, s.label_en, d.heading ":
-    "jointe en mémoire : idem, lu par `maps.filter((m) => m.law_id === law.id)` sur la liste " +
-    "masquée, et aucun décompte global n'en sort.",
+    "src/lib.ts :: listLaws :: SELECT sm.law_id, sm.division_path, s.label_fr, s.label_en, d.heading ":
+      "jointe en mémoire : idem, lu par `maps.filter((m) => m.law_id === law.id)` sur la liste " +
+      "masquée, et aucun décompte global n'en sort.",
 
-  "src/lib.ts :: translatePaths :: SELECT afr.division_path AS fr_path, MIN(aen.division_path) AS other_p":
-    "gardée en amont : pont des numéros d'articles (invariant 4), borné à `lawId`. Ses deux " +
-    "appelants ont tranché avant — `listLaws` sur une loi de la liste masquée, `getDivision` " +
-    "après `getLaw(db, law, env)`.",
+    "src/lib.ts :: translatePaths :: SELECT afr.division_path AS fr_path, MIN(aen.division_path) AS other_p":
+      "gardée en amont : pont des numéros d'articles (invariant 4), borné à `lawId`. Ses deux " +
+      "appelants ont tranché avant — `listLaws` sur une loi de la liste masquée, `getDivision` " +
+      "après `getLaw(db, law, env)`.",
 
-  "src/lib.ts :: translatePaths :: SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND ":
-    "gardée en amont : intitulés des chemins traduits, bornés au `lawId` déjà résolu.",
+    "src/lib.ts :: translatePaths :: SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND ":
+      "gardée en amont : intitulés des chemins traduits, bornés au `lawId` déjà résolu.",
 
-  "src/lib.ts :: translateDivisionPath :: SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND ":
-    "gardée en amont : bornée au `lawId` déjà résolu par `getLaw`. Couvre les deux relevés " +
-    "d'intitulé de la fonction (court-circuit fédéral et chemin traduit), au SQL identique.",
+    "src/lib.ts :: translateDivisionPath :: SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND ":
+      "gardée en amont : bornée au `lawId` déjà résolu par `getLaw`. Couvre les deux relevés " +
+      "d'intitulé de la fonction (court-circuit fédéral et chemin traduit), au SQL identique.",
 
-  "src/lib.ts :: translateDivisionPath :: SELECT a2.division_path AS p FROM articles a1 JOIN articles a2 ON a2.l":
-    "gardée en amont : pont des numéros d'articles, borné au `lawId` déjà résolu.",
+    "src/lib.ts :: translateDivisionPath :: SELECT a2.division_path AS p FROM articles a1 JOIN articles a2 ON a2.l":
+      "gardée en amont : pont des numéros d'articles, borné au `lawId` déjà résolu.",
 
-  "src/lib.ts :: lawOutlines :: SELECT id, law_id, path, kind, number, heading FROM divisions WHERE la":
-    "gardée en amont, et doublement : `lawOutlines` borne à la constante `OUTLINE_LAWS`, " +
-    "purement québécoise, ET filtre `kind = 'livre'`, qu'aucun texte fédéral ne portera. " +
-    "Y ajouter une loi fédérale rendrait un plan VIDE sans erreur — c'est un défaut connu et " +
-    "signalé, hors portée de l'interrupteur.",
+    "src/lib.ts :: lawOutlines :: SELECT id, law_id, path, kind, number, heading FROM divisions WHERE la":
+      "gardée en amont, et doublement : `lawOutlines` borne à la constante `OUTLINE_LAWS`, " +
+      "purement québécoise, ET filtre `kind = 'livre'`, qu'aucun texte fédéral ne portera. " +
+      "Y ajouter une loi fédérale rendrait un plan VIDE sans erreur — c'est un défaut connu et " +
+      "signalé, hors portée de l'interrupteur.",
 
-  "src/lib.ts :: lawOutlines :: SELECT parent_id, path, kind, number, heading FROM divisions WHERE par":
-    "dérivée d'un jeu masqué : enfants des divisions du tour `OUTLINE_LAWS` ci-dessus.",
+    "src/lib.ts :: lawOutlines :: SELECT parent_id, path, kind, number, heading FROM divisions WHERE par":
+      "dérivée d'un jeu masqué : enfants des divisions du tour `OUTLINE_LAWS` ci-dessus.",
 
-  "src/lib.ts :: getArticle :: SELECT , d.kind AS d_kind, d.number AS d_number, d.heading AS d_headin":
-    "gardée en amont : c'est LE point d'étranglement qui a été réparé. Chacun des appelants " +
-    "de `getArticle` passe par `getLaw(db, law, env)` et refuse avant d'arriver ici ; la " +
-    "fuite mesurée venait de ce que `getLaw` ne recevait pas `env`, pas de cette requête.",
+    "src/lib.ts :: getArticle :: SELECT , d.kind AS d_kind, d.number AS d_number, d.heading AS d_headin":
+      "gardée en amont : c'est LE point d'étranglement qui a été réparé. Chacun des appelants " +
+      "de `getArticle` passe par `getLaw(db, law, env)` et refuse avant d'arriver ici ; la " +
+      "fuite mesurée venait de ce que `getLaw` ne recevait pas `env`, pas de cette requête.",
 
-  "src/lib.ts :: loadRelevanceData :: SELECT law_id, path, heading FROM divisions WHERE lang = fr AND path I":
-    "dérivée d'un jeu masqué : intitulés des chemins retenus au tour précédent de " +
-    "`loadRelevanceData`, dont le préfiltre de divisions porte le masque.",
+    "src/lib.ts :: loadRelevanceData :: SELECT law_id, path, heading FROM divisions WHERE lang = fr AND path I":
+      "dérivée d'un jeu masqué : intitulés des chemins retenus au tour précédent de " +
+      "`loadRelevanceData`, dont le préfiltre de divisions porte le masque.",
 
-  "src/lib.ts :: breadcrumbChains :: SELECT path, kind, number, heading FROM divisions WHERE law_id = ? AND":
-    "dérivée d'un jeu masqué : fil d'Ariane des candidats déjà retenus par le repérage.",
+    "src/lib.ts :: breadcrumbChains :: SELECT path, kind, number, heading FROM divisions WHERE law_id = ? AND":
+      "dérivée d'un jeu masqué : fil d'Ariane des candidats déjà retenus par le repérage.",
 
-  "src/lib.ts :: lawNames :: SELECT id, name_fr, name_en FROM laws WHERE id IN ()":
-    "dérivée d'un jeu masqué : noms des lois candidates, toutes issues de " +
-    "`loadRelevanceData`, dont les quatre sources (subject_map, laws, law_relations, " +
-    "préfiltre de divisions) portent le masque.",
+    "src/lib.ts :: lawNames :: SELECT id, name_fr, name_en FROM laws WHERE id IN ()":
+      "dérivée d'un jeu masqué : noms des lois candidates, toutes issues de " +
+      "`loadRelevanceData`, dont les quatre sources (subject_map, laws, law_relations, " +
+      "préfiltre de divisions) portent le masque.",
 
-  "src/lib.ts :: articleBriefs :: SELECT law_id, number, division_path, substr(text, 1, 240) AS t, lengt":
-    "dérivée d'un jeu masqué : `articleBriefs` matérialise des couples (loi, numéro) déjà " +
-    "filtrés par `filtreVecteurs`, qui est LA garde du canal vectoriel — le masque D1 ne " +
-    "peut pas l'atteindre, les identifiants venant des métadonnées de Vectorize.",
+    "src/lib.ts :: articleBriefs :: SELECT law_id, number, division_path, substr(text, 1, 240) AS t, lengt":
+      "dérivée d'un jeu masqué : `articleBriefs` matérialise des couples (loi, numéro) déjà " +
+      "filtrés par `filtreVecteurs`, qui est LA garde du canal vectoriel — le masque D1 ne " +
+      "peut pas l'atteindre, les identifiants venant des métadonnées de Vectorize.",
 
-  "src/backfill.ts :: handleBackfillInner :: SELECT id, name_fr FROM laws WHERE id = ?":
-    "hors surface servie : route ADMIN `/admin/backfill-vectors`, derrière un porteur " +
-    "distinct (`backfill.token`), jamais un outil MCP. L'interrupteur borne ce qui est " +
-    "SERVI, pas ce qui est indexé ; le filtre de juridiction des vecteurs est l'index de " +
-    "métadonnées `jurisdiction` de la phase 6, posé AVANT le premier upsert (invariant 8).",
+    "src/backfill.ts :: handleBackfillInner :: SELECT id, name_fr FROM laws WHERE id = ?":
+      "hors surface servie : route ADMIN `/admin/backfill-vectors`, derrière un porteur " +
+      "distinct (`backfill.token`), jamais un outil MCP. L'interrupteur borne ce qui est " +
+      "SERVI, pas ce qui est indexé ; le filtre de juridiction des vecteurs est l'index de " +
+      "métadonnées `jurisdiction` de la phase 6, posé AVANT le premier upsert (invariant 8).",
 
-  "src/backfill.ts :: handleBackfillInner :: SELECT number, division_path, text FROM articles WHERE law_id = ? AND ":
-    "hors surface servie : idem, la requête d'indexation de la même route admin.",
-}));
+    "src/backfill.ts :: handleBackfillInner :: SELECT number, division_path, text FROM articles WHERE law_id = ? AND ":
+      "hors surface servie : idem, la requête d'indexation de la même route admin.",
+  }),
+);
 
 test("toute lecture SQL du corpus est masquée, ou tolérée avec un motif écrit", () => {
   const nues = [];
@@ -328,8 +357,9 @@ test("searchText transmet `env`, et le canal vectoriel est filtré aux DEUX barr
   );
 
   // `runMatch` porte le masque sur `articles_fts` ; chacun de ses appels doit passer `env`.
-  const appelsMatch = [...lib.matchAll(/\brunMatch\(([^;]*?)\)[,;)\s]/gs)]
-    .filter((m) => !m[1].includes("db: D1Database"));
+  const appelsMatch = [...lib.matchAll(/\brunMatch\(([^;]*?)\)[,;)\s]/gs)].filter(
+    (m) => !m[1].includes("db: D1Database"),
+  );
   assert.ok(appelsMatch.length >= 6, `attendu >= 6 appels de runMatch, vu ${appelsMatch.length}`);
   for (const a of appelsMatch) {
     assert.match(

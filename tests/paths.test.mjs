@@ -19,9 +19,9 @@
 // source COMME DU TEXTE et on reconstruit la regex — même idiome que
 // tests/catalogue.test.mjs et tests/page-client.test.mjs.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { test } from "vitest";
 
 const lire = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const PATHS_TS = lire("src/paths.ts");
@@ -95,7 +95,7 @@ test("l'intervalle [p+'-', p+'.') ne capte pas un frère au préfixe commun", ()
   const cas = [
     ["fh1:3", "fh1:3", true],
     ["fh1:3", "fh1:3-fh2:1", true],
-    ["fh1:3", "fh1:30", false],          // le cas qui compte
+    ["fh1:3", "fh1:30", false], // le cas qui compte
     ["fh1:3", "fh1:30-fh2:1", false],
     ["fs:1", "fs:1-fh1:1", true],
     ["fs:1", "fs:10", false],
@@ -106,8 +106,11 @@ test("l'intervalle [p+'-', p+'.') ne capte pas un frère au préfixe commun", ()
     ["annexe-a", "annexe-abrogative", false],
   ];
   for (const [p, c, attendu] of cas) {
-    assert.equal(dansSousArbre(p, c), attendu,
-      `${c} ${attendu ? "devrait" : "ne devrait pas"} être dans le sous-arbre de ${p}`);
+    assert.equal(
+      dansSousArbre(p, c),
+      attendu,
+      `${c} ${attendu ? "devrait" : "ne devrait pas"} être dans le sous-arbre de ${p}`,
+    );
   }
   assert.ok("-".charCodeAt(0) < ".".charCodeAt(0), "0x2D doit précéder 0x2E");
   assert.ok(".".charCodeAt(0) < "0".charCodeAt(0), "0x2E doit précéder les chiffres");
@@ -124,8 +127,7 @@ test("SEG_SPLIT est identique en TypeScript et en Python", () => {
   // C'est la dette que le miroir sortKeyOf ↔ sort_key n'a JAMAIS eue : aucun test ne
   // comparait les deux implémentations, et le commentaire de schema.sql a décrit pendant
   // longtemps une TROISIÈME échelle qui n'existait nulle part.
-  assert.equal(m[1], source,
-    "les deux littéraux doivent être identiques CARACTÈRE POUR CARACTÈRE");
+  assert.equal(m[1], source, "les deux littéraux doivent être identiques CARACTÈRE POUR CARACTÈRE");
 });
 
 test("les deux familles sont reconnues par la regex, et rien d'autre", () => {
@@ -141,48 +143,68 @@ test("les deux familles sont reconnues par la regex, et rien d'autre", () => {
 // ---------------------------------------------------------------------------
 
 /** Retire les commentaires de ligne et de bloc : on ne garde à l'œil que le CODE. */
-const sansCommentaires = (s) => s.split("\n")
-  .filter((l) => {
-    const q = l.trim();
-    return !q.startsWith("//") && !q.startsWith("*") && !q.startsWith("/*");
-  })
-  .join("\n");
+const sansCommentaires = (s) =>
+  s
+    .split("\n")
+    .filter((l) => {
+      const q = l.trim();
+      return !q.startsWith("//") && !q.startsWith("*") && !q.startsWith("/*");
+    })
+    .join("\n");
 
 test("aucun découpeur borné à la seule famille Irosoft ne subsiste dans le CODE", () => {
   // L'en-tête de src/lib.ts CITE l'ancienne regex pour expliquer pourquoi elle a disparu,
   // et c'est souhaitable : on ne scanne donc que le code, pas les commentaires.
   const fautifs = [];
-  for (const [nom, src] of [["src/lib.ts", LIB], ["src/backfill.ts", BACKFILL]]) {
+  for (const [nom, src] of [
+    ["src/lib.ts", LIB],
+    ["src/backfill.ts", BACKFILL],
+  ]) {
     for (const m of sansCommentaires(src).matchAll(/\/-\(\?=g\[a-z\]:\)\//g)) {
       fautifs.push(`${nom} : ${m[0]}`);
     }
   }
-  assert.deepEqual(fautifs, [],
-    "un découpeur borné à g[a-z]: voit un chemin fédéral comme UN segment, sans erreur");
+  assert.deepEqual(
+    fautifs,
+    [],
+    "un découpeur borné à g[a-z]: voit un chemin fédéral comme UN segment, sans erreur",
+  );
 });
 
 test("aucun split('-') sur un chemin ne subsiste", () => {
   const fautifs = [];
-  for (const [nom, src] of [["src/lib.ts", LIB], ["src/backfill.ts", BACKFILL]]) {
-    for (const m of src.matchAll(/\w*(?:path|Path)\w*\.split\("-"\)/g)) fautifs.push(`${nom} : ${m[0]}`);
+  for (const [nom, src] of [
+    ["src/lib.ts", LIB],
+    ["src/backfill.ts", BACKFILL],
+  ]) {
+    for (const m of src.matchAll(/\w*(?:path|Path)\w*\.split\("-"\)/g))
+      fautifs.push(`${nom} : ${m[0]}`);
   }
-  assert.deepEqual(fautifs, [],
-    "découper un chemin sur CHAQUE tiret casse gc:l_dix-septieme et annexe-a");
+  assert.deepEqual(
+    fautifs,
+    [],
+    "découper un chemin sur CHAQUE tiret casse gc:l_dix-septieme et annexe-a",
+  );
 });
 
 test("src/lib.ts et src/backfill.ts importent le module de chemins", () => {
   assert.match(LIB, /from "\.\/paths"/, "src/lib.ts doit importer ./paths");
   // Le fil d'Ariane est CUIT dans le texte embarqué des vecteurs : un découpage faux y
   // ampute le contexte hiérarchique, et rien dans l'API ne le montre.
-  assert.ok(/from "\.\/paths"/.test(BACKFILL) || /breadcrumbChains/.test(BACKFILL),
-    "src/backfill.ts doit passer par le découpeur unifié, directement ou via lib");
+  assert.ok(
+    /from "\.\/paths"/.test(BACKFILL) || /breadcrumbChains/.test(BACKFILL),
+    "src/backfill.ts doit passer par le découpeur unifié, directement ou via lib",
+  );
 });
 
 test("src/paths.ts est un module PUR : aucun import", () => {
   // Un module de chemins qui importe D1, le catalogue ou relevance deviendrait
   // intestable par lecture de source, et c'est le seul moyen de test dont on dispose.
   const imports = [...PATHS_TS.matchAll(/^\s*import\s/gm)];
-  assert.deepEqual(imports.map((m) => m[0].trim()), []);
+  assert.deepEqual(
+    imports.map((m) => m[0].trim()),
+    [],
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -195,10 +217,15 @@ test("translateDivisionPath court-circuite EXPLICITEMENT sur un chemin fédéral
   const corps = LIB.slice(i, i + 1800);
   // Le §3.3 du SPEC dit « no-op » ; mesuré, la fonction n'est pas neutre, elle est
   // SEGMENTÉE À TORT. Le court-circuit rend le no-op VRAI au lieu de l'espérer.
-  assert.match(corps, /isFederalPath/,
-    "le court-circuit doit être explicite, pas espéré d'une segmentation juste");
-  assert.ok(PATHS_TS.includes("export function isFederalPath"),
-    "isFederalPath doit être exporté par src/paths.ts");
+  assert.match(
+    corps,
+    /isFederalPath/,
+    "le court-circuit doit être explicite, pas espéré d'une segmentation juste",
+  );
+  assert.ok(
+    PATHS_TS.includes("export function isFederalPath"),
+    "isFederalPath doit être exporté par src/paths.ts",
+  );
 });
 
 test("isFederalPath reconnaît les préfixes LIMS et refuse les Irosoft", () => {
@@ -206,8 +233,11 @@ test("isFederalPath reconnaît les préfixes LIMS et refuse les Irosoft", () => 
   // teste, pas la mise en forme du code.
   const fed = PATHS_TS.match(/const FEDERAL = \/(.+?)\/;/);
   assert.ok(fed, "src/paths.ts doit définir FEDERAL en littéral de regex");
-  assert.match(PATHS_TS, /return FEDERAL\.test\(path\);/,
-    "isFederalPath doit s'appuyer sur FEDERAL");
+  assert.match(
+    PATHS_TS,
+    /return FEDERAL\.test\(path\);/,
+    "isFederalPath doit s'appuyer sur FEDERAL",
+  );
   const r = new RegExp(fed[1]);
   for (const p of ["fh1:3", "fh1:3-fh2:5", "fs:2", "fs:2-fh1:1", "fp:0"]) {
     assert.ok(r.test(p), `${p} est un chemin fédéral`);

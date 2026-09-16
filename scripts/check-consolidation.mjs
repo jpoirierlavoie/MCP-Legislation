@@ -24,9 +24,9 @@
 // Code de sortie : 0 même en cas de dérive (la dérive est le signal attendu, pas une
 // erreur) ; ≠ 0 seulement si le détecteur lui-même n'a rien pu vérifier.
 
-import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createMcpClient } from "../eval/mcp-client.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -43,8 +43,18 @@ export const UNREACHABLE_ALERT_RATIO = 0.25;
 
 // Miroir de _FR_MONTHS (pipeline/ingest.py).
 export const FR_MONTHS = {
-  janvier: 1, "février": 2, mars: 3, avril: 4, mai: 5, juin: 6,
-  juillet: 7, "août": 8, septembre: 9, octobre: 10, novembre: 11, "décembre": 12,
+  janvier: 1,
+  février: 2,
+  mars: 3,
+  avril: 4,
+  mai: 5,
+  juin: 6,
+  juillet: 7,
+  août: 8,
+  septembre: 9,
+  octobre: 10,
+  novembre: 11,
+  décembre: 12,
 };
 
 /**
@@ -124,7 +134,8 @@ export function extractConsolidationFederale(html) {
  * DIT déjà (`consolidation_source` ou `official_source`).
  */
 async function fetchLiveDate(url, extracteur) {
-  if (!url) return { status: "injoignable", note: "URL de consolidation absente de laws.config.json" };
+  if (!url)
+    return { status: "injoignable", note: "URL de consolidation absente de laws.config.json" };
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": USER_AGENT },
@@ -141,12 +152,25 @@ async function fetchLiveDate(url, extracteur) {
 
 /** Répartit les contrôles (déjà dotés de status/live/stored) en catégories. */
 export function classify(checks) {
-  const retard = [], anomalie = [], sansStockee = [], illisible = [], injoignable = [];
+  const retard = [],
+    anomalie = [],
+    sansStockee = [],
+    illisible = [],
+    injoignable = [];
   for (const c of checks) {
-    if (c.status === "injoignable") { injoignable.push(c); continue; }
-    if (c.status === "illisible") { illisible.push(c); continue; }
+    if (c.status === "injoignable") {
+      injoignable.push(c);
+      continue;
+    }
+    if (c.status === "illisible") {
+      illisible.push(c);
+      continue;
+    }
     // status === "ok" : c.live est une date ISO. Comparaison lexicographique valide.
-    if (c.stored == null) { sansStockee.push(c); continue; }
+    if (c.stored == null) {
+      sansStockee.push(c);
+      continue;
+    }
     if (c.live > c.stored) retard.push(c);
     else if (c.live < c.stored) anomalie.push(c);
     // c.live === c.stored : à jour, rien à signaler
@@ -163,7 +187,15 @@ export function classify(checks) {
  * titre par 33 % de 502), ni la laisser passer pour un corpus vérifié. Les deux drapeaux
  * sortent séparément sur GITHUB_OUTPUT ; le workflow ne clôt que si les DEUX sont éteints.
  */
-export function computeDrift({ retard, anomalie, sansStockee, illisible, sansLangue, injoignable, total }) {
+export function computeDrift({
+  retard,
+  anomalie,
+  sansStockee,
+  illisible,
+  sansLangue,
+  injoignable,
+  total,
+}) {
   const unreachableRatio = total ? injoignable.length / total : 0;
   const unreachableAlert = unreachableRatio >= UNREACHABLE_ALERT_RATIO;
   const actionable =
@@ -229,7 +261,8 @@ export function agregeParSeau(checks, sansLangue = []) {
     // et MENTIRAIT dès qu'un blocage viendrait de Justice Canada — le dépôt a déjà corrigé
     // exactement ce défaut le 2026-07-23 (« le titre mentait »).
     bloquees: [...seaux.entries()]
-      .filter(([, s]) => s.unreachableAlert).map(([nom]) => NOM_PUBLIEUR[nom]),
+      .filter(([, s]) => s.unreachableAlert)
+      .map(([nom]) => NOM_PUBLIEUR[nom]),
   };
 }
 
@@ -244,12 +277,14 @@ async function main() {
   // contrôles fédéraux n'avaient AUCUNE URL, tombaient en `injoignable`, et — exclus
   // d'`actionable` et noyés sous le seuil global de 25 % (36/194 = 18,6 %) — laissaient le
   // job MENSUEL passer VERT pendant que 18 textes sur 97 n'étaient surveillés par rien.
-  const sources = new Map(config.laws.map((l) => [
-    l.id,
-    l.consolidation_source
-      ? { urls: l.consolidation_source, publieur: "legisquebec" }
-      : { urls: l.official_source || {}, publieur: "justice" },
-  ]));
+  const sources = new Map(
+    config.laws.map((l) => [
+      l.id,
+      l.consolidation_source
+        ? { urls: l.consolidation_source, publieur: "legisquebec" }
+        : { urls: l.official_source || {}, publieur: "justice" },
+    ]),
+  );
 
   // 1) Dates stockées, via l'endpoint MCP public (une seule session).
   const mcp = createMcpClient(MCP_URL);
@@ -257,7 +292,9 @@ async function main() {
   const res = await mcp.callTool("legislation_list_laws", {});
   const laws = res?.structuredContent?.laws;
   if (!Array.isArray(laws) || laws.length === 0) {
-    throw new Error(`legislation_list_laws n'a renvoyé aucune loi (endpoint ${MCP_URL} injoignable ?)`);
+    throw new Error(
+      `legislation_list_laws n'a renvoyé aucune loi (endpoint ${MCP_URL} injoignable ?)`,
+    );
   }
 
   // 2) Un contrôle par (loi, langue). Une loi sans langue déclarée (langs vide -> ligne
@@ -270,7 +307,9 @@ async function main() {
     const langs = Array.isArray(law.langs) ? law.langs : [];
     if (langs.length === 0) {
       sansLangue.push({
-        id: law.id, name: law.name_fr || law.name_en || law.id, publieur: src.publieur,
+        id: law.id,
+        name: law.name_fr || law.name_en || law.id,
+        publieur: src.publieur,
       });
       continue;
     }
@@ -289,7 +328,9 @@ async function main() {
   }
   // Garde : un détecteur qui n'a construit AUCUN contrôle ne doit pas rapporter « vert ».
   if (checks.length === 0 && sansLangue.length === 0) {
-    throw new Error("aucun couple (loi, langue) construit — forme de legislation_list_laws inattendue ?");
+    throw new Error(
+      "aucun couple (loi, langue) construit — forme de legislation_list_laws inattendue ?",
+    );
   }
 
   // 3) Date live pour chaque contrôle, avec l'extracteur de SON publieur.
@@ -306,15 +347,27 @@ async function main() {
 
   // Totaux, pour le rapport et le journal : union des seaux, jamais recalculés à part.
   const cat = (cle) => [...seaux.values()].flatMap((s) => s[cle]);
-  const retard = cat("retard"), anomalie = cat("anomalie"), sansStockee = cat("sansStockee");
-  const illisible = cat("illisible"), injoignable = cat("injoignable");
+  const retard = cat("retard"),
+    anomalie = cat("anomalie"),
+    sansStockee = cat("sansStockee");
+  const illisible = cat("illisible"),
+    injoignable = cat("injoignable");
   const total = checks.length;
   const unreachableRatio = total ? injoignable.length / total : 0;
 
   // 5) Rapport.
   const report = buildReport({
-    total, laws: laws.length, retard, anomalie, sansStockee, illisible, sansLangue,
-    injoignable, unreachableRatio, unreachableAlert, seaux,
+    total,
+    laws: laws.length,
+    retard,
+    anomalie,
+    sansStockee,
+    illisible,
+    sansLangue,
+    injoignable,
+    unreachableRatio,
+    unreachableAlert,
+    seaux,
   });
   writeFileSync(join(ROOT, "consolidation-report.md"), report, "utf8");
 
@@ -324,35 +377,59 @@ async function main() {
   console.log(`  sans date stockée  : ${sansStockee.length}`);
   console.log(`  page illisible     : ${illisible.length}`);
   console.log(`  loi sans langue    : ${sansLangue.length}`);
-  console.log(`  injoignables réseau: ${injoignable.length} (${(unreachableRatio * 100).toFixed(0)} %)`);
+  console.log(
+    `  injoignables réseau: ${injoignable.length} (${(unreachableRatio * 100).toFixed(0)} %)`,
+  );
   for (const [nom, s] of seaux) {
-    console.log(`  — ${NOM_PUBLIEUR[nom]} : ${s.total} couples, ` +
-      `${s.injoignable.length} injoignables (${(s.unreachableRatio * 100).toFixed(0)} %), ` +
-      `dérive ${s.drift ? "OUI" : "non"}, alerte réseau ${s.unreachableAlert ? "OUI" : "non"}`);
+    console.log(
+      `  — ${NOM_PUBLIEUR[nom]} : ${s.total} couples, ` +
+        `${s.injoignable.length} injoignables (${(s.unreachableRatio * 100).toFixed(0)} %), ` +
+        `dérive ${s.drift ? "OUI" : "non"}, alerte réseau ${s.unreachableAlert ? "OUI" : "non"}`,
+    );
   }
   console.log(`  => dérive corpus   : ${drift ? "OUI" : "non"}`);
-  console.log(`  => alerte réseau   : ${unreachableAlert ? "OUI" : "non"}` +
-    (bloquees.length ? ` (${bloquees.join(" et ")})` : ""));
-  for (const c of retard) console.log(`    RETARD ${c.id}/${c.lang} : D1 ${c.stored} < live ${c.live}`);
+  console.log(
+    `  => alerte réseau   : ${unreachableAlert ? "OUI" : "non"}` +
+      (bloquees.length ? ` (${bloquees.join(" et ")})` : ""),
+  );
+  for (const c of retard)
+    console.log(`    RETARD ${c.id}/${c.lang} : D1 ${c.stored} < live ${c.live}`);
   for (const c of illisible) console.log(`    ILLISIBLE ${c.id}/${c.lang} : ${c.note}`);
 
   if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT,
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
       `drift=${drift}\nunreachable=${unreachableAlert}\n` +
-      `sources_bloquees=${bloquees.join(" et ")}\n`);
+        `sources_bloquees=${bloquees.join(" et ")}\n`,
+    );
   }
   if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, report + "\n");
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${report}\n`);
   }
 }
 
 function buildReport(d) {
-  const { total, laws, retard, anomalie, sansStockee, illisible, sansLangue, injoignable, unreachableRatio, unreachableAlert, seaux } = d;
-  const stamp = new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const {
+    total,
+    laws,
+    retard,
+    anomalie,
+    sansStockee,
+    illisible,
+    sansLangue,
+    injoignable,
+    unreachableRatio,
+    unreachableAlert,
+    seaux,
+  } = d;
+  const stamp = `${new Date().toISOString().replace("T", " ").slice(0, 16)} UTC`;
   const pub = (c) => NOM_PUBLIEUR[c.publieur] ?? "?";
   const rows = (list) =>
     list
-      .map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.stored ?? "—"} | ${c.live ?? "—"} | ${(c.name || "").replace(/\|/g, "/")} |`)
+      .map(
+        (c) =>
+          `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.stored ?? "—"} | ${c.live ?? "—"} | ${(c.name || "").replace(/\|/g, "/")} |`,
+      )
       .join("\n");
   const dateTable = (title, list) =>
     list.length
@@ -397,7 +474,9 @@ function buildReport(d) {
     md += `\`extractConsolidationFederale\` ↔ \`extrait_consolidation_federale\` pour Justice `;
     md += `Canada). Ce n'est PAS un problème réseau.\n\n`;
     md += `| Loi | Langue | Publieur | Détail |\n|---|---|---|---|\n`;
-    md += illisible.map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.note ?? "?"} |`).join("\n") + "\n";
+    md +=
+      illisible.map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.note ?? "?"} |`).join("\n") +
+      "\n";
   }
 
   if (sansLangue.length) {
@@ -405,7 +484,9 @@ function buildReport(d) {
     md += `> ⚠️ Aucune langue servie par \`legislation_list_laws\` : ligne \`laws\` sans article ? `;
     md += `(ingestion incomplète). À vérifier.\n\n`;
     md += `| Loi | Titre |\n|---|---|\n`;
-    md += sansLangue.map((c) => `| ${c.id} | ${(c.name || "").replace(/\|/g, "/")} |`).join("\n") + "\n";
+    md +=
+      sansLangue.map((c) => `| ${c.id} | ${(c.name || "").replace(/\|/g, "/")} |`).join("\n") +
+      "\n";
   }
 
   if (injoignable.length) {
@@ -421,7 +502,9 @@ function buildReport(d) {
       md += `conditionnerait aussi toute ingestion automatisée. À vérifier hors CI.\n\n`;
     }
     md += `| Loi | Langue | Publieur | Motif |\n|---|---|---|---|\n`;
-    md += injoignable.map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.note ?? "?"} |`).join("\n") + "\n";
+    md +=
+      injoignable.map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.note ?? "?"} |`).join("\n") +
+      "\n";
   }
 
   md += `\n---\n`;

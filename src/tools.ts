@@ -1,21 +1,46 @@
 // Enregistrement des outils MCP « Lois du Québec » (legislation_*). Tous en lecture seule.
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-
-import {
-  ArticleJoined, ArticleRow, Lang, LawRow, LawSummary, StructureNode,
-  articlesByNumbers, articlesByRange, articlesInDivision, childDivisions,
-  citationOf, citeOf, consolOf, getArticle, getDivision, getLaw, getStructure,
-  boundRef, breadcrumbChains, headingInOtherLang, lawNames, lawOutlines, listLaws,
-  listSubjects, loadRelevanceData, logSearch, nearestArticles, paginate, parseCitation,
-  relatedLaws, searchText, sortKeyOf, translateDivisionPath,
-} from "./lib";
-import { WEIGHTS, rank, tokenize } from "./relevance";
-
 // SOURCE UNIQUE des titres (R10) : le titre servi par tools/list et celui affiché sur la
 // page publique sont la MÊME valeur, pas deux copies. catalogue.json porte en outre la
 // prose longue de la page. Parité outils <-> catalogue épinglée par tests/catalogue.test.mjs.
 import catalogue from "../catalogue.json";
+import {
+  type ArticleJoined,
+  type ArticleRow,
+  articlesByNumbers,
+  articlesByRange,
+  articlesInDivision,
+  boundRef,
+  breadcrumbChains,
+  childDivisions,
+  citationOf,
+  citeOf,
+  consolOf,
+  getArticle,
+  getDivision,
+  getLaw,
+  getStructure,
+  headingInOtherLang,
+  type Lang,
+  type LawRow,
+  type LawSummary,
+  lawNames,
+  lawOutlines,
+  listLaws,
+  listSubjects,
+  loadRelevanceData,
+  logSearch,
+  nearestArticles,
+  paginate,
+  parseCitation,
+  relatedLaws,
+  type StructureNode,
+  searchText,
+  sortKeyOf,
+  translateDivisionPath,
+} from "./lib";
+import { rank, tokenize, WEIGHTS } from "./relevance";
 
 const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom].title_fr;
 
@@ -29,11 +54,13 @@ const GARDE_FOU =
   "get_structure / get_division / get_article.";
 
 /** Rappel du patron en deux temps sur les outils d'extraction (§6.4). */
-const DEUX_TEMPS =
-  " Si la loi pertinente est inconnue, commencer par legislation_find_relevant.";
+const DEUX_TEMPS = " Si la loi pertinente est inconnue, commencer par legislation_find_relevant.";
 
 const READONLY = {
-  readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false,
+  readOnlyHint: true,
+  idempotentHint: true,
+  destructiveHint: false,
+  openWorldHint: false,
 } as const;
 
 const LANG = z.enum(["fr", "en"]).default("fr").describe("Langue : 'fr' (défaut) ou 'en'.");
@@ -41,46 +68,78 @@ const LANG = z.enum(["fr", "en"]).default("fr").describe("Langue : 'fr' (défaut
 // Libellés de type de division, par langue (l'anglais dit « Division » pour la « Section »).
 const KIND_LABEL: Record<Lang, Record<string, string>> = {
   fr: {
-    livre: "Livre", titre: "Titre", chapitre: "Chapitre", section: "Section",
-    "sous-section": "Sous-section", niveau6: "Niveau", niveau7: "Niveau", niveau8: "Niveau",
-    disposition: "Disposition", annexe: "Annexe",
+    livre: "Livre",
+    titre: "Titre",
+    chapitre: "Chapitre",
+    section: "Section",
+    "sous-section": "Sous-section",
+    niveau6: "Niveau",
+    niveau7: "Niveau",
+    niveau8: "Niveau",
+    disposition: "Disposition",
+    annexe: "Annexe",
   },
   en: {
-    livre: "Book", titre: "Title", chapitre: "Chapter", section: "Division",
-    "sous-section": "Subsection", niveau6: "Level", niveau7: "Level", niveau8: "Level",
-    disposition: "Provision", annexe: "Schedule",
+    livre: "Book",
+    titre: "Title",
+    chapitre: "Chapter",
+    section: "Division",
+    "sous-section": "Subsection",
+    niveau6: "Level",
+    niveau7: "Level",
+    niveau8: "Level",
+    disposition: "Provision",
+    annexe: "Schedule",
   },
 };
 
 // Libellés de legislation_related_laws, par langue. Même motif que KIND_LABEL : l'outil
 // déclarait `lang` sans l'honorer — un client qui demandait l'anglais recevait du français
 // sans la moindre étiquette, ce qui est « faux, servi, silencieux ».
-const REL_LABEL: Record<Lang, {
-  inconnue: (l: string) => string; dispo: string; aucune: string;
-  aucuneRel: (l: string) => string; deType: (t: string) => string;
-  enDirection: (d: string) => string; essayez: string;
-  horsCorpus: string; renvois: string; relations: string;
-  affichees: (n: number) => string; dontHors: (n: number) => string;
-}> = {
+const REL_LABEL: Record<
+  Lang,
+  {
+    inconnue: (l: string) => string;
+    dispo: string;
+    aucune: string;
+    aucuneRel: (l: string) => string;
+    deType: (t: string) => string;
+    enDirection: (d: string) => string;
+    essayez: string;
+    horsCorpus: string;
+    renvois: string;
+    relations: string;
+    affichees: (n: number) => string;
+    dontHors: (n: number) => string;
+  }
+> = {
   fr: {
-    inconnue: (l) => `Loi '${l}' inconnue.`, dispo: "Lois disponibles :", aucune: "aucune",
+    inconnue: (l) => `Loi '${l}' inconnue.`,
+    dispo: "Lois disponibles :",
+    aucune: "aucune",
     aucuneRel: (l) => `Aucune relation pour '${l}'`,
     deType: (t) => ` de type '${t}'`,
     enDirection: (d) => ` en direction '${d}'`,
     essayez: "Essayez sans filtre, ou legislation_list_laws pour la carte du corpus.",
     horsCorpus: "NON disponible au corpus (candidat d'acquisition)",
-    renvois: "renvoi(s)", relations: "relation(s) pour",
-    affichees: (n) => ` (${n} affichées)`, dontHors: (n) => ` — dont ${n} hors corpus`,
+    renvois: "renvoi(s)",
+    relations: "relation(s) pour",
+    affichees: (n) => ` (${n} affichées)`,
+    dontHors: (n) => ` — dont ${n} hors corpus`,
   },
   en: {
-    inconnue: (l) => `Unknown statute '${l}'.`, dispo: "Available statutes:", aucune: "none",
+    inconnue: (l) => `Unknown statute '${l}'.`,
+    dispo: "Available statutes:",
+    aucune: "none",
     aucuneRel: (l) => `No relation for '${l}'`,
     deType: (t) => ` of type '${t}'`,
     enDirection: (d) => ` in direction '${d}'`,
     essayez: "Try without a filter, or legislation_list_laws for the corpus map.",
     horsCorpus: "NOT available in the corpus (acquisition candidate)",
-    renvois: "reference(s)", relations: "relation(s) for",
-    affichees: (n) => ` (${n} shown)`, dontHors: (n) => ` — ${n} outside the corpus`,
+    renvois: "reference(s)",
+    relations: "relation(s) for",
+    affichees: (n) => ` (${n} shown)`,
+    dontHors: (n) => ` — ${n} outside the corpus`,
   },
 };
 
@@ -96,7 +155,12 @@ const ok = (text: string, structured?: Record<string, unknown>): ToolResult => (
   ...(structured ? { structuredContent: structured } : {}),
 });
 
-function divisionLabel(kind: string, number: string | null, heading: string | null, lang: Lang): string {
+function divisionLabel(
+  kind: string,
+  number: string | null,
+  heading: string | null,
+  lang: Lang,
+): string {
   const label = (KIND_LABEL[lang] ?? KIND_LABEL.fr)[kind] ?? kind;
   const parts = [label, number ?? ""].filter(Boolean).join(" ");
   return heading ? `${parts} — ${heading}` : parts || (heading ?? "");
@@ -104,7 +168,9 @@ function divisionLabel(kind: string, number: string | null, heading: string | nu
 
 function renderArticle(a: ArticleJoined, loi: LawRow, consol: string | null, lang: Lang): string {
   const cite = citationOf(loi, a.number, lang);
-  const loc = a.d_kind ? `\n${divisionLabel(a.d_kind, a.d_number, a.d_heading, lang)} [${a.division_path}]` : "";
+  const loc = a.d_kind
+    ? `\n${divisionLabel(a.d_kind, a.d_number, a.d_heading, lang)} [${a.division_path}]`
+    : "";
   const head = `${cite}${consol ? ` (à jour au ${consol})` : ""}${a.repealed ? " — ABROGÉ" : ""}${loc}`;
   const hist = a.history ? `\n\nHistorique : ${a.history}` : "";
   return `${head}\n\n${a.text}${hist}`;
@@ -123,23 +189,31 @@ export function registerTools(server: McpServer, env: Env): void {
   const OUTLINE_LAWS = ["ccq", "cpc"];
 
   const renderOutline = (nodes: import("./lib").OutlineNode[], lang: Lang): string =>
-    nodes.map((n) => {
-      const lab = (KIND_LABEL[lang] ?? KIND_LABEL.fr)[n.kind] ?? n.kind;
-      const head = `    ▸ ${lab}${n.number ? ` ${n.number}` : ""}${n.heading ? ` — ${n.heading}` : ""} [${n.path}]`;
-      const kids = n.children.map((c) => {
-        const cl = (KIND_LABEL[lang] ?? KIND_LABEL.fr)[c.kind] ?? c.kind;
-        return `      · ${cl}${c.number ? ` ${c.number}` : ""}${c.heading ? ` — ${c.heading}` : ""} [${c.path}]`;
-      });
-      return [head, ...kids].join("\n");
-    }).join("\n");
+    nodes
+      .map((n) => {
+        const lab = (KIND_LABEL[lang] ?? KIND_LABEL.fr)[n.kind] ?? n.kind;
+        const head = `    ▸ ${lab}${n.number ? ` ${n.number}` : ""}${n.heading ? ` — ${n.heading}` : ""} [${n.path}]`;
+        const kids = n.children.map((c) => {
+          const cl = (KIND_LABEL[lang] ?? KIND_LABEL.fr)[c.kind] ?? c.kind;
+          return `      · ${cl}${c.number ? ` ${c.number}` : ""}${c.heading ? ` — ${c.heading}` : ""} [${c.path}]`;
+        });
+        return [head, ...kids].join("\n");
+      })
+      .join("\n");
 
-  const renderLaw = (l: LawSummary, outline?: import("./lib").OutlineNode[], lang: Lang = "fr"): string => {
+  const renderLaw = (
+    l: LawSummary,
+    outline?: import("./lib").OutlineNode[],
+    lang: Lang = "fr",
+  ): string => {
     const attrs = [
       l.fonction ? `fonction: ${l.fonction}` : null,
       l.forum ? `forum: ${l.forum}` : null,
       l.parent_law_id ? `loi habilitante: ${l.parent_law_id}` : null,
       l.subjects.length ? `matières: ${l.subjects.join(", ")}` : null,
-    ].filter(Boolean).join(" ; ");
+    ]
+      .filter(Boolean)
+      .join(" ; ");
     const head =
       `• ${l.id} — ${l.name_fr} / ${l.name_en} (${citeOf(l)}) ; ` +
       `langues: ${l.langs.join(", ") || "aucune"} ; ` +
@@ -149,9 +223,10 @@ export function registerTools(server: McpServer, env: Env): void {
     const scope = l.scope_fr ? `\n    portée: ${l.scope_fr}` : "";
     // pour les grands codes : les divisions rattachées à une matière (les Livres du C.c.Q.)
     const divs = l.mapped_divisions.length
-      ? "\n" + l.mapped_divisions
-        .map((d) => `    ◦ ${d.heading ?? d.division_path} [${d.division_path}] — ${d.subject}`)
-        .join("\n")
+      ? "\n" +
+        l.mapped_divisions
+          .map((d) => `    ◦ ${d.heading ?? d.division_path} [${d.division_path}] — ${d.subject}`)
+          .join("\n")
       : "";
     const plan = outline?.length ? `\n${renderOutline(outline, lang)}` : "";
     return `${head}${attrs ? `\n    ${attrs}` : ""}${scope}${divs}${plan}`;
@@ -168,14 +243,26 @@ export function registerTools(server: McpServer, env: Env): void {
         "Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; " +
         "pour partir d'un problème concret, préférer legislation_find_relevant.",
       inputSchema: {
-        fonction: z.string().optional()
+        fonction: z
+          .string()
+          .optional()
           .describe("Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'."),
-        forum: z.string().optional()
+        forum: z
+          .string()
+          .optional()
           .describe("Filtrer par forum, ex. 'Tribunal administratif du logement', 'Cour d'appel'."),
-        subject: z.string().optional()
-          .describe("Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. legislation_list_subjects)."),
-        structure: z.boolean().default(true)
-          .describe("Inclure le plan profondeur 2 (Livres et leurs Titres) des grands codes (défaut true)."),
+        subject: z
+          .string()
+          .optional()
+          .describe(
+            "Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. legislation_list_subjects).",
+          ),
+        structure: z
+          .boolean()
+          .default(true)
+          .describe(
+            "Inclure le plan profondeur 2 (Livres et leurs Titres) des grands codes (défaut true).",
+          ),
         lang: LANG.optional(),
       },
       annotations: READONLY,
@@ -184,20 +271,26 @@ export function registerTools(server: McpServer, env: Env): void {
       const laws = await listLaws(db, { fonction, forum, subject }, lang as Lang, env);
       // 1.4 : le signal de repérage est souvent au Titre, pas au Livre (post-mortem :
       // Livre V C.p.c. muet, Titre IV parlant) — plan profondeur 2 des lois à Livres.
-      const outlines = structure === false
-        ? new Map<string, import("./lib").OutlineNode[]>()
-        : await lawOutlines(db, (lang ?? "fr") as Lang,
-            laws.map((l) => l.id).filter((id) => OUTLINE_LAWS.includes(id)));
+      const outlines =
+        structure === false
+          ? new Map<string, import("./lib").OutlineNode[]>()
+          : await lawOutlines(
+              db,
+              (lang ?? "fr") as Lang,
+              laws.map((l) => l.id).filter((id) => OUTLINE_LAWS.includes(id)),
+            );
       if (laws.length === 0) {
         const applied = [
           fonction ? `fonction='${fonction}'` : null,
           forum ? `forum='${forum}'` : null,
           subject ? `subject='${subject}'` : null,
-        ].filter(Boolean).join(", ");
+        ]
+          .filter(Boolean)
+          .join(", ");
         return err(
           applied
             ? `Aucune loi pour ${applied}. Vérifiez les valeurs (legislation_list_subjects pour les matières) ` +
-              "ou appelez legislation_list_laws sans filtre."
+                "ou appelez legislation_list_laws sans filtre."
             : "Aucune loi chargée dans la base.",
         );
       }
@@ -209,21 +302,29 @@ export function registerTools(server: McpServer, env: Env): void {
         filters: { fonction: fonction ?? null, forum: forum ?? null, subject: subject ?? null },
         count: laws.length,
         laws: laws.map((l) => ({
-          id: l.id, name_fr: l.name_fr, name_en: l.name_en,
+          id: l.id,
+          name_fr: l.name_fr,
+          name_en: l.name_en,
           // Clé HISTORIQUE conservée le temps de la migration : la retirer ici serait
           // une rupture de contrat pour tout consommateur du champ typé. Le passage à
           // `official_cite` seul est un commit séparé, annoncé.
-          rlrq_cite: citeOf(l), official_cite: citeOf(l),
-          langs: l.langs, consol_date_fr: l.consol_date_fr, consol_date_en: l.consol_date_en,
+          rlrq_cite: citeOf(l),
+          official_cite: citeOf(l),
+          langs: l.langs,
+          consol_date_fr: l.consol_date_fr,
+          consol_date_en: l.consol_date_en,
           article_count: l.article_count,
-          fonction: l.fonction, forum: l.forum,
+          fonction: l.fonction,
+          forum: l.forum,
           // PAS de repli sur name_fr : la portée éditoriale n'a jamais été rédigée (79 lois
           // sur 79 à NULL), et substituer le titre servait au client un champ VIDE AYANT
           // L'AIR PLEIN — sans rien qui dise que c'en était un repli. La sortie texte, elle,
           // omettait honnêtement la ligne (voir renderLaw) : les deux surfaces du même outil
           // se contredisaient. Corollaire structuré de R4, décision 001.
-          scope: l.scope_fr, parent_law_id: l.parent_law_id,
-          subjects: l.subjects, mapped_divisions: l.mapped_divisions,
+          scope: l.scope_fr,
+          parent_law_id: l.parent_law_id,
+          subjects: l.subjects,
+          mapped_divisions: l.mapped_divisions,
           structure: outlines.get(l.id) ?? null,
         })),
       });
@@ -249,27 +350,42 @@ export function registerTools(server: McpServer, env: Env): void {
       const KIND: Record<string, string> = en
         ? { "prive-ccq": "Private law (C.C.Q.)", specialise: "Specialized areas" }
         : { "prive-ccq": "Droit privé (C.c.Q.)", specialise: "Matières spécialisées" };
-      const libelle = (s: typeof subs[number]) => (en ? s.label_en || s.label_fr : s.label_fr);
-      const descr = (s: typeof subs[number]) => (en ? s.description_en || s.description_fr : s.description_fr);
+      const libelle = (s: (typeof subs)[number]) => (en ? s.label_en || s.label_fr : s.label_fr);
+      const descr = (s: (typeof subs)[number]) =>
+        en ? s.description_en || s.description_fr : s.description_fr;
       const groups = new Map<string, typeof subs>();
       for (const s of subs) {
         const g = groups.get(s.kind);
-        if (g) g.push(s); else groups.set(s.kind, [s]);
+        if (g) g.push(s);
+        else groups.set(s.kind, [s]);
       }
-      const body = [...groups.entries()].map(([kind, items]) =>
-        `\n${KIND[kind] ?? kind} :\n` + items.map((s) =>
-          `  • ${s.id} — ${libelle(s)} (${s.laws_count} ${en ? "law(s)" : "loi(s)"}` +
-          `${s.divisions_count ? `, ${s.divisions_count} division(s)` : ""})` +
-          `${descr(s) ? `\n      ${descr(s)}` : ""}`,
-        ).join("\n"),
-      ).join("\n");
+      const body = [...groups.entries()]
+        .map(
+          ([kind, items]) =>
+            `\n${KIND[kind] ?? kind} :\n` +
+            items
+              .map(
+                (s) =>
+                  `  • ${s.id} — ${libelle(s)} (${s.laws_count} ${en ? "law(s)" : "loi(s)"}` +
+                  `${s.divisions_count ? `, ${s.divisions_count} division(s)` : ""})` +
+                  `${descr(s) ? `\n      ${descr(s)}` : ""}`,
+              )
+              .join("\n"),
+        )
+        .join("\n");
       return ok(`${subs.length} ${en ? "subject areas" : "matières"} :${body}`, {
         count: subs.length,
         subjects: subs.map((s) => ({
-          id: s.id, label_fr: s.label_fr, label_en: s.label_en, kind: s.kind,
-          label: libelle(s), description: descr(s),
-          description_fr: s.description_fr, description_en: s.description_en,
-          laws_count: s.laws_count, divisions_count: s.divisions_count,
+          id: s.id,
+          label_fr: s.label_fr,
+          label_en: s.label_en,
+          kind: s.kind,
+          label: libelle(s),
+          description: descr(s),
+          description_fr: s.description_fr,
+          description_en: s.description_en,
+          laws_count: s.laws_count,
+          divisions_count: s.divisions_count,
         })),
       });
     },
@@ -286,11 +402,23 @@ export function registerTools(server: McpServer, env: Env): void {
         "Signale les cibles NON disponibles au corpus. Ex. : law='cpc' pour voir ses règlements de cour.",
       inputSchema: {
         law: z.string().describe("Identifiant de la loi, ex. 'cpc'."),
-        rel_type: z.string().optional()
-          .describe("Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe'."),
-        direction: z.enum(["out", "in", "both"]).default("both")
+        rel_type: z
+          .string()
+          .optional()
+          .describe(
+            "Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe'.",
+          ),
+        direction: z
+          .enum(["out", "in", "both"])
+          .default("both")
           .describe("'out' : depuis la loi ; 'in' : vers la loi ; 'both' (défaut)."),
-        limit: z.number().int().min(1).max(200).optional().describe("Max d'arêtes (défaut 50, max 200)."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Max d'arêtes (défaut 50, max 200)."),
         lang: LANG.optional(),
       },
       annotations: READONLY,
@@ -305,8 +433,8 @@ export function registerTools(server: McpServer, env: Env): void {
       if (all.length === 0) {
         return err(
           `${L.aucuneRel(law)}` +
-          `${rel_type ? L.deType(rel_type) : ""}` +
-          `${direction !== "both" ? L.enDirection(direction) : ""}. ${L.essayez}`,
+            `${rel_type ? L.deType(rel_type) : ""}` +
+            `${direction !== "both" ? L.enDirection(direction) : ""}. ${L.essayez}`,
         );
       }
       const page = paginate(limit, 0, 50, 200);
@@ -314,26 +442,41 @@ export function registerTools(server: McpServer, env: Env): void {
       const lines = edges.map((e) => {
         const arrow = e.direction === "out" ? "→" : "←";
         const dispo = e.in_corpus
-          ? (e.other_name ? ` — ${e.other_name}` : "")
+          ? e.other_name
+            ? ` — ${e.other_name}`
+            : ""
           : ` — ${L.horsCorpus}`;
         const w = e.rel_type === "renvoie-a" ? ` ; ${e.weight} ${L.renvois}` : "";
         // Les notes curées n'existent QU'EN FRANÇAIS (law_relations n'a pas de colonne
         // note_en) : sous lang='en' on les rend marquées [fr] plutôt que de laisser croire
         // à une traduction. Même motif que l'intitulé emprunté de get_division.
         const note = e.note ? `${e.note}${lang === "en" ? " [fr]" : ""}` : null;
-        return `  ${arrow} ${e.other_id} [${e.rel_type}, ${e.source}${w}]${dispo}` +
-          `${note ? `\n      ${note}` : ""}`;
+        return (
+          `  ${arrow} ${e.other_id} [${e.rel_type}, ${e.source}${w}]${dispo}` +
+          `${note ? `\n      ${note}` : ""}`
+        );
       });
       const hors = edges.filter((e) => !e.in_corpus).length;
-      const head = `${all.length} ${L.relations} '${law}'` +
+      const head =
+        `${all.length} ${L.relations} '${law}'` +
         `${edges.length < all.length ? L.affichees(edges.length) : ""}` +
         `${hors ? L.dontHors(hors) : ""} :`;
       return ok(`${head}\n${lines.join("\n")}`, {
-        law, lang, rel_type: rel_type ?? null, direction, total: all.length, count: edges.length,
+        law,
+        lang,
+        rel_type: rel_type ?? null,
+        direction,
+        total: all.length,
+        count: edges.length,
         relations: edges.map((e) => ({
-          direction: e.direction, other_id: e.other_id, other_name: e.other_name,
-          rel_type: e.rel_type, source: e.source, weight: e.weight,
-          in_corpus: !!e.in_corpus, note: e.note,
+          direction: e.direction,
+          other_id: e.other_id,
+          other_name: e.other_name,
+          rel_type: e.rel_type,
+          source: e.source,
+          weight: e.weight,
+          in_corpus: !!e.in_corpus,
+          note: e.note,
           // La langue de la note est DANS la charge utile (corollaire structuré de R4) :
           // un client qui jette la prose garde l'information que la note n'est pas traduite.
           note_lang: e.note ? "fr" : null,
@@ -347,13 +490,22 @@ export function registerTools(server: McpServer, env: Env): void {
     "legislation_find_relevant",
     {
       title: titre("legislation_find_relevant"),
-      description: GARDE_FOU +
+      description:
+        GARDE_FOU +
         " Classement déterministe sur la matière (taxonomie), les intitulés de divisions, " +
         "les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', " +
         "'congédiement', 'bail commercial'. Enchaîner ensuite avec get_structure / get_division.",
       inputSchema: {
-        query: z.string().describe("Thème ou description libre du problème, ex. « bail de logement »."),
-        limit: z.number().int().min(1).max(50).optional().describe("Nombre de candidats (défaut 8, max 50)."),
+        query: z
+          .string()
+          .describe("Thème ou description libre du problème, ex. « bail de logement »."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe("Nombre de candidats (défaut 8, max 50)."),
         lang: LANG,
       },
       annotations: READONLY,
@@ -364,18 +516,21 @@ export function registerTools(server: McpServer, env: Env): void {
       if (tokens.length === 0) {
         return err(
           `Aucun terme exploitable dans « ${query} ». Reformulez avec des mots porteurs ` +
-          "(ex. « bail de logement », « congédiement »), ou consultez legislation_list_subjects.",
+            "(ex. « bail de logement », « congédiement »), ou consultez legislation_list_subjects.",
         );
       }
       const data = await loadRelevanceData(db, tokens, lang as Lang, env);
       const cands = rank({ tokens, ...data }, page.limit);
       await logSearch(db, {
-        tool: "find_relevant", query, lang, result_count: cands.length,
+        tool: "find_relevant",
+        query,
+        lang,
+        result_count: cands.length,
       });
       if (cands.length === 0) {
         return err(
           `Aucun rapprochement pour « ${query} » (termes retenus : ${tokens.join(", ")}). ` +
-          "Voir les domaines avec legislation_list_subjects, ou chercher dans le texte avec legislation_search_text.",
+            "Voir les domaines avec legislation_list_subjects, ou chercher dans le texte avec legislation_search_text.",
         );
       }
       const lines = cands.map((c, i) => {
@@ -386,9 +541,13 @@ export function registerTools(server: McpServer, env: Env): void {
       });
       return ok(
         `${cands.length} piste(s) pour « ${query} » (termes : ${tokens.join(", ")}) :\n` +
-        `${lines.join("\n")}\n\n${GARDE_FOU}`,
+          `${lines.join("\n")}\n\n${GARDE_FOU}`,
         {
-          query, lang, tokens, weights: WEIGHTS, count: cands.length,
+          query,
+          lang,
+          tokens,
+          weights: WEIGHTS,
+          count: cands.length,
           avertissement: GARDE_FOU,
           candidates: cands.map((c) => ({
             law: c.law_id,
@@ -410,7 +569,8 @@ export function registerTools(server: McpServer, env: Env): void {
       description:
         "Retourne le texte officiel verbatim d'un article, avec citation, chemin hiérarchique, " +
         "date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions " +
-        "se demandent avec article='préliminaire' ou 'finales'." + DEUX_TEMPS,
+        "se demandent avec article='préliminaire' ou 'finales'." +
+        DEUX_TEMPS,
       inputSchema: {
         law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
         article: z.coerce.string().describe("Numéro d'article, ex. '1457', '2926.1', '132.0.1'."),
@@ -429,16 +589,22 @@ export function registerTools(server: McpServer, env: Env): void {
         const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
         return err(
           `Article ${article} introuvable dans ${law} (${lang}). ` +
-          `Vérifiez le numéro et la langue. Articles proches : ${near.join(", ") || "aucun"}.`,
+            `Vérifiez le numéro et la langue. Articles proches : ${near.join(", ") || "aucun"}.`,
         );
       }
       const consol = consolOf(lawRow, lang as Lang);
       return ok(renderArticle(row, lawRow, consol, lang as Lang), {
-        law, number: row.number, lang,
+        law,
+        number: row.number,
+        lang,
         citation: citationOf(lawRow, row.number, lang as Lang),
         division_path: row.division_path,
-        division: row.d_kind ? { kind: row.d_kind, number: row.d_number, heading: row.d_heading } : null,
-        consolidation: consol, history: row.history, repealed: !!row.repealed,
+        division: row.d_kind
+          ? { kind: row.d_kind, number: row.d_number, heading: row.d_heading }
+          : null,
+        consolidation: consol,
+        history: row.history,
+        repealed: !!row.repealed,
         text: row.text,
       });
     },
@@ -451,14 +617,24 @@ export function registerTools(server: McpServer, env: Env): void {
       title: titre("legislation_get_articles"),
       description:
         "Retourne plusieurs articles : soit une plage (from..to), soit une liste explicite (numbers). " +
-        "Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']." + DEUX_TEMPS,
+        "Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']." +
+        DEUX_TEMPS,
       inputSchema: {
         law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
         from: z.coerce.string().optional().describe("Borne basse d'une plage, ex. '1457'."),
         to: z.coerce.string().optional().describe("Borne haute d'une plage, ex. '1460'."),
-        numbers: z.array(z.coerce.string()).optional().describe("Liste de numéros, ex. ['1457','1590']."),
+        numbers: z
+          .array(z.coerce.string())
+          .optional()
+          .describe("Liste de numéros, ex. ['1457','1590']."),
         lang: LANG,
-        limit: z.number().int().min(1).max(200).optional().describe("Max d'articles (défaut 50, max 200)."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Max d'articles (défaut 50, max 200)."),
         offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
       },
       annotations: READONLY,
@@ -466,7 +642,7 @@ export function registerTools(server: McpServer, env: Env): void {
     async ({ law, from, to, numbers, lang, limit, offset }) => {
       if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       const useRange = from != null && to != null;
-      if (!useRange && !(numbers && numbers.length)) {
+      if (!useRange && !numbers?.length) {
         return err("Fournir soit (from ET to), soit numbers[].");
       }
       const page = paginate(limit, offset);
@@ -480,15 +656,22 @@ export function registerTools(server: McpServer, env: Env): void {
           boundRef(db, law, lang as Lang, to!),
         ]);
         const r = await articlesByRange(db, law, lang as Lang, b1, b2, page);
-        rows = r.rows; total = r.total; resolution = r.resolution;
+        rows = r.rows;
+        total = r.total;
+        resolution = r.resolution;
       } else {
         rows = await articlesByNumbers(db, law, lang as Lang, numbers!);
         total = rows.length;
       }
       if (rows.length === 0) return err("Aucun article dans cette plage/liste.");
-      const body = rows.map((a) => `— art. ${a.number}${a.repealed ? " (abrogé)" : ""} —\n${a.text}`).join("\n\n");
+      const body = rows
+        .map((a) => `— art. ${a.number}${a.repealed ? " (abrogé)" : ""} —\n${a.text}`)
+        .join("\n\n");
       return ok(body, {
-        law, lang, count: rows.length, total,
+        law,
+        lang,
+        count: rows.length,
+        total,
         pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
         // Comment la plage a été bornée. Champ TOUJOURS présent (null hors mode plage) :
         // « absent » et « borné par le texte » ne doivent pas être confondus.
@@ -499,8 +682,11 @@ export function registerTools(server: McpServer, env: Env): void {
         //                et peut donc sur-inclure.
         range_resolution: resolution,
         articles: rows.map((a) => ({
-          number: a.number, text: a.text, history: a.history,
-          division_path: a.division_path, repealed: !!a.repealed,
+          number: a.number,
+          text: a.text,
+          history: a.history,
+          division_path: a.division_path,
+          repealed: !!a.repealed,
         })),
       });
     },
@@ -515,12 +701,22 @@ export function registerTools(server: McpServer, env: Env): void {
         "Arbre hiérarchique des divisions (Livre → Titre → Chapitre → Section → Sous-section), " +
         "SANS texte d'article — pour explorer avant d'extraire. Chaque nœud donne kind, number, " +
         "heading et son 'path' (à passer à legislation_get_division). Utiliser root_path pour un sous-arbre " +
-        "et depth pour limiter la profondeur (défaut 2 : livres et titres)." + DEUX_TEMPS,
+        "et depth pour limiter la profondeur (défaut 2 : livres et titres)." +
+        DEUX_TEMPS,
       inputSchema: {
         law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
         lang: LANG,
-        root_path: z.string().optional().describe("Restreindre à ce sous-arbre (path d'une division)."),
-        depth: z.number().int().min(1).max(9).optional().describe("Profondeur affichée (défaut 2)."),
+        root_path: z
+          .string()
+          .optional()
+          .describe("Restreindre à ce sous-arbre (path d'une division)."),
+        depth: z
+          .number()
+          .int()
+          .min(1)
+          .max(9)
+          .optional()
+          .describe("Profondeur affichée (défaut 2)."),
       },
       annotations: READONLY,
     },
@@ -534,13 +730,17 @@ export function registerTools(server: McpServer, env: Env): void {
         const t = await translateDivisionPath(db, law, root_path, lang as Lang);
         if (t) tree = await getStructure(db, law, lang as Lang, t.path, d);
       }
-      if (tree.length === 0) return err(`Aucune division${root_path ? ` sous '${root_path}'` : ""}.`);
+      if (tree.length === 0)
+        return err(`Aucune division${root_path ? ` sous '${root_path}'` : ""}.`);
       const render = (nodes: StructureNode[], level: number): string =>
-        nodes.map((n) =>
-          `${"  ".repeat(level)}${divisionLabel(n.kind, n.number, n.heading, lang as Lang)}` +
-          `${n.repealed ? " (abrogé)" : ""}  [${n.path}]` +
-          (n.children.length ? "\n" + render(n.children, level + 1) : ""),
-        ).join("\n");
+        nodes
+          .map(
+            (n) =>
+              `${"  ".repeat(level)}${divisionLabel(n.kind, n.number, n.heading, lang as Lang)}` +
+              `${n.repealed ? " (abrogé)" : ""}  [${n.path}]` +
+              (n.children.length ? `\n${render(n.children, level + 1)}` : ""),
+          )
+          .join("\n");
       return ok(render(tree, 0), { law, lang, root_path: root_path ?? null, depth: d, tree });
     },
   );
@@ -554,14 +754,27 @@ export function registerTools(server: McpServer, env: Env): void {
         "Retourne une division (Livre/Titre/Chapitre/Section/…) : son intitulé, ses sous-divisions " +
         "immédiates, et les articles qu'elle contient (tout le sous-arbre, paginés). Identifier par " +
         "path (recommandé, via legislation_get_structure) ou division_id. include_text=false pour n'avoir " +
-        "que les numéros d'articles." + DEUX_TEMPS,
+        "que les numéros d'articles." +
+        DEUX_TEMPS,
       inputSchema: {
         law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
-        path: z.string().optional().describe("Chemin de la division (ex. 'ga:l_cinquieme-gb:l_premier')."),
+        path: z
+          .string()
+          .optional()
+          .describe("Chemin de la division (ex. 'ga:l_cinquieme-gb:l_premier')."),
         division_id: z.number().int().optional().describe("Identifiant numérique de la division."),
         lang: LANG,
-        include_text: z.boolean().default(true).describe("Inclure le texte des articles (défaut true)."),
-        limit: z.number().int().min(1).max(200).optional().describe("Max d'articles (défaut 50, max 200)."),
+        include_text: z
+          .boolean()
+          .default(true)
+          .describe("Inclure le texte des articles (défaut true)."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Max d'articles (défaut 50, max 200)."),
         offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
       },
       annotations: READONLY,
@@ -585,27 +798,53 @@ export function registerTools(server: McpServer, env: Env): void {
       }
       const kids = await childDivisions(db, div.id);
       const page = paginate(limit, offset);
-      const { rows, total } = await articlesInDivision(db, law, lang as Lang, div.path, page, include_text);
+      const { rows, total } = await articlesInDivision(
+        db,
+        law,
+        lang as Lang,
+        div.path,
+        page,
+        include_text,
+      );
       const header = `${divisionLabel(div.kind, div.number, headingShown, lang as Lang)}${div.repealed ? " (abrogé)" : ""} [${div.path}]`;
       const subs = kids.length
-        ? `\n\nSous-divisions :\n` + kids.map((k) => `  • ${divisionLabel(k.kind, k.number, k.heading, lang as Lang)} [${k.path}]`).join("\n")
+        ? `\n\nSous-divisions :\n` +
+          kids
+            .map(
+              (k) => `  • ${divisionLabel(k.kind, k.number, k.heading, lang as Lang)} [${k.path}]`,
+            )
+            .join("\n")
         : "";
       const arts = rows.length
         ? `\n\nArticles (${page.offset + 1}–${page.offset + rows.length} / ${total}) :\n` +
-          rows.map((a) => include_text ? `\n— art. ${a.number} —\n${a.text}` : `art. ${a.number}`).join(include_text ? "\n" : ", ")
+          rows
+            .map((a) => (include_text ? `\n— art. ${a.number} —\n${a.text}` : `art. ${a.number}`))
+            .join(include_text ? "\n" : ", ")
         : "\n\n(aucun article)";
       return ok(`${header}${subs}${arts}`, {
-        law, lang,
+        law,
+        lang,
         division: {
-          division_id: div.id, path: div.path, kind: div.kind, number: div.number,
-          heading: div.heading, history: div.history, repealed: !!div.repealed,
+          division_id: div.id,
+          path: div.path,
+          kind: div.kind,
+          number: div.number,
+          heading: div.heading,
+          history: div.history,
+          repealed: !!div.repealed,
         },
         children: kids.map((k) => ({
-          division_id: k.id, path: k.path, kind: k.kind, number: k.number,
-          heading: k.heading, repealed: !!k.repealed,
+          division_id: k.id,
+          path: k.path,
+          kind: k.kind,
+          number: k.number,
+          heading: k.heading,
+          repealed: !!k.repealed,
         })),
         articles: rows.map((a) => ({
-          number: a.number, division_path: a.division_path, repealed: !!a.repealed,
+          number: a.number,
+          division_path: a.division_path,
+          repealed: !!a.repealed,
           ...(include_text ? { text: a.text, history: a.history } : {}),
         })),
         pagination: { limit: page.limit, offset: page.offset, total },
@@ -621,7 +860,8 @@ export function registerTools(server: McpServer, env: Env): void {
       description:
         "Recherche plein texte (FTS5) dans le texte des articles. Retourne les correspondances " +
         "classées par pertinence avec un extrait surligné. Ex. : query='prescription action', " +
-        "law='ccq' (défaut : toutes les lois)." + DEUX_TEMPS +
+        "law='ccq' (défaut : toutes les lois)." +
+        DEUX_TEMPS +
         // +1 phrase (plan v2, 1.1 — delta consigné au rapport de phase)
         " Omettre `law` sauf raison précise de restreindre ; une recherche restreinte sans " +
         "résultat est automatiquement élargie au corpus.",
@@ -629,7 +869,13 @@ export function registerTools(server: McpServer, env: Env): void {
         query: z.string().describe("Termes à rechercher, ex. 'responsabilité préjudice'."),
         law: z.string().optional().describe("Restreindre à une loi (défaut : toutes)."),
         lang: LANG,
-        limit: z.number().int().min(1).max(50).optional().describe("Max de résultats (défaut 10, max 50)."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe("Max de résultats (défaut 10, max 50)."),
         offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
       },
       annotations: READONLY,
@@ -668,17 +914,27 @@ export function registerTools(server: McpServer, env: Env): void {
         await logSearch(db, { tool: "search_text", query, law, lang, result_count: 0 });
         return err(`Recherche invalide. Essayez des mots simples. (${(e as Error).message})`);
       }
-      const fallbackLog = res.fallback === null
-        ? null
-        : typeof res.fallback === "object" ? `loo:${res.fallback.loo}` : res.fallback;
+      const fallbackLog =
+        res.fallback === null
+          ? null
+          : typeof res.fallback === "object"
+            ? `loo:${res.fallback.loo}`
+            : res.fallback;
       await logSearch(db, {
-        tool: "search_text", query, law, lang, result_count: res.hits.length,
+        tool: "search_text",
+        query,
+        law,
+        lang,
+        result_count: res.hits.length,
         fallback: fallbackLog,
       });
       if (res.hits.length === 0) return err(`Aucun résultat pour « ${query} » (${lang}).`);
 
       // 1.3 : fils d'Ariane (résultats auto-explicatifs) + regroupement par loi.
-      const semDivRefs = (res.divisions ?? []).map((d) => ({ law_id: d.law_id, division_path: d.path }));
+      const semDivRefs = (res.divisions ?? []).map((d) => ({
+        law_id: d.law_id,
+        division_path: d.path,
+      }));
       const allRefs = [...res.hits, ...(res.elsewhere?.hits ?? []), ...semDivRefs];
       const chains = await breadcrumbChains(db, lang as Lang, allRefs);
       const names = await lawNames(db, [...new Set(allRefs.map((h) => h.law_id))]);
@@ -689,17 +945,21 @@ export function registerTools(server: McpServer, env: Env): void {
         // les autres produiraient des « Livre, Titre, » vides.
         const kinds = chain
           .filter((n) => n.number)
-          .map((n) => `${(KIND_LABEL[lang as Lang] ?? KIND_LABEL.fr)[n.kind] ?? n.kind} ${n.number}`)
+          .map(
+            (n) => `${(KIND_LABEL[lang as Lang] ?? KIND_LABEL.fr)[n.kind] ?? n.kind} ${n.number}`,
+          )
           .join(", ");
         const titled = [...chain].reverse().find((n) => n.heading);
         if (!kinds) return titled?.heading ?? "";
         return `${kinds}${titled ? ` : ${titled.heading}` : ""}`;
       };
-      const line = (h: typeof res.hits[number]) => {
+      const line = (h: (typeof res.hits)[number]) => {
         const crumb = crumbOf(h);
-        return `${ABBREV[h.law_id] ?? h.law_id}${crumb ? ` — ${crumb}` : ""} › art. ${h.number}` +
+        return (
+          `${ABBREV[h.law_id] ?? h.law_id}${crumb ? ` — ${crumb}` : ""} › art. ${h.number}` +
           `${h.semantic ? " (repérage sémantique)" : ""}  [${h.division_path}]\n` +
-          `   « ${h.snippet} »`;
+          `   « ${h.snippet} »`
+        );
       };
       // corps : groupé par loi dès que les résultats en couvrent plusieurs (max 6 par loi)
       const lawsInHits = [...new Set(res.hits.map((h) => h.law_id))];
@@ -708,15 +968,20 @@ export function registerTools(server: McpServer, env: Env): void {
         const byLaw = new Map<string, typeof res.hits>();
         for (const h of res.hits) {
           const arr = byLaw.get(h.law_id);
-          if (arr) arr.push(h); else byLaw.set(h.law_id, [h]);
+          if (arr) arr.push(h);
+          else byLaw.set(h.law_id, [h]);
         }
-        body = [...byLaw.entries()].map(([id, hs]) => {
-          const nm = names.get(id);
-          const title = nm ? (lang === "en" ? nm.name_en : nm.name_fr) : id;
-          const shown = hs.slice(0, 6);
-          return `— ${title} (${shown.length}${hs.length > shown.length ? ` / ${hs.length}` : ""} affiché(s)) —\n` +
-            shown.map(line).join("\n");
-        }).join("\n\n");
+        body = [...byLaw.entries()]
+          .map(([id, hs]) => {
+            const nm = names.get(id);
+            const title = nm ? (lang === "en" ? nm.name_en : nm.name_fr) : id;
+            const shown = hs.slice(0, 6);
+            return (
+              `— ${title} (${shown.length}${hs.length > shown.length ? ` / ${hs.length}` : ""} affiché(s)) —\n` +
+              shown.map(line).join("\n")
+            );
+          })
+          .join("\n\n");
       } else {
         body = res.hits.map(line).join("\n");
       }
@@ -740,14 +1005,19 @@ export function registerTools(server: McpServer, env: Env): void {
         : "";
       const structures = res.divisions?.length
         ? "\n\nStructures pertinentes (repérage sémantique) :\n" +
-          res.divisions.map((d) => {
-            const crumb = crumbOf({ law_id: d.law_id, division_path: d.path });
-            return `  • ${ABBREV[d.law_id] ?? d.law_id} — ${crumb || d.heading || d.path}  [${d.path}]`;
-          }).join("\n")
+          res.divisions
+            .map((d) => {
+              const crumb = crumbOf({ law_id: d.law_id, division_path: d.path });
+              return `  • ${ABBREV[d.law_id] ?? d.law_id} — ${crumb || d.heading || d.path}  [${d.path}]`;
+            })
+            .join("\n")
         : "";
-      const enrich = (h: typeof res.hits[number]) => ({ ...h, breadcrumb: crumbOf(h) });
+      const enrich = (h: (typeof res.hits)[number]) => ({ ...h, breadcrumb: crumbOf(h) });
       return ok(`${header}\n${body}${structures}${elsewhere}`, {
-        query, lang, law: law ?? null, total: res.total,
+        query,
+        lang,
+        law: law ?? null,
+        total: res.total,
         fallback: fallbackLog,
         elsewhere: res.elsewhere
           ? { total: res.elsewhere.total, results: res.elsewhere.hits.map(enrich) }
@@ -767,7 +1037,8 @@ export function registerTools(server: McpServer, env: Env): void {
       description:
         "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») " +
         "vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, " +
-        "ainsi que les abréviations C.c.Q. et C.p.c." + DEUX_TEMPS,
+        "ainsi que les abréviations C.c.Q. et C.p.c." +
+        DEUX_TEMPS,
       inputSchema: {
         citation: z.string().describe("Citation libre, ex. « article 1457 C.c.Q. »."),
         lang: LANG,
@@ -782,12 +1053,12 @@ export function registerTools(server: McpServer, env: Env): void {
         return err(
           parsed.chapitre_inconnu
             ? `Le chapitre « ${parsed.chapitre_inconnu} » n'est pas au corpus — aucune loi n'a été ` +
-              "résolue (il n'est PAS rabattu sur un chapitre voisin). " +
-              `Voir les ${all.length} textes disponibles avec legislation_list_laws. ` +
-              `Article détecté : ${parsed.article ?? "aucun"}.`
+                "résolue (il n'est PAS rabattu sur un chapitre voisin). " +
+                `Voir les ${all.length} textes disponibles avec legislation_list_laws. ` +
+                `Article détecté : ${parsed.article ?? "aucun"}.`
             : `Loi non reconnue dans « ${citation} ». Précisez le chapitre RLRQ (ex. « RLRQ, c. T-16 ») ` +
-              "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez legislation_get_article avec law=… " +
-              `(voir legislation_list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
+                "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez legislation_get_article avec law=… " +
+                `(voir legislation_list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
         );
       }
       const law = parsed.law;
@@ -795,7 +1066,9 @@ export function registerTools(server: McpServer, env: Env): void {
       const row = await getArticle(db, law, lang as Lang, article);
       if (!row) {
         const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
-        return err(`Référence « ${citation} » non résolue (loi ${law}, art. ${article}). Proches : ${near.join(", ")}.`);
+        return err(
+          `Référence « ${citation} » non résolue (loi ${law}, art. ${article}). Proches : ${near.join(", ")}.`,
+        );
       }
       const lawRow = await getLaw(db, law, env);
       // `parseCitation` n'a reconnu `law` que parmi les lois LUES en base, donc lawRow
@@ -805,8 +1078,11 @@ export function registerTools(server: McpServer, env: Env): void {
       return ok(renderArticle(row, lawRow, consol, lang as Lang), {
         resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
         citation: citationOf(lawRow, row.number, lang as Lang),
-        division_path: row.division_path, consolidation: consol,
-        history: row.history, repealed: !!row.repealed, text: row.text,
+        division_path: row.division_path,
+        consolidation: consol,
+        history: row.history,
+        repealed: !!row.repealed,
+        text: row.text,
       });
     },
   );

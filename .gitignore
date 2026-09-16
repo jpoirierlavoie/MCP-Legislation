@@ -36,3 +36,10 @@ scripts/.backfill-progress.json
 # Meme raison que docs/reconnaissance-courante.md : le document de reference versionne
 # est docs/phase0-structure-lims.md, redige a la main a partir de ce vidage.
 docs/reconnaissance-lims-courante.md
+
+# Configuration de test, ENGENDRÉE avant chaque exécution par
+# `scripts/wrangler-test-config.mjs` (script `pretest`). Dérivée de wrangler.jsonc, moins
+# les liaisons `ai` et `vectorize`, qui n'ont pas d'émulation locale et feraient réclamer
+# un CLOUDFLARE_API_TOKEN. Non versionnée à dessein : une copie versionnée pourrait
+# diverger du vrai fichier, une copie engendrée ne le peut pas.
+wrangler.test.jsonc

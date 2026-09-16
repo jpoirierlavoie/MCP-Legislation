@@ -69,7 +69,7 @@ export const DIVISION_MATCH_MAX = 2;
  * TOUJOURS ses topK, pertinents ou non : sans plancher, « zzz qqq » recevait les plus
  * proches voisins d'un embedding de charabia, présentés comme des résultats.
  */
-export const SEMANTIC_MIN_SCORE = 0.40;
+export const SEMANTIC_MIN_SCORE = 0.4;
 // Calibré par MESURE en production (2026-07-21) : requête réelle EN->FR (cas 19)
 // cpc 490 @ 0,525 ; requête FR vague 0,47-0,49 ; charabia « zzz qqq » max 0,303.
 // 0,40 sépare avec marge des deux côtés.
@@ -85,14 +85,80 @@ export const MAX_TOKENS = 8;
  * « québec » n'y apprennent rien).
  */
 const STOPWORDS = new Set([
-  "les", "des", "une", "un", "le", "la", "de", "du", "au", "aux", "et", "ou", "en",
-  "dans", "pour", "par", "sur", "avec", "sans", "sous", "chez", "vers", "entre",
-  "que", "qui", "quoi", "dont", "mais", "donc", "car", "ne", "pas", "plus", "moins",
-  "est", "sont", "etre", "ete", "avoir", "fait", "faire", "tout", "tous", "toute", "toutes",
-  "cette", "ces", "ceux", "celle", "son", "sa", "ses", "leur", "leurs", "mon", "ma", "mes",
-  "quel", "quelle", "quels", "quelles", "comment", "pourquoi", "quand",
+  "les",
+  "des",
+  "une",
+  "un",
+  "le",
+  "la",
+  "de",
+  "du",
+  "au",
+  "aux",
+  "et",
+  "ou",
+  "en",
+  "dans",
+  "pour",
+  "par",
+  "sur",
+  "avec",
+  "sans",
+  "sous",
+  "chez",
+  "vers",
+  "entre",
+  "que",
+  "qui",
+  "quoi",
+  "dont",
+  "mais",
+  "donc",
+  "car",
+  "ne",
+  "pas",
+  "plus",
+  "moins",
+  "est",
+  "sont",
+  "etre",
+  "ete",
+  "avoir",
+  "fait",
+  "faire",
+  "tout",
+  "tous",
+  "toute",
+  "toutes",
+  "cette",
+  "ces",
+  "ceux",
+  "celle",
+  "son",
+  "sa",
+  "ses",
+  "leur",
+  "leurs",
+  "mon",
+  "ma",
+  "mes",
+  "quel",
+  "quelle",
+  "quels",
+  "quelles",
+  "comment",
+  "pourquoi",
+  "quand",
   // trop génériques dans ce corpus précis
-  "loi", "lois", "article", "articles", "art", "code", "quebec", "droit", "droits",
+  "loi",
+  "lois",
+  "article",
+  "articles",
+  "art",
+  "code",
+  "quebec",
+  "droit",
+  "droits",
 ]);
 
 /** Normalisation de référence — miroir exact de pipeline/norm.py (§2). */
@@ -222,8 +288,14 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
     why: string;
   }
   const hits: Hit[] = [];
-  const hit = (token: string, lawId: string, path: string, heading: string | null,
-               weight: number, why: string) => hits.push({ token, lawId, path, heading, weight, why });
+  const hit = (
+    token: string,
+    lawId: string,
+    path: string,
+    heading: string | null,
+    weight: number,
+    why: string,
+  ) => hits.push({ token, lawId, path, heading, weight, why });
 
   // S1 — sujets. Surface d'appariement : libellé + id + description. La description est
   // l'endroit où le juriste dépose le vocabulaire du domaine (taxonomy.json, §3.1) : c'est
@@ -242,8 +314,14 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
         const cible = m.division_path
           ? input.mappedHeadings.get(keyOf(m.law_id, m.division_path))
           : undefined;
-        hit(t, m.law_id, cible?.path ?? m.division_path, cible?.heading ?? null,
-          WEIGHTS.S1_SUBJECT, `matière : ${s.label_fr}`);
+        hit(
+          t,
+          m.law_id,
+          cible?.path ?? m.division_path,
+          cible?.heading ?? null,
+          WEIGHTS.S1_SUBJECT,
+          `matière : ${s.label_fr}`,
+        );
       }
     }
   }
@@ -252,8 +330,14 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
   for (const d of input.divisions) {
     for (const t of tokens) {
       if (!wordMatch(d.heading_norm ?? "", t)) continue;
-      hit(t, d.law_id, d.path, d.heading, WEIGHTS.S2_DIVISION_HEADING,
-        `intitulé : ${d.heading ?? d.path}`);
+      hit(
+        t,
+        d.law_id,
+        d.path,
+        d.heading,
+        WEIGHTS.S2_DIVISION_HEADING,
+        `intitulé : ${d.heading ?? d.path}`,
+      );
     }
   }
 
@@ -308,12 +392,14 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
     if (seedLaws.has(r.to_law_id)) link(r.from_law_id, r.to_law_id);
   }
 
-  const tries = [...cands.values()].sort((a, b) =>
-    b.score - a.score ||
-    // départage stable : une cible précise (division) avant la loi entière, puis l'id
-    (a.division_path ? 0 : 1) - (b.division_path ? 0 : 1) ||
-    a.law_id.localeCompare(b.law_id) ||
-    a.division_path.localeCompare(b.division_path));
+  const tries = [...cands.values()].sort(
+    (a, b) =>
+      b.score - a.score ||
+      // départage stable : une cible précise (division) avant la loi entière, puis l'id
+      (a.division_path ? 0 : 1) - (b.division_path ? 0 : 1) ||
+      a.law_id.localeCompare(b.law_id) ||
+      a.division_path.localeCompare(b.division_path),
+  );
 
   // Sélection avec plafond de diversité par matière (cf. MAX_PER_SUBJECT).
   const parMatiere = new Map<string, number>();
@@ -322,9 +408,14 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
   for (const c of tries) {
     const matieres = c.pourquoi.filter((p) => p.startsWith("matière : "));
     const autreSignal = c.pourquoi.length > matieres.length;
-    const sature = !autreSignal && matieres.length > 0 &&
+    const sature =
+      !autreSignal &&
+      matieres.length > 0 &&
       matieres.every((m) => (parMatiere.get(m) ?? 0) >= MAX_PER_SUBJECT);
-    if (sature) { attente.push(c); continue; }
+    if (sature) {
+      attente.push(c);
+      continue;
+    }
     for (const m of matieres) parMatiere.set(m, (parMatiere.get(m) ?? 0) + 1);
     retenus.push(c);
     if (retenus.length >= limit) return retenus;

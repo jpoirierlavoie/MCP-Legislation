@@ -2,14 +2,19 @@
 // Chaque cas verrouille un défaut trouvé par la revue adversariale du 2026-07-21 : ils ne
 // doivent PLUS jamais réapparaître silencieusement.
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "vitest";
 import {
-  extractConsolidation, extractConsolidationFederale, classify, computeDrift,
-  agregeParSeau, NOM_PUBLIEUR, UNREACHABLE_ALERT_RATIO,
+  agregeParSeau,
+  classify,
+  computeDrift,
+  extractConsolidation,
+  extractConsolidationFederale,
+  NOM_PUBLIEUR,
+  UNREACHABLE_ALERT_RATIO,
 } from "./check-consolidation.mjs";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,14 +31,12 @@ test("extractConsolidation : bannière canonique (avec <sup>er</sup>)", () => {
 
 test("extractConsolidation : ignore les dates d'historique HORS text-end (finding fidélité #6)", () => {
   // Une date d'historique AVANT la bannière ne doit pas être choisie.
-  const html =
-    `<p>en vigueur de la mise à jour au 1 janvier 1984</p>` +
-    banner("2 avril 2026");
+  const html = `<p>en vigueur de la mise à jour au 1 janvier 1984</p>${banner("2 avril 2026")}`;
   assert.equal(extractConsolidation(html), "2026-04-02");
 });
 
 test("extractConsolidation : ignore le contenu des <script> (finding fidélité #8)", () => {
-  const html = `<script>var x="jour au 9 mai 2010";</script>` + banner("3 mars 2025");
+  const html = `<script>var x="jour au 9 mai 2010";</script>${banner("3 mars 2025")}`;
   assert.equal(extractConsolidation(html), "2025-03-03");
 });
 
@@ -68,7 +71,7 @@ test("classify : retard / anomalie / à jour / sans date stockée", () => {
     { status: "ok", stored: "2026-04-01", live: "2026-04-02" }, // retard
     { status: "ok", stored: "2026-04-02", live: "2026-04-01" }, // anomalie (D1 en avance)
     { status: "ok", stored: "2026-04-01", live: "2026-04-01" }, // à jour -> aucune catégorie
-    { status: "ok", stored: null, live: "2026-04-01" },          // sans date stockée
+    { status: "ok", stored: null, live: "2026-04-01" }, // sans date stockée
   ]);
   assert.equal(retard.length, 1);
   assert.equal(anomalie.length, 1);
@@ -77,7 +80,13 @@ test("classify : retard / anomalie / à jour / sans date stockée", () => {
 
 test("computeDrift : une page illisible suffit à déclencher la dérive (finding cardinal)", () => {
   const d = computeDrift({
-    retard: [], anomalie: [], sansStockee: [], illisible: [{}], sansLangue: [], injoignable: [], total: 10,
+    retard: [],
+    anomalie: [],
+    sansStockee: [],
+    illisible: [{}],
+    sansLangue: [],
+    injoignable: [],
+    total: 10,
   });
   assert.equal(d.drift, true);
 });
@@ -85,7 +94,13 @@ test("computeDrift : une page illisible suffit à déclencher la dérive (findin
 test("computeDrift : injoignables sous le seuil, sans autre signal -> pas de dérive", () => {
   const injoignable = Array.from({ length: 2 }, () => ({})); // 2/100 = 2 %
   const d = computeDrift({
-    retard: [], anomalie: [], sansStockee: [], illisible: [], sansLangue: [], injoignable, total: 100,
+    retard: [],
+    anomalie: [],
+    sansStockee: [],
+    illisible: [],
+    sansLangue: [],
+    injoignable,
+    total: 100,
   });
   assert.equal(d.drift, false);
 });
@@ -96,7 +111,13 @@ test("computeDrift : blocage massif injoignable -> alerte réseau, SANS dérive 
   // retitre en « vérification incomplète » et ne clôt que si les DEUX sont éteints.
   const injoignable = Array.from({ length: 30 }, () => ({})); // 30/100 = 30 % >= seuil
   const d = computeDrift({
-    retard: [], anomalie: [], sansStockee: [], illisible: [], sansLangue: [], injoignable, total: 100,
+    retard: [],
+    anomalie: [],
+    sansStockee: [],
+    illisible: [],
+    sansLangue: [],
+    injoignable,
+    total: 100,
   });
   assert.equal(d.unreachableRatio >= UNREACHABLE_ALERT_RATIO, true);
   assert.equal(d.unreachableAlert, true);
@@ -106,7 +127,13 @@ test("computeDrift : blocage massif injoignable -> alerte réseau, SANS dérive 
 test("computeDrift : blocage massif + retard réel -> les DEUX drapeaux levés (le blocage ne masque pas la dérive)", () => {
   const injoignable = Array.from({ length: 30 }, () => ({}));
   const d = computeDrift({
-    retard: [{}], anomalie: [], sansStockee: [], illisible: [], sansLangue: [], injoignable, total: 100,
+    retard: [{}],
+    anomalie: [],
+    sansStockee: [],
+    illisible: [],
+    sansLangue: [],
+    injoignable,
+    total: 100,
   });
   assert.equal(d.drift, true);
   assert.equal(d.unreachableAlert, true);
@@ -114,11 +141,16 @@ test("computeDrift : blocage massif + retard réel -> les DEUX drapeaux levés (
 
 test("computeDrift : une loi sans langue déclarée est actionnable (finding #4/#5)", () => {
   const d = computeDrift({
-    retard: [], anomalie: [], sansStockee: [], illisible: [], sansLangue: [{ id: "x" }], injoignable: [], total: 0,
+    retard: [],
+    anomalie: [],
+    sansStockee: [],
+    illisible: [],
+    sansLangue: [{ id: "x" }],
+    injoignable: [],
+    total: 0,
   });
   assert.equal(d.drift, true);
 });
-
 
 // ---------------------------------------------------------------------------------------
 // CORPUS FÉDÉRAL (2026-09-14). Le détecteur couvre DEUX publieurs depuis cette date.
@@ -187,10 +219,16 @@ test("extractConsolidationFederale : bloc absent -> null (=> illisible, jamais �
 });
 
 test("extractConsolidationFederale : libellé changé -> null, on refuse au lieu de deviner", () => {
-  assert.equal(extractConsolidationFederale("<p id='assentedDate'>Consolidé le 2026-07-21.</p>"), null);
+  assert.equal(
+    extractConsolidationFederale("<p id='assentedDate'>Consolidé le 2026-07-21.</p>"),
+    null,
+  );
   // Format littéral : si Justice Canada y passait, les DEUX moitiés du miroir seraient à
   // reprendre — et ce null le dit au lieu de le taire.
-  assert.equal(extractConsolidationFederale("<p id='assentedDate'>Loi à jour 21 juillet 2026;</p>"), null);
+  assert.equal(
+    extractConsolidationFederale("<p id='assentedDate'>Loi à jour 21 juillet 2026;</p>"),
+    null,
+  );
 });
 
 test("MIROIR : la regex fédérale est identique des deux côtés (JS ↔ Python)", () => {
@@ -208,10 +246,11 @@ test("MIROIR : la regex fédérale est identique des deux côtés (JS ↔ Python
   assert.ok(mPy, "_DATE_FEDERALE introuvable dans pipeline/ingest.py");
 
   assert.equal(
-    mJs[1], mPy[1],
+    mJs[1],
+    mPy[1],
     "les deux moitiés du miroir de date fédérale ont divergé : l'ingestion et la veille " +
-    "liraient des dates différentes sur la même page, et les 36 contrôles fédéraux " +
-    "seraient faux sans qu'aucun test ne rougisse.",
+      "liraient des dates différentes sur la même page, et les 36 contrôles fédéraux " +
+      "seraient faux sans qu'aucun test ne rougisse.",
   );
 
   // L'identifiant du bloc borne la portée des deux côtés : le vérifier aussi.
@@ -224,7 +263,13 @@ test("MIROIR : la regex fédérale est identique des deux côtés (JS ↔ Python
 // ---------------------------------------------------------------------------------------
 
 const ctl = (publieur, status, extra = {}) => ({
-  id: "x", lang: "fr", publieur, status, stored: "2026-01-01", live: "2026-01-01", ...extra,
+  id: "x",
+  lang: "fr",
+  publieur,
+  status,
+  stored: "2026-01-01",
+  live: "2026-01-01",
+  ...extra,
 });
 
 test("agregeParSeau : un seau ENTIÈREMENT bloqué alerte, même si l'autre est propre", () => {
@@ -246,8 +291,13 @@ test("agregeParSeau : le MÊME jeu agrégé globalement NE déclencherait PAS l'
   // 36/194 = 18,6 % < 25 % : sans les seaux, le job passait VERT.
   const injoignable = Array.from({ length: 36 }, () => ({}));
   const global = computeDrift({
-    retard: [], anomalie: [], sansStockee: [], illisible: [], sansLangue: [],
-    injoignable, total: 194,
+    retard: [],
+    anomalie: [],
+    sansStockee: [],
+    illisible: [],
+    sansLangue: [],
+    injoignable,
+    total: 194,
   });
   assert.equal(global.unreachableAlert, false);
   assert.ok(global.unreachableRatio < UNREACHABLE_ALERT_RATIO);

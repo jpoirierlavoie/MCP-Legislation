@@ -415,3 +415,17 @@ revue adversariale (2026-07-21 et 2026-09-14) et corrigés avant le commit.
   baselines. Seule une réingestion du C.c.Q. ou du C.p.c. peut l'invalider.
 - `docs/propositions-journal-2026-07-30.md` — premier dépouillement de `search_log` :
   cas d'éval et entrées de gazetteer **proposés** (⛔, rien d'appliqué).
+
+## Mise en forme (Biome, depuis le 2026-09-16)
+
+`npx biome check .` — 100 colonnes, guillemets doubles, virgules finales, points-virgules.
+Même configuration que le connecteur jumeau, à **une** règle près.
+
+**`complexity.noUselessStringRaw` est DÉSARMÉE, et il faut savoir pourquoi.** Biome
+signale les deux `String.raw` de `src/site.ts` (`BOOT` et `JS`) comme inutiles, puisque
+les blocs ne contiennent aujourd'hui aucune séquence d'échappement. C'est exact et c'est
+hors sujet : le commentaire au-dessus de `JS` dit que `String.raw` est là **par
+prudence**, parce que les antislashs d'un gabarit non balisé seraient mangés le jour où
+l'on y écrira une expression régulière — en silence. Suivre Biome retirerait une garantie
+pour gagner deux caractères, et casserait au passage `tests/page-client.test.mjs`, qui
+extrait ces deux blocs **par leur nom** dans le texte source.
