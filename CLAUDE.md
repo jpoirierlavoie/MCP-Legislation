@@ -67,7 +67,7 @@ les dix outils à son modèle depuis `athena/chat/worker_tools.py` **engendré**
 consigne qui figurait ici jusqu'au 2026-09-16 prescrivait un remède injouable.
 Le couplage, lui, a SURVÉCU en changeant de support : il vit désormais dans les **Skills
 claude.ai** (`competences-juridiques-pallas-athena/`, deux compétences — recherche et
-rédaction) qui nomment les outils `legislation_*` **à la main** (21 appels relevés le
+rédaction) qui nomment les outils `legislation_*` **à la main** (25 appels relevés le
 2026-09-16, répartis sur 6 fichiers). Rien ne les engendre, donc rien ne peut les réparer :
 après tout ajout, retrait ou renommage d'outil, les corriger À LA MAIN puis les téléverser
 dans claude.ai. Sinon l'échec n'apparaît qu'en pleine recherche juridique, sous la forme
