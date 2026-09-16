@@ -104,7 +104,7 @@ ALTER TABLE articles ADD COLUMN footnotes TEXT;
 --
 -- 64 `Label` du corpus fédéral ne sont pas de simples numéros, dont des plages
 -- (« 11 à 14 », « 257 à 264 »). Sans cette table,
--- `qclaw_get_article(law='ca-i-15', article='12')` répondrait « introuvable » là où la
+-- `legislation_get_article(law='ca-i-15', article='12')` répondrait « introuvable » là où la
 -- vraie réponse est « abrogé, art. 11 à 14 » — un faux silencieux sur une question
 -- d'abrogation.
 --

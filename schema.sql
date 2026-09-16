@@ -56,7 +56,7 @@ CREATE TABLE articles (
   --
   -- L'ordre EXACT du texte est `articles.id` à l'intérieur d'un couple (law_id, lang) :
   -- pipeline/load.py attribue `id_base + j` dans l'ordre d'émission du parseur. C'est lui
-  -- que le mode plage de qclaw_get_articles emploie quand ses deux bornes désignent des
+  -- que le mode plage de legislation_get_articles emploie quand ses deux bornes désignent des
   -- articles réels (cf. boundRef / articlesByRange, src/lib.ts). ATTENTION : cela ne vaut
   -- PAS pour les pseudo-articles (préliminaire, annexes), dont l'id ne suit pas l'ordre du
   -- document. `sort_key` reste la clé de tri d'affichage et de voisinage.

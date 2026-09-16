@@ -39,7 +39,7 @@ qu'une seule ligne fausse servie à un modèle dans un outil juridique.
    (corollaire structuré de R4, décision 001).
 
 **Pourquoi cette obligation existe.** La dérive n'est pas hypothétique ici, elle est
-documentée : `qclaw_resolve_reference` a servi aux modèles « Voir les 38 textes
+documentée : `legislation_resolve_reference` a servi aux modèles « Voir les 38 textes
 disponibles » pendant que le corpus en comptait 79 ; le README annonçait 3 tarifs sur 4,
 ~46 000 articles sur 49 255, 57 contrôles sur 62, et publiait une configuration de
 connexion qui renvoyait 404 ; `docs/ARCHITECTURE-NOTES.md` est resté à 38 lois / 28 matières.
@@ -58,21 +58,27 @@ en se déclarant « état réel » sans qu'aucun test n'échoue, précisément p
 prétendait au présent. Corollaire de rédaction : dans `docs/`, écrire au passé et dater ;
 ne jamais y recopier un décompte vivant en le présentant comme actuel.
 
-**EN REVANCHE, UNE SIXIÈME SURFACE EXISTE — et elle vit HORS de ce dépôt.** Le clavardage
-de Pallas Athéna offre les dix outils à son modèle depuis `athena/chat/worker_tools.py`,
-**engendré** depuis `tools/list` par `athena/scripts/sync_worker_tools.py`. Ce fichier est
-le préfixe du cache de prompt, donc stable octet pour octet — et un outil `qclaw_*` renommé
-ici y laisse une fiche qui appelle un nom mort, dont l'échec n'apparaît qu'au tour de
-clavardage suivant, sous la forme d'un outil qui « ne marche plus ». **Aucune commande
-d'ici ne la voit dériver**, et c'est pourquoi elle est nommée : après tout ajout, retrait
-ou renommage d'outil, relancer `sync_worker_tools.py` et commiter le fichier engendré.
+**EN REVANCHE, UNE SIXIÈME SURFACE EXISTE — et elle vit HORS de ce dépôt.** Elle a CHANGÉ de
+forme le 2026-09-02, et le piège est là : le clavardage interne de Pallas Athéna, qui offrait
+les dix outils à son modèle depuis `athena/chat/worker_tools.py` **engendré** depuis
+`tools/list` par `athena/scripts/sync_worker_tools.py`, a été supprimé EN ENTIER (commit
+`ef85473`, 87 fichiers) quand le cabinet est passé à un compte Claude for Work sous DPA.
+**Ce générateur n'existe plus. Ne pas le chercher, ne pas tenter de le relancer** — la
+consigne qui figurait ici jusqu'au 2026-09-16 prescrivait un remède injouable.
+Le couplage, lui, a SURVÉCU en changeant de support : il vit désormais dans les **Skills
+claude.ai** (`competences-juridiques-pallas-athena/`, deux compétences — recherche et
+rédaction) qui nomment les outils `legislation_*` **à la main** (21 appels relevés le
+2026-09-16, répartis sur 6 fichiers). Rien ne les engendre, donc rien ne peut les réparer :
+après tout ajout, retrait ou renommage d'outil, les corriger À LA MAIN puis les téléverser
+dans claude.ai. Sinon l'échec n'apparaît qu'en pleine recherche juridique, sous la forme
+d'un outil qui « n'existe pas ».
 Les CINQ surfaces ci-dessus restent le contrat INTRA-dépôt ; celle-ci est un couplage
-inter-dépôts, non gardé.
+inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
 
 ## Architecture (3 morceaux)
 
 1. **Worker Cloudflare** (`src/`, TypeScript) — McpAgent (Durable Object) + 10 outils
-   `qclaw_*`, D1 (`qclaw`), Workers AI (bge-m3) + Vectorize (`qclaw-articles`) pour la
+   `legislation_*`, D1 (`qclaw`), Workers AI (bge-m3) + Vectorize (`qclaw-articles`) pour la
    recherche hybride. Config : `wrangler.jsonc` (PAS .toml).
 2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours
    `PYTHONUTF8=1`) — télécharge/parse les EPUB Irosoft, charge D1 par
@@ -99,10 +105,10 @@ npx wrangler dev --var MCP_TOKEN:a --var MCP_TOKEN_ATHENA:b   # dev local (D1 lo
 #   ^ les --var sont REQUIS depuis le défaut fermé (2026-08-27) : sans secret, /mcp refuse TOUT
 npx tsc --noEmit                                   # type-check (toujours avant commit)
 npm run evals                                      # contrôles bout-en-bout (le harnais imprime son total ; MCP_URL=… pour cibler)
-npm run eval                                       # harnais d'éval : 20 cas, recall@10/MRR (production)
+npm run eval                                       # harnais d'éval : 21 cas, recall@10/MRR (production)
 node eval/run.mjs --refresh-paths                  # revalide eval/cases.resolved.json et SORT — diff à VIDER avant de mesurer
 node scripts/journal.mjs [--local|--jours N|--tout] # dépouille search_log (lecture seule) : replis et reformulations
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # 23 tests
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # 131 tests
 node --test scripts/check-consolidation.test.mjs   # 26 contrôles du détecteur de veille (sans réseau, en CI)
 node --test tests/catalogue.test.mjs               # garde anti-dérive doc (R10 ; sans réseau, en CI)
 node --test tests/page-client.test.mjs             # JS client de la page (sans réseau ni navigateur, en CI)
@@ -232,7 +238,7 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
   se CALCULE (D1, JSON versionné) ou s'IMPORTE (`WEIGHTS`, `SEMANTIC_MIN_SCORE`) — jamais
   recopié dans de la prose. Un fait *historique daté* reste licite AVEC sa date
   (« mesuré à 38 lois : 36 en avaient », « recall@10 40 % → 88 % → 98 % »).
-  **Preuve que la consigne seule ne suffit pas** : `qclaw_resolve_reference` a servi aux
+  **Preuve que la consigne seule ne suffit pas** : `legislation_resolve_reference` a servi aux
   modèles « Voir les 38 textes disponibles » alors que le corpus en comptait 79 ; le README
   annonçait 3 tarifs sur 4 ; `docs/ARCHITECTURE-NOTES.md` est resté à 38 lois / 28 matières.
   Tout cela sans qu'aucun test n'échoue. Garde : `tests/catalogue.test.mjs` (hors réseau,
@@ -254,7 +260,7 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
 **Modifier le Worker** : coder → `tsc` → `wrangler dev` + contrôles locaux →
 `npm run evals` → deploy → re-vérifier en production (les Durable Objects mettent
 ~30–60 s à recycler l'ancien code) → `npm run eval` si le comportement de recherche a
-changé — **porte : aucune régression sur les 20 cas**.
+changé — **porte : aucune régression sur les 21 cas**.
 
 **Contrôle d'accès de `/mcp`** (`src/auth.ts`) : **DEUX jetons** (`MCP_TOKEN` pour le
 connecteur claude.ai, `MCP_TOKEN_ATHENA` pour le clavardage de Pallas Athéna), aux droits
@@ -359,7 +365,7 @@ laissant les embeddings sur l'ancien texte donc du droit périmé rendu en silen
 **Veille de consolidation** (`.github/workflows/veille-consolidation.yml` +
 `scripts/check-consolidation.mjs`) : job **en LECTURE SEULE**, mensuel, qui compare la
 date « À jour au » de chaque loi **sur son publieur officiel** à `consol_date_*` en D1
-(lue via `qclaw_list_laws` sur l'endpoint MCP — jeton de LECTURE `MCP_TOKEN` en secret
+(lue via `legislation_list_laws` sur l'endpoint MCP — jeton de LECTURE `MCP_TOKEN` en secret
 GitHub, toujours AUCUN secret Cloudflare) et ouvre/actualise une
 issue étiquetée `veille-consolidation` quand un rafraîchissement est dû (issue close
 automatiquement à la résolution). Il DÉTECTE, il ne bascule jamais.

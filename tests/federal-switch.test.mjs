@@ -342,7 +342,7 @@ test("searchText transmet `env`, et le canal vectoriel est filtré aux DEUX barr
 
 test("le futur paramètre `jurisdiction` ne peut pas ÉCRASER le masque", () => {
   const lib = readFileSync("src/lib.ts", "utf8");
-  // La phase 5 implémentera `jurisdiction` sur `qclaw_list_laws` (décision de Jason). Le
+  // La phase 5 implémentera `jurisdiction` sur `legislation_list_laws` (décision de Jason). Le
   // piège serait qu'il REMPLACE le masque au lieu de s'y ajouter : `jurisdiction='ca'`
   // deviendrait alors la porte de service de l'interrupteur — la seule requête du corpus
   // qui le contourne, et par un paramètre documenté.

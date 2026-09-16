@@ -179,7 +179,7 @@ def numero_de_division(brut: str) -> str | None:
 
     La règle ne fonctionnait que par accident — « PARTIE I » (le I du mot vaut le numéro) et
     « PART III » (aucune lettre romane dans PART). Le défaut était donc ASYMÉTRIQUE entre les
-    langues, et `qclaw_get_structure` aurait rendu quatorze parties toutes numérotées « I »
+    langues, et `legislation_get_structure` aurait rendu quatorze parties toutes numérotées « I »
     pour la Loi sur la faillite. Le corpus québécois n'est pas touché : son parseur est
     `parser.py`, un autre code (vérifié : 0 divergence FR/EN sur les 79 textes).
 

@@ -6,7 +6,7 @@
 // bascule reste humaine.
 //
 // Deux sources, aucune n'exige de secret :
-//   • date STOCKÉE   ← qclaw_list_laws sur l'endpoint MCP public (= colonnes consol_date_*
+//   • date STOCKÉE   ← legislation_list_laws sur l'endpoint MCP public (= colonnes consol_date_*
 //                       de D1, telles que servies aux usagers). Une seule session MCP.
 //   • date LIVE      ← page LégisQuébec de chaque loi (« À jour au JJ mois AAAA »).
 //
@@ -254,10 +254,10 @@ async function main() {
   // 1) Dates stockées, via l'endpoint MCP public (une seule session).
   const mcp = createMcpClient(MCP_URL);
   await mcp.connect();
-  const res = await mcp.callTool("qclaw_list_laws", {});
+  const res = await mcp.callTool("legislation_list_laws", {});
   const laws = res?.structuredContent?.laws;
   if (!Array.isArray(laws) || laws.length === 0) {
-    throw new Error(`qclaw_list_laws n'a renvoyé aucune loi (endpoint ${MCP_URL} injoignable ?)`);
+    throw new Error(`legislation_list_laws n'a renvoyé aucune loi (endpoint ${MCP_URL} injoignable ?)`);
   }
 
   // 2) Un contrôle par (loi, langue). Une loi sans langue déclarée (langs vide -> ligne
@@ -289,7 +289,7 @@ async function main() {
   }
   // Garde : un détecteur qui n'a construit AUCUN contrôle ne doit pas rapporter « vert ».
   if (checks.length === 0 && sansLangue.length === 0) {
-    throw new Error("aucun couple (loi, langue) construit — forme de qclaw_list_laws inattendue ?");
+    throw new Error("aucun couple (loi, langue) construit — forme de legislation_list_laws inattendue ?");
   }
 
   // 3) Date live pour chaque contrôle, avec l'extracteur de SON publieur.
@@ -361,7 +361,7 @@ function buildReport(d) {
 
   let md = `# Veille de consolidation — ${stamp}\n\n`;
   md += `Détecteur **en lecture seule** : ${laws} lois, ${total} couples (loi, langue) comparés `;
-  md += `entre les dates chargées en D1 (via \`qclaw_list_laws\`) et les dates « À jour au » `;
+  md += `entre les dates chargées en D1 (via \`legislation_list_laws\`) et les dates « À jour au » `;
   md += `affichées par leur publieur officiel — LégisQuébec pour le Québec, Justice Canada `;
   md += `pour le fédéral.\n\n`;
 
@@ -402,7 +402,7 @@ function buildReport(d) {
 
   if (sansLangue.length) {
     md += `\n### Lois sans langue déclarée en D1\n\n`;
-    md += `> ⚠️ Aucune langue servie par \`qclaw_list_laws\` : ligne \`laws\` sans article ? `;
+    md += `> ⚠️ Aucune langue servie par \`legislation_list_laws\` : ligne \`laws\` sans article ? `;
     md += `(ingestion incomplète). À vérifier.\n\n`;
     md += `| Loi | Titre |\n|---|---|\n`;
     md += sansLangue.map((c) => `| ${c.id} | ${(c.name || "").replace(/\|/g, "/")} |`).join("\n") + "\n";

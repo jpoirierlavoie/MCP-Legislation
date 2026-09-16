@@ -1,4 +1,4 @@
-// Enregistrement des outils MCP « Lois du Québec » (qclaw_*). Tous en lecture seule.
+// Enregistrement des outils MCP « Lois du Québec » (legislation_*). Tous en lecture seule.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -30,7 +30,7 @@ const GARDE_FOU =
 
 /** Rappel du patron en deux temps sur les outils d'extraction (§6.4). */
 const DEUX_TEMPS =
-  " Si la loi pertinente est inconnue, commencer par qclaw_find_relevant.";
+  " Si la loi pertinente est inconnue, commencer par legislation_find_relevant.";
 
 const READONLY = {
   readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false,
@@ -52,7 +52,7 @@ const KIND_LABEL: Record<Lang, Record<string, string>> = {
   },
 };
 
-// Libellés de qclaw_related_laws, par langue. Même motif que KIND_LABEL : l'outil
+// Libellés de legislation_related_laws, par langue. Même motif que KIND_LABEL : l'outil
 // déclarait `lang` sans l'honorer — un client qui demandait l'anglais recevait du français
 // sans la moindre étiquette, ce qui est « faux, servi, silencieux ».
 const REL_LABEL: Record<Lang, {
@@ -67,7 +67,7 @@ const REL_LABEL: Record<Lang, {
     aucuneRel: (l) => `Aucune relation pour '${l}'`,
     deType: (t) => ` de type '${t}'`,
     enDirection: (d) => ` en direction '${d}'`,
-    essayez: "Essayez sans filtre, ou qclaw_list_laws pour la carte du corpus.",
+    essayez: "Essayez sans filtre, ou legislation_list_laws pour la carte du corpus.",
     horsCorpus: "NON disponible au corpus (candidat d'acquisition)",
     renvois: "renvoi(s)", relations: "relation(s) pour",
     affichees: (n) => ` (${n} affichées)`, dontHors: (n) => ` — dont ${n} hors corpus`,
@@ -77,7 +77,7 @@ const REL_LABEL: Record<Lang, {
     aucuneRel: (l) => `No relation for '${l}'`,
     deType: (t) => ` of type '${t}'`,
     enDirection: (d) => ` in direction '${d}'`,
-    essayez: "Try without a filter, or qclaw_list_laws for the corpus map.",
+    essayez: "Try without a filter, or legislation_list_laws for the corpus map.",
     horsCorpus: "NOT available in the corpus (acquisition candidate)",
     renvois: "reference(s)", relations: "relation(s) for",
     affichees: (n) => ` (${n} shown)`, dontHors: (n) => ` — ${n} outside the corpus`,
@@ -113,7 +113,7 @@ function renderArticle(a: ArticleJoined, loi: LawRow, consol: string | null, lan
 export function registerTools(server: McpServer, env: Env): void {
   const db = env.DB;
 
-  // 1) qclaw_list_laws ---------------------------------------------------------
+  // 1) legislation_list_laws ---------------------------------------------------------
   //
   // Écart au plan v2 (1.4), consigné au rapport : le critère « toute loi dont les
   // divisions comportent le kind livre » rate sa cible — le parseur classe
@@ -158,22 +158,22 @@ export function registerTools(server: McpServer, env: Env): void {
   };
 
   server.registerTool(
-    "qclaw_list_laws",
+    "legislation_list_laws",
     {
-      title: titre("qclaw_list_laws"),
+      title: titre("legislation_list_laws"),
       description:
         "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, " +
         "date de consolidation, nombre d'articles, et les attributs de découverte (fonction, forum, " +
         "matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). " +
         "Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; " +
-        "pour partir d'un problème concret, préférer qclaw_find_relevant.",
+        "pour partir d'un problème concret, préférer legislation_find_relevant.",
       inputSchema: {
         fonction: z.string().optional()
           .describe("Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'."),
         forum: z.string().optional()
           .describe("Filtrer par forum, ex. 'Tribunal administratif du logement', 'Cour d'appel'."),
         subject: z.string().optional()
-          .describe("Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. qclaw_list_subjects)."),
+          .describe("Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. legislation_list_subjects)."),
         structure: z.boolean().default(true)
           .describe("Inclure le plan profondeur 2 (Livres et leurs Titres) des grands codes (défaut true)."),
         lang: LANG.optional(),
@@ -196,8 +196,8 @@ export function registerTools(server: McpServer, env: Env): void {
         ].filter(Boolean).join(", ");
         return err(
           applied
-            ? `Aucune loi pour ${applied}. Vérifiez les valeurs (qclaw_list_subjects pour les matières) ` +
-              "ou appelez qclaw_list_laws sans filtre."
+            ? `Aucune loi pour ${applied}. Vérifiez les valeurs (legislation_list_subjects pour les matières) ` +
+              "ou appelez legislation_list_laws sans filtre."
             : "Aucune loi chargée dans la base.",
         );
       }
@@ -230,15 +230,15 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 1b) qclaw_list_subjects ----------------------------------------------------
+  // 1b) legislation_list_subjects ----------------------------------------------------
   server.registerTool(
-    "qclaw_list_subjects",
+    "legislation_list_subjects",
     {
-      title: titre("qclaw_list_subjects"),
+      title: titre("legislation_list_subjects"),
       description:
         "Liste les matières de la taxonomie (droit privé du C.c.Q. et matières spécialisées) : " +
         "identifiant, libellé, description, et nombre de lois / divisions rattachées. " +
-        "Sert à choisir un domaine, puis à filtrer qclaw_list_laws (subject=…).",
+        "Sert à choisir un domaine, puis à filtrer legislation_list_laws (subject=…).",
       inputSchema: { lang: LANG.optional() },
       annotations: READONLY,
     },
@@ -275,11 +275,11 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 1c) qclaw_related_laws -----------------------------------------------------
+  // 1c) legislation_related_laws -----------------------------------------------------
   server.registerTool(
-    "qclaw_related_laws",
+    "legislation_related_laws",
     {
-      title: titre("qclaw_related_laws"),
+      title: titre("legislation_related_laws"),
       description:
         "Graphe d'interconnexion d'une loi : règlements pris sous son autorité, loi habilitante, " +
         "renvois vers d'autres textes, et relations curées (met-en-oeuvre, applique, complète…). " +
@@ -342,11 +342,11 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 1d) qclaw_find_relevant ----------------------------------------------------
+  // 1d) legislation_find_relevant ----------------------------------------------------
   server.registerTool(
-    "qclaw_find_relevant",
+    "legislation_find_relevant",
     {
-      title: titre("qclaw_find_relevant"),
+      title: titre("legislation_find_relevant"),
       description: GARDE_FOU +
         " Classement déterministe sur la matière (taxonomie), les intitulés de divisions, " +
         "les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', " +
@@ -364,7 +364,7 @@ export function registerTools(server: McpServer, env: Env): void {
       if (tokens.length === 0) {
         return err(
           `Aucun terme exploitable dans « ${query} ». Reformulez avec des mots porteurs ` +
-          "(ex. « bail de logement », « congédiement »), ou consultez qclaw_list_subjects.",
+          "(ex. « bail de logement », « congédiement »), ou consultez legislation_list_subjects.",
         );
       }
       const data = await loadRelevanceData(db, tokens, lang as Lang, env);
@@ -375,7 +375,7 @@ export function registerTools(server: McpServer, env: Env): void {
       if (cands.length === 0) {
         return err(
           `Aucun rapprochement pour « ${query} » (termes retenus : ${tokens.join(", ")}). ` +
-          "Voir les domaines avec qclaw_list_subjects, ou chercher dans le texte avec qclaw_search_text.",
+          "Voir les domaines avec legislation_list_subjects, ou chercher dans le texte avec legislation_search_text.",
         );
       }
       const lines = cands.map((c, i) => {
@@ -402,11 +402,11 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 2) qclaw_get_article -------------------------------------------------------
+  // 2) legislation_get_article -------------------------------------------------------
   server.registerTool(
-    "qclaw_get_article",
+    "legislation_get_article",
     {
-      title: titre("qclaw_get_article"),
+      title: titre("legislation_get_article"),
       description:
         "Retourne le texte officiel verbatim d'un article, avec citation, chemin hiérarchique, " +
         "date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions " +
@@ -444,11 +444,11 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 3) qclaw_get_articles ------------------------------------------------------
+  // 3) legislation_get_articles ------------------------------------------------------
   server.registerTool(
-    "qclaw_get_articles",
+    "legislation_get_articles",
     {
-      title: titre("qclaw_get_articles"),
+      title: titre("legislation_get_articles"),
       description:
         "Retourne plusieurs articles : soit une plage (from..to), soit une liste explicite (numbers). " +
         "Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']." + DEUX_TEMPS,
@@ -506,15 +506,15 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 4) qclaw_get_structure -----------------------------------------------------
+  // 4) legislation_get_structure -----------------------------------------------------
   server.registerTool(
-    "qclaw_get_structure",
+    "legislation_get_structure",
     {
-      title: titre("qclaw_get_structure"),
+      title: titre("legislation_get_structure"),
       description:
         "Arbre hiérarchique des divisions (Livre → Titre → Chapitre → Section → Sous-section), " +
         "SANS texte d'article — pour explorer avant d'extraire. Chaque nœud donne kind, number, " +
-        "heading et son 'path' (à passer à qclaw_get_division). Utiliser root_path pour un sous-arbre " +
+        "heading et son 'path' (à passer à legislation_get_division). Utiliser root_path pour un sous-arbre " +
         "et depth pour limiter la profondeur (défaut 2 : livres et titres)." + DEUX_TEMPS,
       inputSchema: {
         law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
@@ -545,15 +545,15 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 5) qclaw_get_division ------------------------------------------------------
+  // 5) legislation_get_division ------------------------------------------------------
   server.registerTool(
-    "qclaw_get_division",
+    "legislation_get_division",
     {
-      title: titre("qclaw_get_division"),
+      title: titre("legislation_get_division"),
       description:
         "Retourne une division (Livre/Titre/Chapitre/Section/…) : son intitulé, ses sous-divisions " +
         "immédiates, et les articles qu'elle contient (tout le sous-arbre, paginés). Identifier par " +
-        "path (recommandé, via qclaw_get_structure) ou division_id. include_text=false pour n'avoir " +
+        "path (recommandé, via legislation_get_structure) ou division_id. include_text=false pour n'avoir " +
         "que les numéros d'articles." + DEUX_TEMPS,
       inputSchema: {
         law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
@@ -613,11 +613,11 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 6) qclaw_search_text -------------------------------------------------------
+  // 6) legislation_search_text -------------------------------------------------------
   server.registerTool(
-    "qclaw_search_text",
+    "legislation_search_text",
     {
-      title: titre("qclaw_search_text"),
+      title: titre("legislation_search_text"),
       description:
         "Recherche plein texte (FTS5) dans le texte des articles. Retourne les correspondances " +
         "classées par pertinence avec un extrait surligné. Ex. : query='prescription action', " +
@@ -759,11 +759,11 @@ export function registerTools(server: McpServer, env: Env): void {
     },
   );
 
-  // 7) qclaw_resolve_reference -------------------------------------------------
+  // 7) legislation_resolve_reference -------------------------------------------------
   server.registerTool(
-    "qclaw_resolve_reference",
+    "legislation_resolve_reference",
     {
-      title: titre("qclaw_resolve_reference"),
+      title: titre("legislation_resolve_reference"),
       description:
         "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») " +
         "vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, " +
@@ -783,11 +783,11 @@ export function registerTools(server: McpServer, env: Env): void {
           parsed.chapitre_inconnu
             ? `Le chapitre « ${parsed.chapitre_inconnu} » n'est pas au corpus — aucune loi n'a été ` +
               "résolue (il n'est PAS rabattu sur un chapitre voisin). " +
-              `Voir les ${all.length} textes disponibles avec qclaw_list_laws. ` +
+              `Voir les ${all.length} textes disponibles avec legislation_list_laws. ` +
               `Article détecté : ${parsed.article ?? "aucun"}.`
             : `Loi non reconnue dans « ${citation} ». Précisez le chapitre RLRQ (ex. « RLRQ, c. T-16 ») ` +
-              "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez qclaw_get_article avec law=… " +
-              `(voir qclaw_list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
+              "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez legislation_get_article avec law=… " +
+              `(voir legislation_list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
         );
       }
       const law = parsed.law;

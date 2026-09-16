@@ -1,5 +1,5 @@
 {
-  "name": "qclaw-mcp",
+  "name": "mcp-legislation",
   "version": "0.1.0",
   "private": true,
   "description": "Serveur MCP « Lois du Québec » — Worker Cloudflare (lecture seule sur D1).",

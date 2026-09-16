@@ -66,7 +66,7 @@ const RAPPEL =
   "src/tools.ts, catalogue.json (donc la page publique) et README.md. Voir R10 dans CLAUDE.md.";
 
 /** Noms réellement enregistrés auprès du serveur MCP. */
-const enregistres = [...toolsTs.matchAll(/registerTool\(\s*"(qclaw_[a-z_]+)"/g)].map((m) => m[1]);
+const enregistres = [...toolsTs.matchAll(/registerTool\(\s*"(legislation_[a-z_]+)"/g)].map((m) => m[1]);
 
 test("parité : outils enregistrés <-> catalogue (dans les DEUX sens)", () => {
   // Garde-fou de regex morte : R2 interdit d'ajouter un outil sans approbation, donc
@@ -103,11 +103,11 @@ test("chaque outil du catalogue est complet et bilingue", () => {
 });
 
 test("les titres servis par MCP sont ceux du catalogue (source unique)", () => {
-  // src/tools.ts doit appeler titre("qclaw_x") — jamais un littéral. Un littéral rétablirait
+  // src/tools.ts doit appeler titre("legislation_x") — jamais un littéral. Un littéral rétablirait
   // la copie que le catalogue existe précisément pour supprimer.
   const litteraux = [...toolsTs.matchAll(/title:\s*"([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(litteraux, [],
-    `titres écrits en dur dans src/tools.ts : ${litteraux.join(" | ")} — utiliser titre("qclaw_…"). ${RAPPEL}`);
+    `titres écrits en dur dans src/tools.ts : ${litteraux.join(" | ")} — utiliser titre("legislation_…"). ${RAPPEL}`);
   for (const nom of enregistres) {
     assert.ok(toolsTs.includes(`titre("${nom}")`), `${nom} : le titre n'est pas tiré du catalogue. ${RAPPEL}`);
   }

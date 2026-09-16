@@ -7,9 +7,9 @@ import { renderSite } from "./site";
 import { registerTools } from "./tools";
 
 /**
- * Serveur MCP « Lois du Québec » (qclaw-mcp).
+ * Serveur MCP « MCP Legislation » (paquet mcp-legislation).
  *
- * Expose les outils qclaw_* (PLAN §3), en lecture seule sur D1. Transport HTTP
+ * Expose les outils legislation_* (PLAN §3), en lecture seule sur D1. Transport HTTP
  * streamable sur POST /mcp.
  */
 /**
@@ -19,13 +19,13 @@ import { registerTools } from "./tools";
  */
 const INSTRUCTIONS =
   "Corpus large (lois, règlements de procédure, tarifs du Québec). Pour repérer les sources " +
-  "pertinentes d'un problème, commencer par qclaw_find_relevant ou qclaw_list_laws, puis cibler " +
+  "pertinentes d'un problème, commencer par legislation_find_relevant ou legislation_list_laws, puis cibler " +
   "avec get_structure → get_division/get_article. L'aide au repérage est heuristique : toujours " +
   "vérifier le texte.";
 
 export class QclawMCP extends McpAgent {
   server = new McpServer(
-    { name: "qclaw-mcp", version: "0.2.0" },
+    { name: "MCP Legislation", version: "0.2.0" },
     { instructions: INSTRUCTIONS },
   );
 

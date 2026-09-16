@@ -647,7 +647,7 @@ export async function relatedLaws(
   lang: Lang = "fr", env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<RelationEdge[]> {
   const typeClause = relType ? "AND rel_type = ?" : "";
-  // Le bout SUJET est déjà gardé : `qclaw_related_laws` passe par `getLaw(db, law, env)` et
+  // Le bout SUJET est déjà gardé : `legislation_related_laws` passe par `getLaw(db, law, env)` et
   // refuse avant d'arriver ici. C'est l'AUTRE bout qui fuyait — une arête vers un texte
   // fédéral serait rendue avec `in_corpus = 1` et son nom résolu, donc le modèle irait
   // appeler `get_article` dessus et se ferait refuser. Servir une piste qu'on refuse ensuite
@@ -972,7 +972,7 @@ function pruneDepth(nodes: StructureNode[], depth: number): void {
   }
 }
 
-// --- analyse d'une citation libre (qclaw_resolve_reference) -------------------
+// --- analyse d'une citation libre (legislation_resolve_reference) -------------------
 
 export interface ParsedCitation {
   law: string | null;
@@ -1057,7 +1057,7 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   return { law, article, law_source: law ? lawSource : null, chapitre_inconnu: explicite };
 }
 
-// --- données de pertinence (qclaw_find_relevant) ------------------------------
+// --- données de pertinence (legislation_find_relevant) ------------------------------
 
 /** Plafond de divisions préfiltrées ramenées du SQL (le tri fin se fait en mémoire). */
 const DIVISION_PREFILTER_LIMIT = 2000;
@@ -1373,7 +1373,7 @@ async function runMatch(
   // court, donc un signal disproportionné — une ligne fédérale a pris la 1re place devant
   // l'ancien 1er. On BORNE donc, ce qui préserve jeu et ordre à l'identique, et l'ouverture
   // de `marginal_note` en canal SÉPARÉ ET ÉTIQUETÉ reste à faire, avec des poids explicites
-  // importés de src/relevance.ts et une mesure des 20 cas.
+  // importés de src/relevance.ts et une mesure des 21 cas.
   const binds: unknown[] = [`{text} : (${match})`, lang];
   if (scope.law) { clauses.push("AND articles_fts.law_id = ?"); binds.push(scope.law); }
   if (scope.notLaw) { clauses.push("AND articles_fts.law_id <> ?"); binds.push(scope.notLaw); }

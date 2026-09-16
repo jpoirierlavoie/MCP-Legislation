@@ -6,13 +6,13 @@
 //   MCP_URL=http://127.0.0.1:8787/mcp node eval/run.mjs   # contre wrangler dev
 //
 // Pour chaque cas de eval/cases.json (vérité terrain — Appendice A, ⛔ modification par
-// Jason seulement) : appelle qclaw_search_text (portée du cas) et qclaw_find_relevant,
+// Jason seulement) : appelle legislation_search_text (portée du cas) et legislation_find_relevant,
 // puis calcule :
 //   - recall@10 : fraction des must_include dans le top 10 de la recherche ;
 //   - MRR       : 1/rang du premier must_include atteint (0 si aucun) ;
 //   - FR        : couverture par find_relevant — un article est « couvert » si un candidat
 //                 pointe sa loi et que son division_path tombe sous le chemin du candidat
-//                 (chemins résolus une fois via qclaw_get_article, cache cases.resolved.json).
+//                 (chemins résolus une fois via legislation_get_article, cache cases.resolved.json).
 // UNE session MCP pour tous les appels (eval/mcp-client.mjs).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
@@ -60,7 +60,7 @@ async function resolvePaths({ refresh = false } = {}) {
   const changed = [];
   for (const [k, a] of wanted) {
     if (cache[k] && !refresh) continue;
-    const res = await callTool("qclaw_get_article", { law: a.law, article: a.article });
+    const res = await callTool("legislation_get_article", { law: a.law, article: a.article });
     if (res.isError) throw new Error(`vérité terrain irrésoluble : ${k} — ${res.content?.[0]?.text}`);
     const path = res.structuredContent.division_path;
     if (cache[k] === undefined) added++;
@@ -95,10 +95,10 @@ const covers = (candPath, artPath) =>
   !candPath || artPath === candPath || artPath.startsWith(`${candPath}-`);
 
 async function runCase(c, paths) {
-  // --- qclaw_search_text (portée du cas, top 10) ---
+  // --- legislation_search_text (portée du cas, top 10) ---
   const sArgs = { query: c.query, limit: 10 };
   if (c.law_scope) sArgs.law = c.law_scope;
-  const s = await callTool("qclaw_search_text", sArgs);
+  const s = await callTool("legislation_search_text", sArgs);
   const results = s.isError ? [] : (s.structuredContent?.results ?? []);
   const top = results.map((r) => `${r.law_id}|${r.number}`);
 
@@ -114,8 +114,8 @@ async function runCase(c, paths) {
   const mrr = Number.isFinite(firstRank) ? 1 / firstRank : 0;
   const niceHits = (c.nice_to_have ?? []).map(keyOf).filter((k) => top.includes(k)).length;
 
-  // --- qclaw_find_relevant (toujours corpus entier — c'est un routeur) ---
-  const f = await callTool("qclaw_find_relevant", { query: c.query });
+  // --- legislation_find_relevant (toujours corpus entier — c'est un routeur) ---
+  const f = await callTool("legislation_find_relevant", { query: c.query });
   const cands = f.isError ? [] : (f.structuredContent?.candidates ?? []);
   const frCovered = mustKeys.filter((k) => {
     const artPath = paths[k];

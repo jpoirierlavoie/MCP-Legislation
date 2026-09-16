@@ -69,7 +69,7 @@ def seed_laws(db) -> int:
         # décrit ici, lui, est INCHANGÉ : la config ne porte toujours aucune date fédérale,
         # donc l'UPDATE inconditionnel détruirait toujours ce que l'ingestion a écrit.)
         #
-        # Conséquence servie : `qclaw_list_laws` et la page publique annonçaient 18 textes
+        # Conséquence servie : `legislation_list_laws` et la page publique annonçaient 18 textes
         # SANS date « à jour au ». Sur un outil juridique, servir du droit sans dire de
         # quand il date est le genre de faux silencieux que ce dépôt refuse. Et le défaut
         # se rejouait à chaque passe éditoriale sur `taxonomy.json`, donc une réingestion

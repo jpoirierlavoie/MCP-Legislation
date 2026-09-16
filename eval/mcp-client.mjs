@@ -92,7 +92,7 @@ export function createMcpClient(url, { token } = {}) {
     await rpc("initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
-      clientInfo: { name: "qclaw-eval-client", version: "1.0.0" },
+      clientInfo: { name: "legislation-eval-client", version: "1.0.0" },
     });
     await rpc("notifications/initialized", {}, { notification: true });
   }

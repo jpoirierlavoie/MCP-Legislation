@@ -37,7 +37,7 @@ const progress = RESUME && existsSync(PROGRESS)
 // page HTML de blocage après ~20 appels serrés). On espace les appels, on se présente
 // avec un User-Agent de navigateur, et on recule LONGUEMENT en cas de blocage.
 const PACE_MS = 500;
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) qclaw-backfill";
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) legislation-backfill";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

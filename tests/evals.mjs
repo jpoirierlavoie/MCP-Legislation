@@ -1,4 +1,4 @@
-// Évals du routeur qclaw_find_relevant (plan-couche-decouverte §8) + fumée des outils
+// Évals du routeur legislation_find_relevant (plan-couche-decouverte §8) + fumée des outils
 // de découverte. Tests de bout en bout : parlent MCP (HTTP streamable) au serveur réel.
 //
 //   npx wrangler dev            # dans un autre terminal (D1 local)
@@ -198,7 +198,7 @@ const matches = (cand, exp) =>
 const fmt = (c) => `${c.law}${c.division_path ? `›${c.division_path}` : ""}(${c.score})`;
 
 async function runEval(e) {
-  const res = await callTool("qclaw_find_relevant",
+  const res = await callTool("legislation_find_relevant",
     e.lang ? { query: e.query, lang: e.lang } : { query: e.query });
   const cands = res.structuredContent?.candidates ?? [];
   const failures = [];
@@ -206,7 +206,7 @@ async function runEval(e) {
   if (e.none) {
     if (!res.isError) failures.push(`attendu aucun rapprochement, obtenu ${cands.length} candidat(s)`);
     const txt = res.content?.[0]?.text ?? "";
-    if (!/list_subjects/.test(txt)) failures.push("le message n'oriente pas vers qclaw_list_subjects");
+    if (!/list_subjects/.test(txt)) failures.push("le message n'oriente pas vers legislation_list_subjects");
     return { failures, cands };
   }
 
@@ -258,29 +258,29 @@ async function smokeTests() {
   const servis = JSON.parse(
     readFileSync(new URL("../pipeline/expected/served.json", import.meta.url), "utf8"),
   ).ids.length;
-  const laws = await callTool("qclaw_list_laws", {});
+  const laws = await callTool("legislation_list_laws", {});
   add(`list_laws : ${servis} lois servies`, laws.structuredContent?.count === servis,
     `count=${laws.structuredContent?.count}, déclaré=${servis}`);
   const ccq = laws.structuredContent?.laws?.find((l) => l.id === "ccq");
   add("list_laws : ccq porte ses Livres (matières)", (ccq?.mapped_divisions?.length ?? 0) >= 10,
     `${ccq?.mapped_divisions?.length ?? 0} division(s) mappée(s)`);
 
-  const filtered = await callTool("qclaw_list_laws", { fonction: "tarif" });
+  const filtered = await callTool("legislation_list_laws", { fonction: "tarif" });
   add("list_laws : filtre fonction='tarif'", filtered.structuredContent?.count === 4,
     `count=${filtered.structuredContent?.count}`);
 
-  const bySubject = await callTool("qclaw_list_laws", { subject: "louage-residentiel" });
+  const bySubject = await callTool("legislation_list_laws", { subject: "louage-residentiel" });
   add("list_laws : filtre subject='louage-residentiel'",
     (bySubject.structuredContent?.count ?? 0) >= 3,
     `count=${bySubject.structuredContent?.count}`);
 
-  const subs = await callTool("qclaw_list_subjects", {});
+  const subs = await callTool("legislation_list_subjects", {});
   add("list_subjects : 43 matières", subs.structuredContent?.count === 43,
     `count=${subs.structuredContent?.count}`);
 
   // Les 43 matières doivent être traduites : c'est la surface d'appariement du signal S1,
   // sans quoi le routeur reste muet en anglais.
-  const subsEn = await callTool("qclaw_list_subjects", { lang: "en" });
+  const subsEn = await callTool("legislation_list_subjects", { lang: "en" });
   const sansEn = (subsEn.structuredContent?.subjects ?? [])
     .filter((s) => !s.label_en || !s.description_en).map((s) => s.id);
   add("list_subjects (lang=en) : les 43 matières traduites", sansEn.length === 0,
@@ -307,17 +307,17 @@ async function smokeTests() {
     /— Biens\b/.test(texteFr) && /Matières spécialisées/.test(texteFr) && !/— Property\b/.test(texteFr));
 
   // 6 règlements de cour sous le chapitre C-25.01 (sur les 13 arêtes 'reglement-de' du corpus)
-  const rel = await callTool("qclaw_related_laws", { law: "cpc", rel_type: "reglement-de" });
+  const rel = await callTool("legislation_related_laws", { law: "cpc", rel_type: "reglement-de" });
   add("related_laws : cpc a 6 règlements", rel.structuredContent?.total === 6,
     `total=${rel.structuredContent?.total}`);
 
-  const bad = await callTool("qclaw_related_laws", { law: "inexistante" });
+  const bad = await callTool("legislation_related_laws", { law: "inexistante" });
   add("related_laws : erreur actionnable si loi inconnue",
     bad.isError === true && /Lois disponibles/.test(bad.content?.[0]?.text ?? ""));
 
   // L'outil DÉCLARAIT `lang` sans jamais le lire : un client demandant l'anglais recevait
   // noms de lois ET notes curées en français, sans étiquette — « faux, servi, silencieux ».
-  const relEn = await callTool("qclaw_related_laws", { law: "c-27.1", lang: "en" });
+  const relEn = await callTool("legislation_related_laws", { law: "c-27.1", lang: "en" });
   const relsEn = relEn.structuredContent?.relations ?? [];
   const c19 = relsEn.find((r) => r.other_id === "c-19");
   add("related_laws (lang=en) : nom de loi en ANGLAIS",
@@ -330,7 +330,7 @@ async function smokeTests() {
   add("related_laws (lang=en) : ossature de la réponse en anglais",
     /relation\(s\) for/.test(relEn.content?.[0]?.text ?? ""),
     (relEn.content?.[0]?.text ?? "").slice(0, 60));
-  const relFr = await callTool("qclaw_related_laws", { law: "c-27.1" });
+  const relFr = await callTool("legislation_related_laws", { law: "c-27.1" });
   add("related_laws (défaut fr) : nom de loi en français, aucune marque [fr]",
     (relFr.structuredContent?.relations ?? []).find((r) => r.other_id === "c-19")?.other_name
       === "Loi sur les cités et villes" && !/\[fr\]/.test(relFr.content?.[0]?.text ?? ""));
@@ -338,11 +338,11 @@ async function smokeTests() {
   // list_laws rendait les libellés de MATIÈRES toujours en français, même sous lang='en',
   // alors que label_en est peuplé sur les 43 matières. Contrôler les ENTRÉES, pas l'en-tête :
   // c'est la leçon déjà tirée pour list_subjects et jamais reportée ici.
-  const lawsEn = await callTool("qclaw_list_laws", { lang: "en", structure: false });
+  const lawsEn = await callTool("legislation_list_laws", { lang: "en", structure: false });
   const cmEn = lawsEn.structuredContent?.laws?.find((l) => l.id === "c-27.1");
   add("list_laws (lang=en) : libellés de matières en ANGLAIS",
     (cmEn?.subjects ?? []).includes("Municipal Law"), `subjects=${JSON.stringify(cmEn?.subjects)}`);
-  const lawsFr = await callTool("qclaw_list_laws", { lang: "fr", structure: false });
+  const lawsFr = await callTool("legislation_list_laws", { lang: "fr", structure: false });
   add("list_laws (lang=fr) : libellés de matières en français",
     (lawsFr.structuredContent?.laws?.find((l) => l.id === "c-27.1")?.subjects ?? [])
       .includes("Droit municipal"));
@@ -356,7 +356,7 @@ async function smokeTests() {
   const toutes = laws.structuredContent?.laws ?? [];
   const cassees = [];
   for (const l of toutes) {
-    const r = await callTool("qclaw_get_articles", { law: l.id, from: "1", to: "3" });
+    const r = await callTool("legislation_get_articles", { law: l.id, from: "1", to: "3" });
     if (r.isError) cassees.push(l.id);
   }
   add(`get_articles : mode plage opérant sur les ${servis} lois servies`, cassees.length === 0,
@@ -368,7 +368,7 @@ async function smokeTests() {
   // peut rien y voir — la signature D1 `all<T>()` est une ASSERTION, pas une vérification :
   // le compilateur ne lit pas le SQL. D'où ces contrôles sur la FORME de la sortie.
   {
-    const r = await callTool("qclaw_get_articles", { law: "ccq", from: "1", to: "5" });
+    const r = await callTool("legislation_get_articles", { law: "ccq", from: "1", to: "5" });
     const a = r.structuredContent?.articles?.[0];
     add("get_articles : chaque article porte number, text, division_path, repealed",
       !!a && typeof a.number === "string" && a.number.length > 0 &&
@@ -388,7 +388,7 @@ async function smokeTests() {
   // Les plages bornées par deux articles réels passent désormais par l'ordre du DOCUMENT.
   for (const [law, a, b] of [["ccq-r.8", "15.1", "15.2"], ["t-15.01", "31.1", "31.2"]]) {
     for (const lang of ["fr", "en"]) {
-      const r = await callTool("qclaw_get_articles", { law, from: a, to: b, lang });
+      const r = await callTool("legislation_get_articles", { law, from: a, to: b, lang });
       const nums = (r.structuredContent?.articles ?? []).map((x) => x.number);
       add(`get_articles : plage ${law} ${a}..${b} (${lang}) exacte, sans les voisins à clé partagée`,
         nums.length === 2 && nums[0] === a && nums[1] === b,
@@ -403,17 +403,17 @@ async function smokeTests() {
   // TOUJOURS présent (R4, corollaire structuré, décision 001) : « absent » et « borné par
   // le texte » ne doivent pas être confondus.
   {
-    const n = await callTool("qclaw_get_articles", { law: "ccq", numbers: ["1457", "1590"] });
+    const n = await callTool("legislation_get_articles", { law: "ccq", numbers: ["1457", "1590"] });
     add("get_articles : range_resolution présent et null en mode numbers[]",
       "range_resolution" in (n.structuredContent ?? {}) && n.structuredContent.range_resolution === null,
       `range_resolution=${JSON.stringify(n.structuredContent?.range_resolution)}`);
-    const o = await callTool("qclaw_get_articles", { law: "ccq", from: "1", to: "9999" });
+    const o = await callTool("legislation_get_articles", { law: "ccq", from: "1", to: "9999" });
     add("get_articles : borne ouverte étiquetée 'cle' (repli sur la clé de tri)",
       o.structuredContent?.range_resolution === "cle",
       `range_resolution=${o.structuredContent?.range_resolution}`);
     // Un pseudo-article comme borne retombe aussi sur la clé : son `id` ne suit pas
     // l'ordre du document (l'émission du parseur le place hors de sa position réelle).
-    const p = await callTool("qclaw_get_articles", { law: "ccq", from: "préliminaire", to: "3" });
+    const p = await callTool("legislation_get_articles", { law: "ccq", from: "préliminaire", to: "3" });
     add("get_articles : pseudo-article en borne étiqueté 'cle'",
       p.structuredContent?.range_resolution === "cle",
       `range_resolution=${p.structuredContent?.range_resolution}`);
@@ -428,7 +428,7 @@ async function smokeTests() {
   // a-2.1 art. 26 est abrogé en base (22 articles abrogés dans cette loi). Si ce n'est plus
   // vrai après une réingestion, ce contrôle DOIT rougir : c'est un fait de corpus qui change.
   {
-    const one = await callTool("qclaw_get_article", { law: "a-2.1", article: "26" });
+    const one = await callTool("legislation_get_article", { law: "a-2.1", article: "26" });
     add("get_article : un article abrogé est marqué abrogé, en données ET en prose",
       one.structuredContent?.repealed === true && /abrog/i.test(one.content?.[0]?.text ?? ""),
       `a-2.1 art. 26 : repealed=${one.structuredContent?.repealed} ` +
@@ -438,7 +438,7 @@ async function smokeTests() {
   // getStructure sans parent_id APLATIT l'arbre : toutes les divisions deviennent racines.
   // Le contrôle voisin ne teste que l'absence d'erreur — il passerait.
   {
-    const st = await callTool("qclaw_get_structure", { law: "ccq" });
+    const st = await callTool("legislation_get_structure", { law: "ccq" });
     const tree = st.structuredContent?.tree;
     const profondeur = (ns, d = 1) => ns.reduce(
       (m, n) => Math.max(m, n.children?.length ? profondeur(n.children, d + 1) : d), 0);
@@ -451,21 +451,21 @@ async function smokeTests() {
   // D1 plafonne la complexité des motifs LIKE/GLOB : les chemins profonds du C.c.Q. le
   // dépassaient et faisaient échouer get_division / get_structure(root_path).
   const profond = "ga:l_cinquieme-gb:l_premier-gc:l_troisieme-gd:l_i-ge:l_1";
-  const div = await callTool("qclaw_get_division", { law: "ccq", path: profond });
+  const div = await callTool("legislation_get_division", { law: "ccq", path: profond });
   add("get_division : chemin profond (55 car.) sans erreur D1", div.isError !== true,
     div.isError ? (div.content?.[0]?.text ?? "").slice(0, 90) : "");
-  const stru = await callTool("qclaw_get_structure", { law: "ccq", root_path: profond });
+  const stru = await callTool("legislation_get_structure", { law: "ccq", root_path: profond });
   add("get_structure : root_path profond sans erreur D1", stru.isError !== true,
     stru.isError ? (stru.content?.[0]?.text ?? "").slice(0, 90) : "");
 
   // resolve_reference rendait silencieusement le MAUVAIS article de la MAUVAISE loi :
   // « c. T-16 » lui donnait l'article 16 du C.c.Q.
-  const t16 = await callTool("qclaw_resolve_reference", { citation: "RLRQ, c. T-16, art. 12" });
+  const t16 = await callTool("legislation_resolve_reference", { citation: "RLRQ, c. T-16, art. 12" });
   add("resolve_reference : chapitre RLRQ correctement reconnu",
     t16.structuredContent?.resolved?.law === "t-16" &&
     t16.structuredContent?.resolved?.number === "12",
     `obtenu ${t16.structuredContent?.resolved?.law}/${t16.structuredContent?.resolved?.number}`);
-  const ccqRef = await callTool("qclaw_resolve_reference", { citation: "art. 1457 C.c.Q." });
+  const ccqRef = await callTool("legislation_resolve_reference", { citation: "art. 1457 C.c.Q." });
   add("resolve_reference : abréviation C.c.Q. toujours reconnue",
     ccqRef.structuredContent?.resolved?.law === "ccq" &&
     ccqRef.structuredContent?.resolved?.number === "1457",
@@ -478,11 +478,11 @@ async function smokeTests() {
 
   // Les identifiants Irosoft sont propres à la langue : une piste rendue en anglais doit
   // porter un chemin ANGLAIS, sinon get_division(lang='en') la refuse.
-  const enLaws = await callTool("qclaw_list_laws", { lang: "en" });
+  const enLaws = await callTool("legislation_list_laws", { lang: "en" });
   const ccqEn = enLaws.structuredContent?.laws?.find((l) => l.id === "ccq");
   const premier = ccqEn?.mapped_divisions?.[0];
   const ouvrable = premier
-    ? await callTool("qclaw_get_division",
+    ? await callTool("legislation_get_division",
         { law: "ccq", lang: "en", path: premier.division_path, include_text: false })
     : { isError: true };
   add("list_laws (lang=en) : chemins de divisions ouvrables en anglais",
@@ -492,7 +492,7 @@ async function smokeTests() {
   // Un chapitre HORS corpus dont un chapitre du corpus est préfixe ne doit pas être avalé.
   // (« B-1.1 » jouait ce rôle jusqu'à son entrée au corpus — voir le contrôle suivant ;
   // « C-73.3 » le remplace : absent, mais préfixé par c-73.2 qui est présent.)
-  const horsCorpus = await callTool("qclaw_resolve_reference", { citation: "RLRQ, c. C-73.3, art. 5" });
+  const horsCorpus = await callTool("legislation_resolve_reference", { citation: "RLRQ, c. C-73.3, art. 5" });
   add("resolve_reference : chapitre hors corpus refusé, pas rabattu sur un voisin",
     horsCorpus.isError === true,
     horsCorpus.isError ? "" : `résolu à tort en ${horsCorpus.structuredContent?.resolved?.law}`);
@@ -505,7 +505,7 @@ async function smokeTests() {
     ["RLRQ, c. E-6.1, art. 1", "e-6.1"], ["RLRQ, c. E-6, art. 1", "e-6"],
     ["RLRQ, c. C-65.1, art. 1", "c-65.1"], ["RLRQ, c. C-65.01, art. 1", "c-65.01"],
   ]) {
-    const r = await callTool("qclaw_resolve_reference", { citation: cite });
+    const r = await callTool("legislation_resolve_reference", { citation: cite });
     add(`resolve_reference : « ${cite.replace("RLRQ, c. ", "")} » -> ${attendu}`,
       r.structuredContent?.resolved?.law === attendu,
       `obtenu ${r.structuredContent?.resolved?.law ?? "(refus)"}`);
@@ -513,14 +513,14 @@ async function smokeTests() {
 
   // Marqueur « a. » (forme québécoise usuelle) : sans lui, le numéro du CHAPITRE était pris
   // pour l'article — « (chapitre T-16), a. 12 » rendait l'article 16.
-  const marqueurA = await callTool("qclaw_resolve_reference",
+  const marqueurA = await callTool("legislation_resolve_reference",
     { citation: "Loi sur les tribunaux judiciaires (chapitre T-16), a. 12" });
   add("resolve_reference : marqueur « a. » et chapitre non confondu avec l'article",
     marqueurA.structuredContent?.resolved?.law === "t-16" &&
     marqueurA.structuredContent?.resolved?.number === "12",
     `obtenu ${marqueurA.structuredContent?.resolved?.law}/${marqueurA.structuredContent?.resolved?.number}`);
 
-  const frEn = await callTool("qclaw_find_relevant", { query: "residential lease", lang: "en" });
+  const frEn = await callTool("legislation_find_relevant", { query: "residential lease", lang: "en" });
   const s1 = (frEn.structuredContent?.candidates ?? []).find((c) => c.division_path);
   add("find_relevant (lang=en) : pas de chemin français dans une réponse anglaise",
     !s1 || !/l_(premier|deuxieme|troisieme|quatrieme|cinquieme|sixieme)/.test(s1.division_path),
@@ -529,7 +529,7 @@ async function smokeTests() {
   // --- phase 1 (Discovery v2) : tests d'acceptation devenus permanents ---
 
   // 1.1 : restreinte sans résultat -> élargissement corpus étiqueté
-  const widen = await callTool("qclaw_search_text", { query: "extranéité", law: "b-9" });
+  const widen = await callTool("legislation_search_text", { query: "extranéité", law: "b-9" });
   add("v2 1.1 : élargissement corpus sur zéro résultat (étiqueté)",
     widen.isError !== true &&
     /Aucun résultat dans b-9/.test(widen.content?.[0]?.text ?? "") &&
@@ -537,7 +537,7 @@ async function smokeTests() {
     (widen.content?.[0]?.text ?? "").slice(0, 60));
 
   // 1.1 : restreinte AVEC résultats -> résultats inchangés + aperçu ailleurs (post-mortem)
-  const scoped = await callTool("qclaw_search_text", { query: "extranéité", law: "ccq" });
+  const scoped = await callTool("legislation_search_text", { query: "extranéité", law: "ccq" });
   add("v2 1.1 : aperçu « ailleurs au corpus » sur recherche restreinte avec résultats",
     scoped.structuredContent?.fallback === null &&
     (scoped.structuredContent?.results ?? []).every((r) => r.law_id === "ccq") &&
@@ -546,7 +546,7 @@ async function smokeTests() {
   // 1.2/2.4 : LE CAS FONDATEUR — cpc 490 dans le top 5, par un chemin ÉTIQUETÉ.
   // Depuis la phase 2, le repérage sémantique répond AVANT le leave-one-out (décision
   // 2.4) ; les deux chemins sont légitimes, l'exigence est le résultat + l'étiquette.
-  const fond = await callTool("qclaw_search_text",
+  const fond = await callTool("legislation_search_text",
     { query: "signification hors du Québec délai", law: "cpc" });
   const fondTop5 = (fond.structuredContent?.results ?? []).slice(0, 5);
   add("v2 1.2/2.4 : cas fondateur — cpc 490 top 5, chemin étiqueté (LOO ou sémantique)",
@@ -556,11 +556,11 @@ async function smokeTests() {
     fondTop5.map((r) => `${r.law_id}|${r.number}`).join(", "));
 
   // 1.2 : requête absurde -> échec propre
-  const absurde = await callTool("qclaw_search_text", { query: "zzz qqq" });
+  const absurde = await callTool("legislation_search_text", { query: "zzz qqq" });
   add("v2 1.2 : requête absurde échoue proprement", absurde.isError === true);
 
   // 1.3 : fils d'Ariane lisibles + ID machine + extraits élargis + groupes par loi
-  const presc = await callTool("qclaw_search_text", { query: "prescription" });
+  const presc = await callTool("legislation_search_text", { query: "prescription" });
   const prescText = presc.content?.[0]?.text ?? "";
   add("v2 1.3 : fil d'Ariane + ID machine dans les résultats",
     /C\.c\.Q\. — Livre HUITIÈME/.test(prescText) && /\[ga:l_huitieme/.test(prescText));
@@ -572,15 +572,15 @@ async function smokeTests() {
     `${unSnippet.split(/\s+/).length} tokens`);
 
   // 1.4 : plan profondeur 2 — le Titre IV du Livre V cpc est visible dans list_laws
-  const lls = await callTool("qclaw_list_laws", {});
+  const lls = await callTool("legislation_list_laws", {});
   add("v2 1.4 : list_laws expose Livre V + Titre IV (droit international privé) du cpc",
     /LES DEMANDES INTÉRESSANT LE DROIT INTERNATIONAL PRIVÉ \[ga:l_v-gb:l_iv\]/.test(lls.content?.[0]?.text ?? ""));
-  const llsSans = await callTool("qclaw_list_laws", { structure: false });
+  const llsSans = await callTool("legislation_list_laws", { structure: false });
   add("v2 1.4 : structure=false coupe le plan",
     !/▸ Livre/.test(llsSans.content?.[0]?.text ?? ""));
 
   // 1.5 : chemin FR sous lang=en -> pont par numéros d'articles
-  const pont = await callTool("qclaw_get_division",
+  const pont = await callTool("legislation_get_division",
     { law: "ccq", path: "ga:l_cinquieme-gb:l_deuxieme-gc:l_septieme", lang: "en", include_text: false });
   add("v2 1.5 : chemin FR accepté sous lang=en (CONTRACT OF EMPLOYMENT)",
     pont.isError !== true && /CONTRACT OF EMPLOYMENT/.test(pont.content?.[0]?.text ?? ""));
@@ -589,7 +589,7 @@ async function smokeTests() {
 
   // Cas 19 du plan (acceptation de la phase 2) : requête ANGLAISE -> texte FRANÇAIS.
   // Aucun terme lexical commun ; seul le pont sémantique multilingue (bge-m3) y arrive.
-  const sem = await callTool("qclaw_search_text", { query: "defendant outside Quebec time to answer" });
+  const sem = await callTool("legislation_search_text", { query: "defendant outside Quebec time to answer" });
   add("v2 2.3 : cas 19 — requête EN trouve cpc 490 (pont sémantique)",
     (sem.structuredContent?.results ?? []).some((r) => r.law_id === "cpc" && r.number === "490"),
     (sem.structuredContent?.results ?? []).slice(0, 5).map((r) => `${r.law_id}|${r.number}`).join(", "));
@@ -598,7 +598,7 @@ async function smokeTests() {
     sem.structuredContent?.fallback === "semantic");
 
   // Une requête lexicalement servie reste lexicale (pas de bruit sémantique en tête).
-  const lex = await callTool("qclaw_search_text", { query: "extranéité" });
+  const lex = await callTool("legislation_search_text", { query: "extranéité" });
   add("v2 2.3 : requête lexicale — le 1er résultat reste la correspondance exacte",
     (lex.structuredContent?.results ?? [])[0]?.number !== undefined &&
     ["3111", "490", "622"].includes((lex.structuredContent?.results ?? [])[0]?.number));
@@ -782,7 +782,7 @@ async function smokeTests() {
       res.status === 200 && /text\/html/.test(res.headers.get("content-type") ?? ""),
       `status=${res.status} type=${res.headers.get("content-type")}`);
 
-    // Parité page <-> outil : autant de lignes de loi que qclaw_list_laws n'annonce de lois.
+    // Parité page <-> outil : autant de lignes de loi que legislation_list_laws n'annonce de lois.
     const rows = (html.match(/data-law-id="/g) ?? []).length;
     add("page : autant de lois affichées que list_laws en déclare",
       rows === laws.structuredContent?.count,

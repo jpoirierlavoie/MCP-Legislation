@@ -34,7 +34,7 @@ class TestColonnes(unittest.TestCase):
 
         Et comme les colonnes de 0004 portent des DEFAULT (`jurisdiction='qc'`,
         `in_force=1`, `unit='article'`), l'omission chargerait les 18 textes fédéraux COMME
-        QUÉBÉCOIS : `qclaw_list_laws(jurisdiction='ca')` rendrait zéro résultat.
+        QUÉBÉCOIS : `legislation_list_laws(jurisdiction='ca')` rendrait zéro résultat.
         """
         for col in ("official_cite", "official_cite_en", "chapter", "jurisdiction",
                     "in_force", "last_amended", "unit"):

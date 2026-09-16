@@ -64,7 +64,7 @@ _ART_COLS = ["id", "law_id", "lang", "number", "sort_key", "division_id",
 # ⚠️ UNE COLONNE ABSENTE DE CES LISTES N'ARRIVE JAMAIS EN BASE, ET EN SILENCE. Les colonnes
 # de 0004 portent des DEFAULT (`jurisdiction='qc'`, `in_force=1`, `unit='article'`) : les
 # omettre chargerait les 18 textes fédéraux COMME QUÉBÉCOIS, en vigueur, unité « article ».
-# `qclaw_list_laws(jurisdiction='ca')` rendrait alors ZÉRO résultat, et l'`in_force` que le
+# `legislation_list_laws(jurisdiction='ca')` rendrait alors ZÉRO résultat, et l'`in_force` que le
 # SPEC §3.7 veut mesuré deviendrait un défaut affirmé. Trou trouvé par l'audit de complétude.
 _LAW_COLS = ["id", "name_fr", "name_en", "official_cite", "consol_date_fr",
              "consol_date_en", "name_norm",

@@ -1,4 +1,4 @@
-// Gardes du mode PLAGE de qclaw_get_articles — hors réseau, en CI.
+// Gardes du mode PLAGE de legislation_get_articles — hors réseau, en CI.
 //
 // Pourquoi ce fichier existe. `articles.sort_key` n'est pas un ordre total : il empaquette
 // `int(composante)` en base 1000, donc `int("01") === int("1")` et le zéro de tête est

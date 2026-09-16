@@ -70,7 +70,7 @@ Deux refus à ne pas confondre, et le second surprend :
 
 Les décomptes exacts (nombre d'articles par langue, dates de consolidation) sont calculés
 en base et affichés sur la [page publique](https://legislation.poirierlavoie.ca/) ainsi que
-par l'outil `qclaw_list_laws` — ils ne sont pas recopiés ici (R10). Rafraîchissement
+par l'outil `legislation_list_laws` — ils ne sont pas recopiés ici (R10). Rafraîchissement
 semestriel.
 
 ## Les 10 outils
@@ -81,25 +81,25 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 
 | Outil | Rôle | Exemple |
 |---|---|---|
-| `qclaw_find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats, avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
-| `qclaw_list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, loi habilitante, plan des grands codes ; filtres `fonction`/`forum`/`subject` | `fonction=tarif` → les 4 tarifs |
-| `qclaw_list_subjects` | Les 43 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
-| `qclaw_related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées | `law=cpc` → ses 6 règlements de cour |
+| `legislation_find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats, avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
+| `legislation_list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, loi habilitante, plan des grands codes ; filtres `fonction`/`forum`/`subject` | `fonction=tarif` → les 4 tarifs |
+| `legislation_list_subjects` | Les 43 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
+| `legislation_related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées | `law=cpc` → ses 6 règlements de cour |
 
 ### Extraction
 
 | Outil | Rôle | Exemple |
 |---|---|---|
-| `qclaw_get_article` | Un article verbatim, avec citation, hiérarchie, historique, date | `law=ccq, article=1457` |
-| `qclaw_get_articles` | Plage (`from`/`to`) ou liste (`numbers`) d'articles, paginée | `law=cpc, from=489, to=496` |
-| `qclaw_get_structure` | L'arbre des divisions, sans texte — pour explorer avant d'extraire | `law=ccq, depth=2` |
-| `qclaw_get_division` | Une division (Livre/Titre/Chapitre…) : intitulé, sous-divisions, articles | `path=ga:l_cinquieme` |
-| `qclaw_search_text` | Recherche hybride dans le texte des articles (voir ci-dessous) | `« délai réponse défendeur hors du Québec »` |
-| `qclaw_resolve_reference` | D'une citation libre vers l'article officiel ; reconnaît les chapitres RLRQ et les abréviations C.c.Q./C.p.c. | `« RLRQ, c. T-16, art. 12 »` |
+| `legislation_get_article` | Un article verbatim, avec citation, hiérarchie, historique, date | `law=ccq, article=1457` |
+| `legislation_get_articles` | Plage (`from`/`to`) ou liste (`numbers`) d'articles, paginée | `law=cpc, from=489, to=496` |
+| `legislation_get_structure` | L'arbre des divisions, sans texte — pour explorer avant d'extraire | `law=ccq, depth=2` |
+| `legislation_get_division` | Une division (Livre/Titre/Chapitre…) : intitulé, sous-divisions, articles | `path=ga:l_cinquieme` |
+| `legislation_search_text` | Recherche hybride dans le texte des articles (voir ci-dessous) | `« délai réponse défendeur hors du Québec »` |
+| `legislation_resolve_reference` | D'une citation libre vers l'article officiel ; reconnaît les chapitres RLRQ et les abréviations C.c.Q./C.p.c. | `« RLRQ, c. T-16, art. 12 »` |
 
 ## La recherche, en détail
 
-`qclaw_search_text` combine deux moteurs et **dit toujours quel chemin a produit les
+`legislation_search_text` combine deux moteurs et **dit toujours quel chemin a produit les
 résultats** :
 
 1. **Lexical** (FTS5, insensible aux accents) — correspondance exacte d'abord ; si une

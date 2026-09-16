@@ -31,7 +31,7 @@
   ],
 
   // Chemins de récupération réversibles (plan v2, R8) : rollback = flip de variable.
-  // RELAX_SEARCH : échelle de relaxation de qclaw_search_text (1.2). "0" pour désactiver.
+  // RELAX_SEARCH : échelle de relaxation de legislation_search_text (1.2). "0" pour désactiver.
   // HYBRID_SEARCH : recherche hybride FTS + vecteurs (2.3). "0" tant que le rattrapage
   // des vecteurs n'est pas validé ; bascule à "1" ensuite (séquence de déploiement §2).
   // FEDERAL_CORPUS : l'interrupteur du corpus fédéral (R8). À "0", les textes

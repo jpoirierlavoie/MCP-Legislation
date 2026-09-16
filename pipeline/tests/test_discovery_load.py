@@ -15,7 +15,7 @@ parce qu'elle sous-déclarait la fraîcheur de près d'un an sur certains textes
 n'était pas celle que la veille compare. Le défaut gardé ici est INCHANGÉ : la config ne
 porte toujours aucune date fédérale.)
 
-Conséquence servie : `qclaw_list_laws` et la page publique annonçaient 18 textes sans date
+Conséquence servie : `legislation_list_laws` et la page publique annonçaient 18 textes sans date
 « à jour au ». Et le défaut se rejouait à chaque passe éditoriale sur `taxonomy.json`, donc
 une réingestion corrective était effacée au chargement suivant — c'est ce qui a rendu la
 cause si difficile à établir : elle réapparaissait après chaque réparation.

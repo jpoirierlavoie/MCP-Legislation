@@ -1,4 +1,4 @@
-// Classement de pertinence pour qclaw_find_relevant (plan-couche-decouverte §4.4/§4.5).
+// Classement de pertinence pour legislation_find_relevant (plan-couche-decouverte §4.4/§4.5).
 //
 // Entièrement DÉTERMINISTE : aucun appel de modèle. Le score d'un candidat est la somme des
 // signaux S1–S4 déclenchés par les tokens de la requête normalisée.

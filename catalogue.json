@@ -1,7 +1,7 @@
 {
   "_comment": "SOURCE UNIQUE de la documentation publique (R10). Consommé par src/tools.ts (les title_fr sont les titres MCP servis par tools/list) et par src/site.ts (la page publique). Épinglé par tests/catalogue.test.mjs, qui exige la parité stricte avec les outils enregistrés et la concordance des constantes de calibration citées ici avec src/relevance.ts. NE JAMAIS y recopier un décompte (lois, matières, articles) : ces chiffres se lisent en base au rendu.",
   "tools": {
-    "qclaw_find_relevant": {
+    "legislation_find_relevant": {
       "title_fr": "Repérage de sources — heuristique",
       "title_en": "Source discovery — heuristic",
       "groupe": "orientation",
@@ -16,7 +16,7 @@
         "This is a retrieval aid, not a legal answer: it does not determine the applicable law. Its output tells you where to read; you then extract the text with the structure and article tools."
       ]
     },
-    "qclaw_list_laws": {
+    "legislation_list_laws": {
       "title_fr": "Carte du corpus",
       "title_en": "Corpus map",
       "groupe": "orientation",
@@ -31,7 +31,7 @@
         "Three filters narrow the map: by function, by forum, or by subject. This is where to start when exploring a known corpus; to start from a concrete problem, the discovery tool is more direct."
       ]
     },
-    "qclaw_list_subjects": {
+    "legislation_list_subjects": {
       "title_fr": "Matières de la taxonomie",
       "title_en": "Taxonomy subjects",
       "groupe": "orientation",
@@ -46,7 +46,7 @@
         "A subject's description is not decorative prose: it is the surface against which query terms are matched. The vocabulary it contains is the vocabulary meant to be recognized — which makes it the main editorial lever for tuning discovery."
       ]
     },
-    "qclaw_related_laws": {
+    "legislation_related_laws": {
       "title_fr": "Lois reliées",
       "title_en": "Related statutes",
       "groupe": "orientation",
@@ -63,7 +63,7 @@
         "Statute names follow the requested language. The notes attached to curated relations, however, exist only in French: under an English request they are returned MARKED [fr] rather than passed off as a translation, and the label travels in the structured payload as well."
       ]
     },
-    "qclaw_get_article": {
+    "legislation_get_article": {
       "title_fr": "Texte officiel d'un article",
       "title_en": "Official text of an article",
       "groupe": "extraction",
@@ -78,7 +78,7 @@
         "If the requested number does not exist, the tool does not guess: it offers the neighbouring articles. A missing article is reported, never substituted with its nearest sibling."
       ]
     },
-    "qclaw_get_articles": {
+    "legislation_get_articles": {
       "title_fr": "Textes officiels en lot",
       "title_en": "Official texts in bulk",
       "groupe": "extraction",
@@ -91,7 +91,7 @@
         "Range mode follows the text's real article order, including decimal numbers inserted between two whole ones — the bounds are read from the database rather than recomputed, which makes ranges immune to a given text's numbering quirks."
       ]
     },
-    "qclaw_get_structure": {
+    "legislation_get_structure": {
       "title_fr": "Structure d'une loi (sans texte)",
       "title_en": "Structure of a statute (no text)",
       "groupe": "extraction",
@@ -106,7 +106,7 @@
         "Paths are language-specific, since they derive from the official markup. A path obtained in French nonetheless remains usable in English: it is translated automatically through the article-number bridge."
       ]
     },
-    "qclaw_get_division": {
+    "legislation_get_division": {
       "title_fr": "Texte officiel d'une division",
       "title_en": "Official text of a division",
       "groupe": "extraction",
@@ -121,7 +121,7 @@
         "Where a heading exists in only one language, the other language's heading is returned and marked as such, rather than displaying a silent blank."
       ]
     },
-    "qclaw_search_text": {
+    "legislation_search_text": {
       "title_fr": "Recherche plein texte — replis étiquetés",
       "title_en": "Full-text search — labelled fallbacks",
       "groupe": "extraction",
@@ -136,7 +136,7 @@
         "A search restricted to one statute that returns nothing is automatically widened to the corpus; a restricted search that does return results still reports what exists elsewhere. Corpus-wide results are grouped by statute, with a per-statute cap, so that a voluminous text cannot monopolize the ranking."
       ]
     },
-    "qclaw_resolve_reference": {
+    "legislation_resolve_reference": {
       "title_fr": "Résolution d'une citation",
       "title_en": "Citation resolution",
       "groupe": "extraction",

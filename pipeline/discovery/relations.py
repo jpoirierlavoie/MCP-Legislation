@@ -130,7 +130,7 @@ class CorpusEpubIncomplet(RuntimeError):
         recréé       33 reglement-de (elles viennent de la config, pas des EPUB)
                   + une poignée de renvoie-a, depuis 2 fichiers
 
-    soit **~1 250 relations détruites en silence** — `qclaw_related_laws` vidé pour presque
+    soit **~1 250 relations détruites en silence** — `legislation_related_laws` vidé pour presque
     toutes les lois, et le signal S4 de `find_relevant` amputé, `law_relations` étant l'une
     des quatre sources de `loadRelevanceData`. Aucune erreur n'aurait été levée : la
     reconstruction aurait « réussi », simplement avec presque rien dedans.
