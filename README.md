@@ -130,11 +130,11 @@ Les recherches corpus sont regroupées par loi (max 6 par loi).
 
 ## Avertissement
 
-L'aide au repérage (`find_relevant`, taxonomie, relations) est **heuristique** : elle ne
-détermine pas le droit applicable. Toujours vérifier en lisant le texte via
-`get_structure` / `get_division` / `get_article`. Ce serveur ne fournit pas de conseil
-juridique ; en cas de doute, consulter la version officielle sur LégisQuébec et un
-professionnel du droit.
+L'aide au repérage (`legislation_find_relevant`, taxonomie, relations) est **heuristique** :
+elle ne détermine pas le droit applicable. Toujours vérifier en lisant le texte via
+`legislation_get_structure` / `legislation_get_division` / `legislation_get_article`.
+Ce serveur ne fournit pas de conseil juridique ; en cas de doute, consulter la version
+officielle du publieur (LégisQuébec ou Justice Canada) et un professionnel du droit.
 
 ## Pour les développeurs
 

@@ -515,6 +515,28 @@ agrégé, un blocage TOTAL du fédéral pesait 36/194 = 18,6 %, donc sous les 25
 passait vert pendant que 18 textes sur 97 n'étaient vérifiés par rien. Défauts trouvés par
 revue adversariale (2026-07-21 et 2026-09-14) et corrigés avant le commit.
 
+## ⏸️ AVANT D'OUVRIR AU PUBLIC — deux décisions qui restent à Jason
+
+Le contrat servi a été corrigé le 2026-09-17 (portée, noms d'outils, sélection fermée,
+avertissement, refus de `get_articles`, fuite du message moteur) et gardé par
+`tests/contrat-public.test.mjs`. **Deux points ne se corrigent PAS en code** :
+
+1. **LE JOURNAL CONSERVE LES REQUÊTES EN CLAIR, SANS DURÉE.** `search_log` enregistre le
+   texte libre de chaque recherche (`src/lib.ts`, `logSearch`) et **aucune purge n'existe**
+   dans le dépôt. Aujourd'hui ce sont les recherches de Jason. Publiquement, ce seront celles
+   d'inconnus — et une requête juridique est souvent intime (« congédiement représailles
+   dénonciation »). Le journal est ANONYME quant à l'auteur, par décision, et c'est ce qui
+   rend la situation tenable ; le TEXTE, lui, demeure. À trancher : une durée de conservation.
+   Purge manuelle, à la durée choisie :
+   `npx wrangler d1 execute legislation --remote --command "DELETE FROM search_log WHERE ts < datetime('now','-90 days')"`
+   Ce journal sert le dépouillement de `scripts/journal.mjs` (replis, reformulations), donc le
+   vider entièrement coûte la capacité de mesurer le repérage : c'est un arbitrage, pas un
+   nettoyage.
+2. **LA FORME `?key=` EXPOSE LE JETON AU JOURNAL DE REQUÊTES** du compte Cloudflare. C'est
+   assumé pour UN connecteur maîtrisé ; si l'authentification publique reprend cette forme,
+   **tout jeton distribué doit être traité comme déjà vu**. `Authorization: Bearer` n'a pas ce
+   défaut — c'est la forme à privilégier pour des porteurs publics.
+
 ## Échéances en cours (ce qui doit DISPARAÎTRE, et quand)
 
 Trois objets du dépôt sont **volontairement temporaires**. Chacun documentait sa propre

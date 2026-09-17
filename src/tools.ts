@@ -51,7 +51,7 @@ const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom
 const GARDE_FOU =
   "Aide heuristique au repérage de lois et de parties de lois candidates. " +
   "Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via " +
-  "get_structure / get_division / get_article.";
+  "legislation_get_structure / legislation_get_division / legislation_get_article.";
 
 /** Rappel du patron en deux temps sur les outils d'extraction (§6.4). */
 const DEUX_TEMPS = " Si la loi pertinente est inconnue, commencer par legislation_find_relevant.";
@@ -406,7 +406,12 @@ export function registerTools(server: McpServer, env: Env): void {
         "renvois vers d'autres textes, et relations curées (met-en-oeuvre, applique, complète…). " +
         "Signale les cibles NON disponibles au corpus. Ex. : law='cpc' pour voir ses règlements de cour.",
       inputSchema: {
-        law: z.string().describe("Identifiant de la loi, ex. 'cpc'."),
+        law: z
+          .string()
+          .describe(
+            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws.",
+          ),
         rel_type: z
           .string()
           .optional()
@@ -502,7 +507,8 @@ export function registerTools(server: McpServer, env: Env): void {
         GARDE_FOU +
         " Classement déterministe sur la matière (taxonomie), les intitulés de divisions, " +
         "les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', " +
-        "'congédiement', 'bail commercial'. Enchaîner ensuite avec get_structure / get_division.",
+        "'congédiement', 'bail commercial'. Enchaîner ensuite avec legislation_get_structure / " +
+        "legislation_get_division.",
       inputSchema: {
         query: z
           .string()
@@ -540,6 +546,8 @@ export function registerTools(server: McpServer, env: Env): void {
       if (cands.length === 0) {
         return err(
           `Aucun rapprochement pour « ${query} » (termes retenus : ${tokens.join(", ")}). ` +
+            "Le corpus est une SÉLECTION FERMÉE de textes du Québec et du fédéral : une absence " +
+            "ici ne dit rien de l'existence d'une règle ailleurs. " +
             "Voir les domaines avec legislation_list_subjects, ou chercher dans le texte avec legislation_search_text.",
         );
       }
@@ -582,7 +590,13 @@ export function registerTools(server: McpServer, env: Env): void {
         "se demandent avec article='préliminaire' ou 'finales'." +
         DEUX_TEMPS,
       inputSchema: {
-        law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
+        law: z
+          .string()
+          .describe(
+            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+              "legislation_find_relevant.",
+          ),
         article: z.coerce.string().describe("Numéro d'article, ex. '1457', '2926.1', '132.0.1'."),
         lang: LANG,
       },
@@ -632,7 +646,13 @@ export function registerTools(server: McpServer, env: Env): void {
         "Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']." +
         DEUX_TEMPS,
       inputSchema: {
-        law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
+        law: z
+          .string()
+          .describe(
+            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+              "legislation_find_relevant.",
+          ),
         from: z.coerce.string().optional().describe("Borne basse d'une plage, ex. '1457'."),
         to: z.coerce.string().optional().describe("Borne haute d'une plage, ex. '1460'."),
         numbers: z
@@ -658,6 +678,18 @@ export function registerTools(server: McpServer, env: Env): void {
       const useRange = from != null && to != null;
       if (!useRange && !numbers?.length) {
         return err("Fournir soit (from ET to), soit numbers[].");
+      }
+      // LES DEUX MODES ENSEMBLE : on REFUSE au lieu de servir la moitié de la demande.
+      // Mesuré en production le 2026-09-17 : { from:'1457', to:'1459', numbers:['1590'] }
+      // rendait 1457-1459 et jetait le 1590 SANS RIEN DIRE — le mode plage gagnait en
+      // silence. « Les art. 1457 à 1460, plus 1590 » est pourtant l'assemblage le plus
+      // naturel qu'un modèle produise, et la réponse avait l'air complète.
+      if (useRange && numbers?.length) {
+        return err(
+          "Modes INCOMPATIBLES : (from, to) et numbers[] ont été fournis ensemble. Ce serveur " +
+            "refuse plutôt que d'en servir un et d'abandonner l'autre en silence. " +
+            "Faire DEUX appels : un pour la plage, un pour la liste.",
+        );
       }
       const page = paginate(limit, offset);
       let rows: Partial<ArticleRow>[];
@@ -718,7 +750,13 @@ export function registerTools(server: McpServer, env: Env): void {
         "et depth pour limiter la profondeur (défaut 2 : livres et titres)." +
         DEUX_TEMPS,
       inputSchema: {
-        law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
+        law: z
+          .string()
+          .describe(
+            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+              "legislation_find_relevant.",
+          ),
         lang: LANG,
         root_path: z
           .string()
@@ -773,7 +811,13 @@ export function registerTools(server: McpServer, env: Env): void {
         "que les numéros d'articles." +
         DEUX_TEMPS,
       inputSchema: {
-        law: z.string().describe("Identifiant de la loi, ex. 'ccq'."),
+        law: z
+          .string()
+          .describe(
+            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+              "legislation_find_relevant.",
+          ),
         path: z
           .string()
           .optional()
@@ -894,7 +938,13 @@ export function registerTools(server: McpServer, env: Env): void {
         "résultat est automatiquement élargie au corpus.",
       inputSchema: {
         query: z.string().describe("Termes à rechercher, ex. 'responsabilité préjudice'."),
-        law: z.string().optional().describe("Restreindre à une loi (défaut : toutes)."),
+        law: z
+          .string()
+          .optional()
+          .describe(
+            "Restreindre à une loi par son identifiant court de corpus (ex. 'ccq') ; " +
+              "défaut : tout le corpus.",
+          ),
         lang: LANG,
         limit: z
           .number()
@@ -939,9 +989,17 @@ export function registerTools(server: McpServer, env: Env): void {
           }
           res = { ...res, hits: picked };
         }
-      } catch (e) {
+      } catch {
         await logSearch(db, { tool: "search_text", query, law, lang, result_count: 0 });
-        return err(`Recherche invalide. Essayez des mots simples. (${(e as Error).message})`);
+        // L'exception n'est PAS liée, et c'est le correctif : on renvoyait `e.message`, qui
+        // vient de SQLite/FTS5 et publiait au premier venu la syntaxe du moteur
+        // (« fts5: syntax error near … »). Sans intérêt pour l'appelant, et c'est de
+        // l'intérieur donné à voir une fois l'endpoint public. L'échec reste journalisé.
+        return err(
+          "Recherche invalide : la requête contient des caractères que le moteur de recherche " +
+            "réserve (guillemets, parenthèses, astérisque, NEAR/AND/OR). Réessayer avec des " +
+            "mots simples séparés par des espaces.",
+        );
       }
       const fallbackLog =
         res.fallback === null
@@ -957,7 +1015,19 @@ export function registerTools(server: McpServer, env: Env): void {
         result_count: res.hits.length,
         fallback: fallbackLog,
       });
-      if (res.hits.length === 0) return err(`Aucun résultat pour « ${query} » (${lang}).`);
+      // « Aucun résultat » DOIT dire dans quoi on a cherché. Sans ça, un modèle public lit
+      // l'absence comme « aucune règle n'existe » et la relaie comme une réponse — une absence
+      // présentée comme un fait. Deux causes dominent et se disent en une phrase : le corpus
+      // est une sélection fermée, et l'appariement est LEXICAL (aucun stemming français,
+      // mesuré : « congédiement » n'attrape pas « congédier »).
+      if (res.hits.length === 0)
+        return err(
+          `Aucun résultat pour « ${query} » (${lang}). Cela ne signifie pas qu'aucune règle ` +
+            "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
+            "LEXICAL (pas de familles de mots — « congédiement » ne trouve pas « congédier »). " +
+            "Essayer d'autres mots exacts du texte, ou legislation_find_relevant pour partir du " +
+            "problème plutôt que des mots.",
+        );
 
       // 1.3 : fils d'Ariane (résultats auto-explicatifs) + regroupement par loi.
       const semDivRefs = (res.divisions ?? []).map((d) => ({
