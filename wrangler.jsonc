@@ -40,7 +40,29 @@
   // servir, puis ouvrir d'un flip — et refermer de même si la qualité se dégrade. Fermé par
   // défaut à dessein : un déploiement qui oublierait la variable ne sert rien de neuf, au
   // lieu de tout servir d'un coup.
-  "vars": { "RELAX_SEARCH": "1", "HYBRID_SEARCH": "1", "FEDERAL_CORPUS": "1" },
+  // MCP_ENABLED — COUPE-CIRCUIT DU BLOC /mcp, fermé par défaut.
+  //
+  // La polarité est « !== "true" ⇒ éteint » : variable absente, vide ou mal orthographiée
+  // coupe le service. Ne JAMAIS l'écrire « === "false" », ce serait un garde ouvert par
+  // défaut sur un point d'entrée destiné au multilocataire.
+  //
+  // ⚠ SA PRÉSENCE ICI EST OBLIGATOIRE, et son oubli aurait éteint la production au premier
+  //   déploiement — constaté avant, pas après. Le coupe-circuit ne touche ni « / », ni les
+  //   documents publics : c'est quand le connecteur est coupé qu'un confrère doit pouvoir
+  //   lire pourquoi.
+  //
+  // SOCLE — bascule du transport. Absent ou différent de "true" : McpAgent sert, comme
+  // depuis toujours. À "true" : le routeur bâti sur @poirierlavoie/socle-juridique prend le
+  // relais, chaîne intergicielle et authentification comprises. Le drapeau bascule le chemin
+  // ENTIER, pour qu'on observe un comportement et non un mélange. Reste fermé jusqu'à ce
+  // que la bascule soit faite délibérément, l'URL du connecteur posée AVANT.
+  "vars": {
+    "RELAX_SEARCH": "1",
+    "HYBRID_SEARCH": "1",
+    "FEDERAL_CORPUS": "1",
+    "MCP_ENABLED": "true",
+    "SOCLE": "false"
+  },
 
   // Limitation de débit DANS le Worker, et non au WAF de la zone — même choix que le
   // connecteur jumeau (jurisprudence), qui a constaté que la limitation de zone n'était pas

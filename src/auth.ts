@@ -195,3 +195,22 @@ export function gateMcp(request: Request, url: URL, env: Env): Request | null {
   normalized.searchParams.delete(QUERY_KEY);
   return new Request(normalized.toString(), request);
 }
+
+/**
+ * La porte d'accès, DÉCLARÉE UNE FOIS, employée par le routeur du socle ET par les tests.
+ *
+ * `tests/catalogue.test.mjs` déduisait ces trois valeurs en ANALYSANT le texte de ce
+ * fichier, faute de pouvoir les importer — `MOUNT` et `QUERY_KEY` n'étaient pas exportés, et
+ * les noms de secrets n'avaient aucune forme d'exécution. L'analyse tenait tant que le code
+ * restait ici ; elle devenait fausse dès qu'il montait au socle. Un même littéral pilote
+ * désormais le runtime et la vérification.
+ *
+ * `segmentBorne` reste vrai tant que `McpAgent` est routé : le transport remonte la requête
+ * sur son chemin de montage, où une profondeur imprévue casserait l'appariement.
+ */
+export const PORTE = {
+  mount: MOUNT,
+  queryKey: QUERY_KEY,
+  nomsSecrets: ["MCP_TOKEN", "MCP_TOKEN_ATHENA"] as const,
+  segmentBorne: true,
+} as const;

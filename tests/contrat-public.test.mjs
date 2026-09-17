@@ -23,7 +23,12 @@ import { describe, expect, it } from "vitest";
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const lire = (p) => readFileSync(join(RACINE, p), "utf8");
 
-const indexTs = lire("src/index.ts");
+// INSTRUCTIONS et SERVER_INFO ont quitté src/index.ts pour src/serveur.ts, afin que le
+// routeur du socle et McpAgent servent LE MÊME texte. On lit donc les deux fichiers :
+// serveur.ts porte les chaînes, index.ts reste surveillé au cas où un nom mort y
+// réapparaîtrait. Ce que la garde prouve est inchangé.
+const indexTs = `${lire("src/serveur.ts")}
+${lire("src/index.ts")}`;
 const toolsTs = lire("src/tools.ts");
 
 /** Noms d'outils SANS préfixe — aucun n'existe côté serveur. */

@@ -1,8 +1,22 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  debitAcceptable,
+  methodeNonPermise,
+  origineAutorisee,
+  origineInterdite,
+  origineRefusee,
+  originesAdmises,
+  ouvrir,
+  preflight,
+  refuser,
+  tropDeRequetes,
+} from "@poirierlavoie/socle-juridique";
 import { McpAgent } from "agents/mcp";
 
-import { gateMcp } from "./auth";
+import { gateMcp, PORTE } from "./auth";
 import { handleBackfill } from "./backfill";
+import { servirMcp } from "./routeur";
+import { INSTRUCTIONS, SERVER_INFO } from "./serveur";
 import { renderSite } from "./site";
 import { construireOutils } from "./tools";
 
@@ -12,49 +26,12 @@ import { construireOutils } from "./tools";
  * Expose les outils legislation_* (PLAN §3), en lecture seule sur D1. Transport HTTP
  * streamable sur POST /mcp.
  */
-/**
- * Orientation générale renvoyée à l'initialisation (plan-couche-decouverte §6.2).
- * Deuxième canal de fiabilité après les sorties d'outils : il énonce le patron en deux
- * temps (s'orienter, puis extraire) et le caractère heuristique du repérage.
- */
-/**
- * CETTE CHAÎNE EST UNE SURFACE SERVIE, et elle n'est gardée par aucun test : elle ne vit ni
- * dans `catalogue.json` ni dans `src/tools.ts`, donc la parité R10 ne la voit pas. Trois
- * défauts mesurés le 2026-09-17, sur le point d'ouvrir l'endpoint au public, ont imposé sa
- * réécriture — chacun invisible parce qu'il produisait une NON-ACTION plutôt qu'une erreur :
- *
- *  1. elle annonçait « tarifs du Québec » et taisait les 18 textes FÉDÉRAUX servis. Un modèle
- *     interrogé sur la faillite écartait le serveur et répondait de mémoire ;
- *  2. elle envoyait vers `get_structure / get_division / get_article` — des noms qui
- *     N'EXISTENT PAS (tout est `legislation_*`). Avec plusieurs serveurs branchés, l'appel
- *     pouvait partir chez un voisin et rendre un texte étranger au corpus ;
- *  3. elle ne disait nulle part que le corpus est une SÉLECTION FERMÉE, ni que le service ne
- *     donne aucun conseil juridique — or l'avertissement du cabinet ne voyage que sur la page
- *     publique (`catalogue.avertissement`, lu par src/site.ts seul), jamais jusqu'au modèle.
- */
-const INSTRUCTIONS =
-  "Texte officiel de lois et règlements du QUÉBEC et du CANADA (fédéral) : codes, lois, " +
-  "règles de procédure et tarifs, en français et en anglais. " +
-  "Pour partir d'un problème concret, commencer par legislation_find_relevant ; pour explorer " +
-  "le corpus, legislation_list_laws. Cibler ensuite avec legislation_get_structure → " +
-  "legislation_get_division / legislation_get_article. " +
-  "PORTÉE : le corpus est une SÉLECTION FERMÉE de textes, pas tout le droit applicable — il ne " +
-  "contient ni jurisprudence, ni versions antérieures d'un article, ni l'ancien Code de " +
-  "procédure civile (c. C-25). Une absence de résultat ne signifie donc JAMAIS qu'aucune règle " +
-  "n'existe : elle signifie que le texte n'est pas dans ce corpus. " +
-  "L'aide au repérage est heuristique et ne détermine pas le droit applicable ; seul le texte " +
-  "officiel du publieur fait foi, les dates de consolidation peuvent accuser un retard sur lui, " +
-  "et ce service ne fournit AUCUN conseil juridique.";
 
 export class QclawMCP extends McpAgent {
-  server = new McpServer(
-    // Le nom porte la JURIDICTION, pas le transport : c'est la chaîne qu'un hôte affiche dans
-    // son sélecteur et que le connecteur jumeau (Jurisprudence du Canada) désigne à ses
-    // modèles — il disait « employer le connecteur Législation du Québec » face à un serveur
-    // qui s'annonçait « MCP Legislation », et le renvoi ne se faisait pas.
-    { name: "Législation du Québec et du Canada", version: "0.2.0" },
-    { instructions: INSTRUCTIONS },
-  );
+  // Identité et texte d'orientation viennent de `src/serveur.ts` : le routeur du socle
+  // doit rendre EXACTEMENT les mêmes, et un seul texte servi est la seule façon de s'en
+  // assurer.
+  server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
 
   async init() {
     construireOutils(this.env, this.server);
@@ -112,63 +89,72 @@ async function servePage(request: Request, env: Env, ctx: ExecutionContext): Pro
     : res;
 }
 
-/**
- * Limitation de débit, DANS le Worker (le WAF de zone n'est pas atteignable — même constat
- * que le connecteur jumeau). Appliquée AVANT le contrôle d'accès, donc un flot non
- * authentifié est coupé lui aussi.
- *
- * FAIL OPEN DÉLIBÉRÉ, et l'asymétrie est le point : l'AUTHENTIFICATION échoue FERMÉE
- * (aucun secret configuré => tout est refusé), tandis que la limitation ne protège que le
- * COÛT. Échouer fermé sur un compteur indisponible rendrait le serveur inutilisable pour
- * préserver une facture : le mauvais arbitrage. Sans le binding (wrangler dev), on passe.
- */
-async function debitAcceptable(request: Request, env: Env): Promise<boolean> {
-  // Typé par wrangler types depuis wrangler.jsonc. La garde de nullité reste : en local
-  // (wrangler dev) le binding n'est pas fourni, et le type ne le dit pas.
-  const limiteur = env.RATE_LIMITER;
-  if (!limiteur) return true;
-  // L'IP vue par Cloudflare. Clé imparfaite — deux clients derrière une même sortie NAT
-  // partagent le budget — mais c'est la seule disponible sans plan Business, et le jeton
-  // ne doit JAMAIS servir de clé : il finirait dans un compteur, donc dans des journaux.
-  const ip = request.headers.get("CF-Connecting-IP") ?? "sans-ip";
-  try {
-    const { success } = await limiteur.limit({ key: ip });
-    return success;
-  } catch {
-    return true;
-  }
-}
-
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
+    const admises = originesAdmises((env as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS);
+    const origin = origineAutorisee(request, admises);
+
+    // La page publique passe AVANT le coupe-circuit, et hors du bloc /mcp. C'est
+    // précisément quand le connecteur est coupé qu'un confrère doit pouvoir lire pourquoi.
+    // Elle ne porte ni secret ni donnée vivante, et n'émet AUCUN en-tête CORS : en émettre
+    // ferait d'elle un oracle.
     if (url.pathname === "/") {
-      // Page publique (src/site.ts). Posture assumée : elle décrit le corpus, les outils
-      // et les aides au repérage. Elle ne contient JAMAIS le jeton et n'appelle jamais
-      // /mcp — elle ne le pourrait pas, src/auth.ts refusant en 404 sans porteur.
       if (request.method !== "GET" && request.method !== "HEAD") {
         return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
       }
       return servePage(request, env, ctx);
     }
-    // Accès sous jeton partagé (src/auth.ts). Vérifié ICI, donc avant toute instanciation
-    // du Durable Object : un appel non autorisé ne coûte ni session DO, ni D1, ni Workers AI.
-    if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
-      // Avant la porte : un flot non authentifié est coupé lui aussi. 429 et non 404 —
-      // ici on ne cache pas l'endpoint, on refuse une cadence, et un client doit pouvoir
-      // distinguer les deux : « trop vite » se réessaie, « pas trouvé » non.
-      if (!(await debitAcceptable(request, env))) {
-        return new Response("Too many requests", {
-          status: 429,
-          headers: { "Retry-After": "60" },
+
+    if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/") || url.pathname === "/health") {
+      // 1. COUPE-CIRCUIT. La polarité est celle du dépôt : variable absente, vide ou mal
+      //    orthographiée ⇒ service ÉTEINT. Ne jamais l'écrire `=== "false"`, ce serait un
+      //    garde ouvert par défaut sur un service destiné au multilocataire.
+      if ((env as { MCP_ENABLED?: string }).MCP_ENABLED !== "true") {
+        return refuser("404", origin);
+      }
+
+      if (url.pathname === "/health") {
+        return new Response(JSON.stringify({ status: "ok" }), {
+          headers: { "Content-Type": "application/json; charset=utf-8" },
         });
       }
-      const authorized = gateMcp(request, url, env);
-      if (!authorized) return new Response("Not found", { status: 404 });
-      return QclawMCP.serve("/mcp").fetch(authorized, env, ctx);
+
+      // 2. ORIGINE, avant toute authentification : c'est la défense contre le
+      //    ré-attachement DNS qu'exige la spécification. Sans en-tête CORS sur le refus.
+      if (origineRefusee(request, admises)) return origineInterdite();
+
+      // 3. PRÉ-VOL, avant l'authentification et JAMAIS limité en débit. Un navigateur émet
+      //    `OPTIONS` sans porteur ; l'exiger casserait le connecteur sans rien protéger, et
+      //    un 429 sur un pré-vol ne remonte que comme un échec CORS opaque.
+      if (request.method === "OPTIONS" && origin) return preflight(origin);
+
+      // 4. DÉBIT. Clé = l'adresse vue par Cloudflare. Le jeton ne doit JAMAIS servir de clé :
+      //    il finirait dans un compteur, donc dans des journaux. Échoue OUVERT — il protège
+      //    un coût, il ne garde pas une porte.
+      const ip = request.headers.get("CF-Connecting-IP") ?? "sans-ip";
+      if (!(await debitAcceptable(env.RATE_LIMITER, ip))) return tropDeRequetes(60, origin);
+
+      const surSocle = (env as { SOCLE?: string }).SOCLE === "true";
+
+      // 5. IDENTITÉ. Échec : refus. Le chemin du socle emploie `ouvrir` (comparaison sur
+      //    empreintes, élargissement des graphies) ; l'ancien garde `gateMcp`. Le drapeau
+      //    bascule la chaîne ENTIÈRE, authentification comprise, pour qu'on observe un
+      //    comportement et non un mélange.
+      const autorise = surSocle
+        ? await ouvrir(request, url, env as unknown as Record<string, unknown>, PORTE)
+        : gateMcp(request, url, env);
+      if (!autorise) return refuser("404", origin);
+
+      // 6. MÉTHODE — APRÈS l'identité, et c'est délibéré. Un 405 servi à un anonyme lui
+      //    apprend que le point d'entrée existe : exactement l'oracle que S8 refuse. Le
+      //    connecteur claude.ai émet des `GET /mcp` sans porteur ; ils restent en refus.
+      if (request.method !== "POST") return methodeNonPermise(origin);
+
+      if (surSocle) return servirMcp(autorise, env, origin);
+      return QclawMCP.serve("/mcp").fetch(autorise, env, ctx);
     }
-    // Administration (plan v2, 2.2) : rattrapage des vecteurs. HORS MCP ; inerte sans
-    // le secret BACKFILL_TOKEN, et exige l'Authorization Bearer correspondante.
+
     if (url.pathname === "/admin/backfill-vectors") {
       return handleBackfill(request, env);
     }
