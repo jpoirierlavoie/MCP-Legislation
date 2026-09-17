@@ -1,4 +1,6 @@
-import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -22,10 +24,35 @@ export default defineConfig({
     projects: [
       {
         plugins: [
-          // wrangler.test.jsonc, non wrangler.jsonc : voir scripts/wrangler-test-config.mjs.
-          cloudflareTest(() => ({ wrangler: { configPath: "./wrangler.test.jsonc" } })),
+          cloudflareTest(async () => {
+            const racine = import.meta.dirname;
+            return {
+              // wrangler.test.jsonc, non wrangler.jsonc : `ai` et `vectorize` n'ont pas
+              // d'émulation locale et feraient réclamer un CLOUDFLARE_API_TOKEN. Voir
+              // scripts/wrangler-test-config.mjs.
+              wrangler: { configPath: "./wrangler.test.jsonc" },
+              miniflare: {
+                // De quoi AMORCER une vraie base : l'état initial, la couche de découverte
+                // — que le bootstrap de la CI n'applique pas — puis les migrations réelles.
+                // Appliqués par test/amorcer-d1.ts, dans cet ordre, qui est celui de la
+                // production et n'est pas interchangeable.
+                bindings: {
+                  TEST_SCHEMA: readFileSync(path.join(racine, "schema.sql"), "utf8"),
+                  TEST_DECOUVERTE: readFileSync(
+                    path.join(racine, "schema-decouverte.sql"),
+                    "utf8",
+                  ),
+                  TEST_MIGRATIONS: await readD1Migrations(path.join(racine, "migrations")),
+                },
+              },
+            };
+          }),
         ],
-        test: { name: "workerd", include: ["test/**/*.test.ts"] },
+        test: {
+          name: "workerd",
+          include: ["test/**/*.test.ts"],
+          setupFiles: ["./test/amorcer-d1.ts"],
+        },
       },
       {
         test: {
