@@ -37,7 +37,12 @@ import {
 } from "./relevance";
 
 const CONTACT = "jason@poirierlavoie.ca";
-const DEPOT = "https://github.com/jpoirierlavoie/MCP-Legislation-Quebec";
+// Le dépôt a été renommé `MCP-Legislation` côté GitHub (constaté le 2026-09-17 : une poussée
+// affiche l'avis de redirection). L'ancienne URL fonctionne encore, mais elle ne fonctionne
+// que PAR REDIRECTION — et une redirection est révocable par un tiers, ici GitHub, qui la
+// perd dès que le nom libéré est réutilisé par quelqu'un d'autre. Un lien servi au public
+// depuis un outil juridique ne doit pas dépendre de ça.
+const DEPOT = "https://github.com/jpoirierlavoie/MCP-Legislation";
 const LEGISQUEBEC = "https://www.legisquebec.gouv.qc.ca";
 
 /**
