@@ -9,12 +9,26 @@
 /**
  * Versions du protocole servies, la plus élevée EN TÊTE.
  *
- * ⚠ CETTE LISTE N'EST PAS ENCORE CELLE DE S3. La marche 3 y ajoutera `2026-07-28` et
- *   `2025-11-25`, derrière le pont de la §3.3 — « déployer le pont AVANT de retirer quoi
- *   que ce soit ». Pour l'heure elle reproduit ce que le SDK négocie, afin que la bascule
- *   vers le routeur du socle ne change pas de version au passage.
+ * ⚠ `2025-03-26` EST ENCORE SERVIE, et son retrait attend une MESURE. S3 la retire, mais
+ *   la §11 marche 3 subordonne ce retrait au constat qu'aucun client ne l'annonce — constat
+ *   qui passe par `clientInfo` dans le plan technique, donc par la phase 4. Servir une
+ *   version de trop ne coûte rien ; en retirer une que quelqu'un emploie casse un client.
+ *
+ * ⚠ Une requête SANS en-tête de version est REFUSÉE (sauf `initialize`), et non promue en
+ *   `2025-03-26`. Les deux positions sont compatibles : on sert la révision à qui
+ *   l'ANNONCE, sans la supposer chez qui se tait.
  */
-export const VERSIONS = ["2025-06-18", "2025-03-26"] as const;
+export const VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"] as const;
+
+/**
+ * Capacités annoncées, à `initialize` comme à `server/discover`.
+ *
+ * ⚠ `listChanged` RESTE FAUX, et ce n'est pas une omission. Sous `2026-07-28`,
+ *   `subscriptions/listen` est le SEUL véhicule des notifications de changement, et il
+ *   n'est pas servi. Annoncer `true` promettrait un signal qui ne viendrait jamais ; le
+ *   déclarer FAUX, plutôt que d'omettre la capacité, dit au client de ne pas l'attendre.
+ */
+export const CAPACITES = { tools: { listChanged: false } } as const;
 
 /**
  * Le nom porte la JURIDICTION, pas le transport : c'est la chaîne qu'un hôte affiche dans

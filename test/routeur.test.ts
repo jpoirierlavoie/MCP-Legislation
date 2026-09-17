@@ -1,8 +1,9 @@
-// Le chemin du socle doit servir EXACTEMENT ce que servait `McpAgent`.
+// Le chemin du socle doit servir EXACTEMENT ce que servait `McpAgent` — et, sous
+// `2026-07-28`, le servir habillé de ce que la révision exige, sans rien changer d'autre.
 //
-// C'est le contrôle qui décide de la marche 2. Le reste — types verts, tests unitaires —
-// ne dit rien de ce qu'un client reçoit ; ceci le dit, en comparant la charge utile réelle
-// à la référence capturée du SDK.
+// C'est le contrôle qui décide des marches 2 et 3. Types verts et tests unitaires ne disent
+// rien de ce qu'un client reçoit ; ceci le dit, en comparant la charge utile réelle à la
+// référence capturée du SDK.
 
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
@@ -11,7 +12,11 @@ import reference from "../fixtures/tools-list.reference.json";
 const URL_MCP = "https://legislation.test/mcp";
 const JETON = "jeton-de-test";
 
-/** Un POST JSON-RPC sur le point d'entrée, porteur en en-tête. */
+/** Révision héritée : aucun en-tête `Mcp-Method` / `Mcp-Name` n'y est exigé. */
+const HERITEE = "2025-06-18";
+/** Révision moderne : en-têtes obligatoires, `resultType` et indices de cache attendus. */
+const MODERNE = "2026-07-28";
+
 const appel = (corps: unknown, entetes: Record<string, string> = {}) =>
   SELF.fetch(URL_MCP, {
     method: "POST",
@@ -25,112 +30,224 @@ const appel = (corps: unknown, entetes: Record<string, string> = {}) =>
 
 const rpc = (method: string, params?: unknown) => ({ jsonrpc: "2.0", id: 1, method, params });
 
-// Les liaisons viennent de wrangler.test.jsonc ; les secrets et drapeaux sont posés ici,
-// car ils n'y figurent pas (et ne doivent pas y figurer).
+/** Appel sous révision héritée : la version suffit, rien d'autre n'est exigé. */
+const heritee = (method: string, params?: unknown) =>
+  appel(rpc(method, params), { "MCP-Protocol-Version": HERITEE });
+
+/** Appel sous révision moderne : les en-têtes miroirs sont obligatoires. */
+const moderne = (method: string, params?: Record<string, unknown>) => {
+  const entetes: Record<string, string> = {
+    "MCP-Protocol-Version": MODERNE,
+    "Mcp-Method": method,
+  };
+  const nom = params?.name ?? params?.uri;
+  if (typeof nom === "string") entetes["Mcp-Name"] = nom;
+  return appel(
+    {
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": MODERNE } },
+    },
+    entetes,
+  );
+};
+
 const e = env as unknown as Record<string, unknown>;
 e.MCP_TOKEN = JETON;
 e.MCP_ENABLED = "true";
 e.SOCLE = "true";
 
-describe("le chemin du socle sert le contrat publié", () => {
-  it("tools/list rend EXACTEMENT la référence capturée du SDK", async () => {
-    const r = await appel(rpc("tools/list"));
-    expect(r.status).toBe(200);
-    const corps = (await r.json()) as { result: { tools: unknown[] } };
-    // Égalité PROFONDE sur les dix descripteurs : noms, titres, descriptions, schémas,
-    // annotations, `execution`. Si l'un bouge, le contrat a bougé.
-    expect(corps.result.tools).toEqual(reference);
+describe("le contrat publié est le même sous les deux ères", () => {
+  it("sous une révision héritée, tools/list est EXACTEMENT la référence du SDK", async () => {
+    const c = (await (await heritee("tools/list")).json()) as { result: Record<string, unknown> };
+    expect(c.result.tools).toEqual(reference);
+    // Rien de moderne ne doit s'y glisser : ces champs n'existent pas avant 2026-07-28.
+    expect(c.result.resultType).toBeUndefined();
+    expect(c.result.ttlMs).toBeUndefined();
   });
 
-  it("initialize rend l'identité et les instructions", async () => {
-    const r = await appel(rpc("initialize", { protocolVersion: "2025-06-18" }));
-    const c = (await r.json()) as { result: Record<string, unknown> };
-    expect(c.result.protocolVersion).toBe("2025-06-18");
-    expect(c.result.serverInfo).toEqual({
-      name: "Législation du Québec et du Canada",
-      version: "0.2.0",
-    });
+  it("sous 2026-07-28, les MÊMES outils, plus resultType et les indices de cache", async () => {
+    const c = (await (await moderne("tools/list")).json()) as { result: Record<string, unknown> };
+    expect(c.result.tools).toEqual(reference); // G4 : même ensemble, même ordre
+    expect(c.result.resultType).toBe("complete");
+    expect(c.result.ttlMs).toBe(3_600_000);
+    expect(c.result.cacheScope).toBe("public");
+  });
+});
+
+describe("négociation de version", () => {
+  it("une version inconnue rend 400 et -32022, AVEC la liste des versions servies", async () => {
+    const r = await appel(rpc("tools/list"), { "MCP-Protocol-Version": "1900-01-01" });
+    expect(r.status).toBe(400);
+    const c = (await r.json()) as { error: { code: number; data: { supported: string[] } } };
+    expect(c.error.code).toBe(-32022);
+    // Sans cette liste, un client ne peut que renoncer ; avec elle, il réessaie.
+    expect(c.error.data.supported).toContain(MODERNE);
+    expect(c.error.data.supported).toContain(HERITEE);
+  });
+
+  it("une requête SANS en-tête de version est refusée — jamais promue en silence", async () => {
+    const r = await appel(rpc("tools/list"));
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { error: { code: number } }).error.code).toBe(-32020);
+  });
+
+  it("`initialize` SANS en-tête passe — la poignée héritée n'en porte pas", async () => {
+    // Sous 2025-06-18 l'en-tête n'est exigé qu'APRÈS l'initialisation. Le refuser
+    // rejetterait la poignée de tout client conforme, connecteur claude.ai compris.
+    const r = await appel(rpc("initialize", { protocolVersion: HERITEE }));
+    expect(r.status).toBe(200);
+    const c = (await r.json()) as { result: { protocolVersion: string } };
+    expect(c.result.protocolVersion).toBe(HERITEE);
+  });
+
+  it("les quatre versions sont servies", async () => {
+    for (const v of [MODERNE, "2025-11-25", HERITEE, "2025-03-26"]) {
+      const r = await appel(rpc("initialize", { protocolVersion: v }), {
+        "MCP-Protocol-Version": v,
+      });
+      expect(r.status, v).toBe(200);
+    }
+  });
+});
+
+describe("validation en-tête contre corps, sous révision moderne SEULEMENT", () => {
+  it("`Mcp-Method` manquant est refusé", async () => {
+    const r = await appel(
+      { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+      { "MCP-Protocol-Version": MODERNE },
+    );
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { error: { code: number } }).error.code).toBe(-32020);
+  });
+
+  it("un `Mcp-Method` qui contredit le corps est refusé", async () => {
+    const r = await appel(
+      { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
+      { "MCP-Protocol-Version": MODERNE, "Mcp-Method": "tools/call" },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("un `Mcp-Name` qui contredit le corps est refusé", async () => {
+    const r = await appel(
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "legislation_list_laws", arguments: {} },
+      },
+      { "MCP-Protocol-Version": MODERNE, "Mcp-Method": "tools/call", "Mcp-Name": "autre_outil" },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("une révision HÉRITÉE n'exige aucun de ces en-têtes", async () => {
+    // Les réclamer là-bas refuserait des clients parfaitement conformes.
+    expect((await heritee("tools/list")).status).toBe(200);
+  });
+});
+
+describe("server/discover", () => {
+  it("rend versions, capacités, instructions, resultType et indices de cache", async () => {
+    const c = (await (await moderne("server/discover")).json()) as {
+      result: Record<string, unknown>;
+    };
+    expect(c.result.supportedVersions).toEqual([MODERNE, "2025-11-25", HERITEE, "2025-03-26"]);
+    expect(c.result.resultType).toBe("complete");
+    expect(c.result.ttlMs).toBe(3_600_000);
     expect(String(c.result.instructions)).toContain("SÉLECTION FERMÉE");
   });
 
-  it("une version inconnue retombe sur la plus élevée servie", async () => {
-    const r = await appel(rpc("initialize", { protocolVersion: "1900-01-01" }));
-    const c = (await r.json()) as { result: { protocolVersion: string } };
-    expect(c.result.protocolVersion).toBe("2025-06-18");
+  it("met serverInfo dans `_meta`, non à la racine", async () => {
+    const c = (await (await moderne("server/discover")).json()) as {
+      result: { _meta: Record<string, unknown>; serverInfo?: unknown };
+    };
+    expect(c.result.serverInfo).toBeUndefined();
+    expect(c.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
+      name: "Législation du Québec et du Canada",
+      version: "0.2.0",
+    });
   });
 
+  it("n'annonce PAS listChanged — subscriptions/listen n'est pas servi", async () => {
+    const c = (await (await moderne("server/discover")).json()) as {
+      result: { capabilities: { tools: { listChanged: boolean } } };
+    };
+    expect(c.result.capabilities.tools.listChanged).toBe(false);
+  });
+});
+
+describe("méthodes et erreurs", () => {
   it("une notification rend 202 sans corps", async () => {
-    const r = await appel({ jsonrpc: "2.0", method: "notifications/initialized" });
+    const r = await appel(
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { "MCP-Protocol-Version": HERITEE },
+    );
     expect(r.status).toBe(202);
     expect(await r.text()).toBe("");
   });
 
   it("une méthode inconnue rend 404 AVEC un corps JSON-RPC", async () => {
-    // Le corps est ce qui distingue ce cas du 404 d'un serveur d'ancienne génération.
-    const r = await appel(rpc("nexiste/pas"));
+    // Le corps distingue ce cas du 404 d'un serveur d'ancienne génération.
+    const r = await heritee("nexiste/pas");
     expect(r.status).toBe(404);
-    const c = (await r.json()) as { error: { code: number } };
-    expect(c.error.code).toBe(-32601);
+    expect(((await r.json()) as { error: { code: number } }).error.code).toBe(-32601);
   });
 
   it("un JSON illisible rend une erreur d'analyse, pas un 500", async () => {
     const r = await SELF.fetch(URL_MCP, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${JETON}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${JETON}`,
+        "MCP-Protocol-Version": HERITEE,
+      },
       body: "{",
     });
-    const c = (await r.json()) as { error: { code: number } };
-    expect(c.error.code).toBe(-32700);
+    expect(((await r.json()) as { error: { code: number } }).error.code).toBe(-32700);
   });
 });
 
 describe("tools/call", () => {
   it("un outil inconnu est une erreur d'OUTIL, pas de protocole", async () => {
-    const r = await appel(rpc("tools/call", { name: "legislation_inexistant", arguments: {} }));
+    const r = await heritee("tools/call", { name: "legislation_inexistant", arguments: {} });
     const c = (await r.json()) as { result: { isError: boolean; content: { text: string }[] } };
     expect(c.result.isError).toBe(true);
     expect(c.result.content[0]?.text).toContain("Outil inconnu");
   });
 
-  it("des arguments invalides sont une erreur d'outil lisible par le modèle", async () => {
-    const r = await appel(rpc("tools/call", { name: "legislation_get_article", arguments: {} }));
+  it("des arguments invalides sont lisibles par le modèle", async () => {
+    const r = await heritee("tools/call", { name: "legislation_get_article", arguments: {} });
     const c = (await r.json()) as { result: { isError: boolean; content: { text: string }[] } };
     expect(c.result.isError).toBe(true);
     expect(c.result.content[0]?.text).toContain("obligatoire");
   });
 
   it("un numéro d'article envoyé en NOMBRE est accepté — Zod le coercait", async () => {
-    // Le schéma publié annonce `"type":"string"` depuis toujours, et les modèles envoient
-    // quand même des entiers. La normalisation du routeur préserve ce que Zod faisait ;
-    // sans elle, le validateur du socle refuserait et l'outil le plus appelé tomberait.
-    const r = await appel(
-      rpc("tools/call", {
-        name: "legislation_get_article",
-        arguments: { law: "ccq", article: 1457 },
-      }),
-    );
-    // La base de test est VIDE : le gestionnaire échoue ensuite, et c'est sans importance
-    // ici. Ce qu'on éprouve est la VALIDATION — si elle avait refusé l'entier, la réponse
-    // porterait « doit être une chaîne ». On regarde donc le corps entier, quelle que soit
-    // sa forme (résultat d'outil ou erreur interne).
+    // Le schéma publié annonce `"type":"string"` depuis toujours et les modèles envoient
+    // quand même des entiers. Sans la normalisation, le validateur refuserait et l'outil le
+    // plus appelé tomberait. La base de test est vide : on éprouve la VALIDATION, pas le
+    // résultat — un refus de type dirait « doit être une chaîne ».
+    const r = await heritee("tools/call", {
+      name: "legislation_get_article",
+      arguments: { law: "ccq", article: 1457 },
+    });
     expect(await r.text()).not.toContain("doit être une cha");
   });
 });
 
 describe("la chaîne intergicielle", () => {
-  it("MCP_ENABLED absent ⇒ 404, et la page publique répond QUAND MÊME", async () => {
+  it("MCP_ENABLED absent ⇒ 404, et la page publique n'en souffre pas", async () => {
     e.MCP_ENABLED = undefined;
     try {
-      expect((await appel(rpc("tools/list"))).status).toBe(404);
+      expect((await heritee("tools/list")).status).toBe(404);
       expect((await SELF.fetch("https://legislation.test/health")).status).toBe(404);
-      // C'est précisément quand le connecteur est coupé qu'un confrère doit pouvoir lire
-      // pourquoi : la page ne tombe JAMAIS avec lui.
-      //
-      // La base de test n'a PAS de schéma (cf. vitest.config.mts : aucune migration n'y est
-      // appliquée), si bien que le rendu échoue sur « no such table: laws ». Cet échec est
-      // justement la PREUVE recherchée : le coupe-circuit aurait rendu 404 AVANT toute
-      // lecture D1. On accepte donc les deux issues, et le jour où la base sera peuplée la
-      // seconde branche prendra le relais sans que le test change de sens.
+      // La base de test n'a pas de schéma (aucune migration n'est appliquée), si bien que le
+      // rendu échoue sur « no such table: laws ». Cet échec est justement la preuve cherchée :
+      // le coupe-circuit aurait rendu 404 AVANT toute lecture D1. On accepte les deux issues,
+      // pour que le test ne change pas de sens le jour où la base sera peuplée.
       const page = await SELF.fetch("https://legislation.test/").catch((x) => x as Error);
       if (page instanceof Error) expect(page.message).toMatch(/laws/);
       else expect(page.status).not.toBe(404);
@@ -152,11 +269,10 @@ describe("la chaîne intergicielle", () => {
       body: "{}",
     });
     expect(r.status).toBe(403);
-    // Sans en-tête CORS : sinon le refus lui-même deviendrait lisible, donc un oracle.
     expect(r.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
-  it("le pré-vol passe SANS porteur, et porte les en-têtes attendus", async () => {
+  it("le pré-vol passe SANS porteur", async () => {
     const r = await SELF.fetch(URL_MCP, {
       method: "OPTIONS",
       headers: { Origin: "https://claude.ai" },
@@ -166,8 +282,7 @@ describe("la chaîne intergicielle", () => {
   });
 
   it("un GET sans porteur rend 404, JAMAIS 405 — la méthode se juge après l'identité", async () => {
-    const r = await SELF.fetch(URL_MCP, { method: "GET" });
-    expect(r.status).toBe(404);
+    expect((await SELF.fetch(URL_MCP, { method: "GET" })).status).toBe(404);
   });
 
   it("un GET AVEC porteur valide rend 405 — là, le refus n'apprend rien", async () => {
@@ -182,7 +297,7 @@ describe("la chaîne intergicielle", () => {
     const garde = e.MCP_TOKEN;
     e.MCP_TOKEN = undefined;
     try {
-      expect((await appel(rpc("tools/list"))).status).toBe(404);
+      expect((await heritee("tools/list")).status).toBe(404);
     } finally {
       e.MCP_TOKEN = garde;
     }
