@@ -379,6 +379,37 @@ entre autres). C'est mesuré, et c'est ce constat qui a fait créer une base de 
 colonne pondérée dans `articles_fts`, donc `DROP` + `CREATE VIRTUAL TABLE` (en-tête de
 `migrations/0003_curation.sql`, §3). C'est la prochaine fois que cette procédure servira.
 
+**⏸️ DÉCISION REPORTÉE — `c-73.2-r.6`, deux divisions au même chemin (2026-09-16).**
+Diagnostic COMPLET, correctif NON fait, et c'est délibéré. Les identifiants Irosoft sont
+propres à CHAQUE DOCUMENT de l'EPUB, pas à l'EPUB entier : `page3.xhtml` et `page4.xhtml`
+portent tous deux un `ga:l_ii`. Irosoft répète l'en-tête du chapitre en tête de la page de
+continuation et y place le titre de la SECTION là où va celui du chapitre — d'où, à la
+lecture page par page, deux « CHAPITRE II » au même chemin :
+
+    page3 : ga:l_ii « CHAPITRE II — COMITÉ DE RÉVISION DES DÉCISIONS DU SYNDIC
+                      — SECTION I COMPOSITION — art. 6…»
+    page4 : ga:l_ii « CHAPITRE II — RÈGLES DE FONCTIONNEMENT — art. 8…»
+
+La structure RÉELLE est un seul Chapitre II à deux sections. Conséquence servie
+aujourd'hui : `get_division('ga:l_ii')` rend l'un des deux au hasard, et son sous-arbre
+mélange les articles des deux. **UNE seule loi sur 97** (les deux langues), mesuré.
+
+POURQUOI ON N'A PAS CORRIGÉ. Le correctif toucherait la boucle qui assemble les chemins
+(`parser.py`, la boucle du spine) — donc les 79 lois québécoises — pour réparer deux
+divisions dans une. L'asymétrie de risque est mauvaise. Et « réparer » recouvre DEUX choses
+différentes : *désambiguïser* (deux chapitres distincts et adressables — mécanique et sûr,
+mais la structure reste fausse au regard du règlement) ou *fusionner* (« Règles de
+fonctionnement » devient la Section II — c'est la vérité juridique, mais il faut inférer
+qu'une page continue la précédente, règle qu'on refuse de généraliser depuis UN exemple).
+La seconde est la bonne ; elle exige un balayage des 79 EPUB pour vérifier qu'aucune autre
+loi ne serait fusionnée à tort.
+
+CE QUI REND L'ATTENTE SÛRE : la garde d'unicité de `validate.py` (ajoutée le même jour)
+REFUSE désormais cette loi — `✗ chemins de division uniques: ga:l_ii ×2` → bascule refusée.
+La donnée en production garde le défaut, mais plus rien ne peut le réintroduire en silence,
+et la loi ne peut plus être réingérée tant que le parseur n'est pas corrigé. À reprendre
+comme chantier propre, pas en appendice d'un autre.
+
 **Reconstruire une base à partir de rien** (nouvel environnement, D1 de CI, dev local
 vierge). `schema.sql` décrit l'ÉTAT INITIAL et les migrations s'appliquent PAR-DESSUS :
 c'est pourquoi il porte encore `articles.consol_date` (retirée par 0002) et PAS

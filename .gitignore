@@ -24,6 +24,12 @@ node_modules/
 # généré par `wrangler types`
 worker-configuration.d.ts
 
+# Sondes jetables. Écrites pour trancher UNE question (« ce schéma Zod rend-il bien ceci ? »),
+# jamais appelées par rien, et sans valeur le lendemain. Le motif existe parce que l'accident
+# a eu lieu : `_tmp_probe.mjs` est entré dans le dépôt le 2026-09-16 par un `git add -A`, et
+# personne ne l'aurait vu passer. Nommer une sonde `_tmp_*` suffit désormais à la retenir.
+_tmp_*
+
 # Secrets locaux — ne JAMAIS versionner (jetons, .env)
 *.token
 .secrets/
