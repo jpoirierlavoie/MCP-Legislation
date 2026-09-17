@@ -232,6 +232,31 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
 16. **`eval/cases.json` est la vérité terrain de Jason** (⛔) : proposer les évolutions,
     ne jamais modifier de son propre chef. Idem tout contenu éditorial juridique
     (taxonomie, gazetteer, headnotes — drapeau `validated`, phase 3 v2).
+17. **Le corpus FÉDÉRAL a son PROPRE parseur, et ses propres pièges** (18 textes sur 97,
+    XML LIMS de Justice Canada, `pipeline/parser_lims.py` — rien à voir avec l'EPUB Irosoft).
+    **JAMAIS `root.iter('Section')` ni `findall('.//Section')`** : mesuré sur le Code
+    criminel, 294 blocs `RelatedOrNotInForce` et 270 `AmendedText` contiennent des `Section`
+    portant les MÊMES NUMÉROS que le corps — du droit parallèle NON EN VIGUEUR. Une
+    ingestion naïve produirait des doublons de numéros dont l'un est inapplicable : faux,
+    servi, silencieux. Le parseur descend explicitement `Body` puis chaque `Schedule`, et
+    REFUSE tout enfant direct de `Body` jamais observé (il lève plutôt que de deviner).
+    **TROIS dates, dont une piège.** `laws.consol_date_*` vient de la **PAGE** de Justice
+    Canada (`fetch_consolidation_federale`, bloc `<p id="assentedDate">`), PAS du XML, et
+    l'échec de lecture est FATAL — un repli mettrait deux sémantiques dans la même colonne.
+    `lims:current-date` SOUS-DÉCLARE la fraîcheur (mesuré : *Loi sur le droit d'auteur*
+    annoncée à jour au 2025-07-24 dans le XML quand la page donne 2026-07-21, près d'un an).
+    `LastConsolidationDate` du lookup ne doit JAMAIS servir : uniforme sur toutes les
+    entrées, c'est la date de l'INSTANTANÉ et non celle de la loi. Seul
+    `laws.last_amended` ← `lims:lastAmendedDate` vient bien du XML.
+    **`LIMS_REF` vaut `HEAD` par défaut** : employer un SHA pour toute ingestion que l'on
+    veut pouvoir rejouer à l'identique — sinon on réingère du droit différent sans le savoir.
+    **Réserve consignée le 2026-09-17** : la spec exigeait d'exclure les `Schedule`
+    `@spanlanguages="yes"` (88 des 92 annexes de DORS/98-106, formulaires bilingues où le
+    fichier français porte du texte anglais) de `articles_fts` et de Vectorize. Ce n'est PAS
+    implémenté — et le risque ne s'est pas matérialisé, parce que le contenu de ces annexes
+    n'a jamais été ingéré en articles : 14 articles seulement sous `fs:%` en FR, tous du
+    Tarif A en français authentique, et les sondes « whereas », « hereby », « sworn » rendent
+    ZÉRO. À rouvrir SI l'on ingère un jour ces annexes plus profondément.
 
 ## Règles de conception actives (héritées du plan v2, toujours en vigueur)
 
