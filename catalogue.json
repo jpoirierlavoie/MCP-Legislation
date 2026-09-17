@@ -165,12 +165,14 @@
       "corps_fr": [
         "Le classement des candidats est une somme de signaux, sans aucun appel de modèle de langue. Le même texte, interrogé deux fois par les mêmes termes, rend le même classement.",
         "La matière pèse le plus lourd : lorsqu'un terme de la requête se retrouve dans le libellé ou la description d'une matière de la taxonomie, toutes les lois rattachées à cette matière deviennent candidates. Viennent ensuite l'intitulé des divisions et le nom des lois, à poids égal. Enfin, un saut dans le graphe des relations ajoute un appoint : une loi voisine d'un bon candidat gagne un point, une seule fois, et seulement par une relation curée ou par un lien de règlement à loi habilitante.",
-        "Deux correctifs empêchent ce cumul de dériver. Un terme qui ne touche que quelques textes pèse davantage qu'un terme générique — dans un corpus entièrement juridique, « procédure » ou « contrat » n'apprennent presque rien, tandis que « courtage » ou « expropriation » désignent. Cette pondération est continue et non par seuil, précisément pour que le classement ne bascule pas le jour où une loi de plus est ajoutée au corpus. Et une même matière ne peut fournir qu'un nombre borné de candidats, faute de quoi une matière riche en textes remplirait à elle seule la liste et en évincerait le code applicable."
+        "Trois correctifs empêchent ce cumul de dériver. Un terme qui ne touche que quelques textes pèse davantage qu'un terme générique — dans un corpus entièrement juridique, « procédure » ou « contrat » n'apprennent presque rien, tandis que « courtage » ou « expropriation » désignent. Et une même matière ne peut fournir qu'un nombre borné de candidats, faute de quoi une matière riche en textes remplirait à elle seule la liste et en évincerait le code applicable.",
+        "Le troisième correctif pèse la part de la question que le candidat explique réellement. Sans lui, un texte rapproché par un seul mot sur six marquait autant que s'il avait été rapproché par un mot sur deux : le score ne dépendait pas de la question posée, et une loi hors sujet qui partageait un mot avec le libellé d'une matière pouvait devancer le code applicable. Comme la pondération par spécificité, ce correctif est continu et non par seuil — précisément pour que le classement ne bascule pas le jour où une loi de plus est ajoutée au corpus."
       ],
       "corps_en": [
         "Candidate ranking is a sum of signals, with no language-model call anywhere. The same query, run twice with the same terms, yields the same ranking.",
         "Subject matter carries the most weight: when a query term appears in the label or description of a taxonomy subject, every statute attached to that subject becomes a candidate. Division headings and statute names follow, at equal weight. Finally, one hop through the relations graph adds a small bonus: a statute adjacent to a strong candidate gains a point, once only, and only through a curated relation or a regulation-to-enabling-statute link.",
-        "Two corrections keep that accumulation from drifting. A term that touches only a few texts weighs more than a generic one — in a corpus that is entirely legal, “procedure” or “contract” teach almost nothing, whereas “brokerage” or “expropriation” designate. That weighting is continuous rather than threshold-based, precisely so the ranking does not tip the day one more statute is added to the corpus. And a single subject may contribute only a bounded number of candidates, failing which a text-rich subject would fill the list on its own and crowd out the governing code."
+        "Three corrections keep that accumulation from drifting. A term that touches only a few texts weighs more than a generic one — in a corpus that is entirely legal, “procedure” or “contract” teach almost nothing, whereas “brokerage” or “expropriation” designate. And a single subject may contribute only a bounded number of candidates, failing which a text-rich subject would fill the list on its own and crowd out the governing code.",
+        "The third correction weighs how much of the question a candidate actually accounts for. Without it, a text matched on one word out of six scored exactly as much as if it had been matched on one word out of two: the score did not depend on the question asked, and an off-topic statute sharing a single word with a subject label could outrank the governing code. Like the specificity weighting, this correction is continuous rather than threshold-based — precisely so the ranking does not tip the day one more statute is added to the corpus."
       ],
       "constantes": [
         "S1_SUBJECT",
@@ -178,23 +180,26 @@
         "S3_LAW_NAME",
         "S4_GRAPH_NEIGHBOUR",
         "MAX_PER_SUBJECT",
-        "MAX_SUFFIX"
+        "MAX_SUFFIX",
+        "COVERAGE_FLOOR"
       ]
     },
     "echelle": {
       "titre_fr": "L'échelle de recherche, et ses étiquettes",
       "titre_en": "The search ladder, and its labels",
       "corps_fr": [
-        "La recherche plein texte descend une échelle, du plus exact au plus approximatif, et s'arrête au premier barreau qui donne quelque chose.",
-        "Elle tente d'abord la correspondance exacte dans la portée demandée. Si une recherche restreinte à une loi ne donne rien, elle est élargie au corpus. Si l'exact échoue partout, elle réessaie en retirant un terme à la fois, puis en acceptant qu'un seul des termes suffise. En dernier recours seulement, elle propose des articles trouvés par proximité de sens.",
+        "La recherche plein texte descend une échelle, du plus exact au plus approximatif. Un barreau n'arrête la descente que s'il rend assez de résultats : une liste d'un seul article la laisse continuer, parce qu'un barreau plus permissif trouve souvent la bonne réponse là où le précédent n'avait accroché qu'un texte marginal.",
+        "Elle tente d'abord la correspondance exacte dans la portée demandée. Si une recherche restreinte à une loi ne donne rien, elle est élargie au corpus. Si l'exact échoue partout, elle réessaie en retirant un terme à la fois, puis en acceptant qu'un seul des termes suffise. En dernier recours seulement, elle propose des articles trouvés par proximité de sens. Ce relâchement n'est pas un luxe : le moteur lexical ne connaît aucune famille de mots en français, si bien qu'une question posée avec « garantie » n'atteint pas d'elle-même un texte qui dit « garantir ».",
         "Chaque barreau pose une étiquette qui voyage avec la réponse — dans le texte rendu et dans les données structurées. On sait donc toujours si l'on regarde une correspondance exacte, un résultat obtenu en ignorant un terme, ou un rapprochement purement sémantique. Le repli est permis ; le repli silencieux ne l'est pas."
       ],
       "corps_en": [
-        "Full-text search walks down a ladder, from most exact to most approximate, and stops at the first rung that yields anything.",
-        "It first attempts an exact match within the requested scope. If a search restricted to one statute returns nothing, it is widened to the corpus. If exact matching fails everywhere, it retries by dropping one term at a time, then by accepting that a single term suffices. Only as a last resort does it offer articles found by closeness of meaning.",
+        "Full-text search walks down a ladder, from most exact to most approximate. A rung only halts the descent if it yields enough results: a list holding a single article lets the ladder carry on, because a more permissive rung often finds the right answer where the previous one had caught only a marginal text.",
+        "It first attempts an exact match within the requested scope. If a search restricted to one statute returns nothing, it is widened to the corpus. If exact matching fails everywhere, it retries by dropping one term at a time, then by accepting that a single term suffices. Only as a last resort does it offer articles found by closeness of meaning. That relaxation is no luxury: the lexical engine knows no French word families, so a question phrased with “garantie” does not by itself reach a text that says “garantir”.",
         "Every rung sets a label that travels with the response — in the rendered text and in the structured payload alike. You can therefore always tell whether you are looking at an exact match, a result obtained by ignoring a term, or a purely semantic association. Falling back is permitted; falling back silently is not."
       ],
-      "constantes": []
+      "constantes": [
+        "RELAX_MIN_LOO_TOTAL"
+      ]
     },
     "hybride": {
       "titre_fr": "Lexical et sémantique, fusionnés",

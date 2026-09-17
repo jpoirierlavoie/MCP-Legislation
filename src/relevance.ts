@@ -55,6 +55,60 @@ export function specificityFactor(reach: number): number {
 }
 
 /**
+ * Plancher du facteur de COUVERTURE : la fraction de son score qu'un candidat garde
+ * lorsqu'il n'apparie qu'un seul token d'une requête qui en compte plusieurs.
+ *
+ * POURQUOI. La somme des signaux ne regardait pas du tout la question posée. Mesuré en
+ * production le 2026-09-17 sur « bail commercial résiliation défaut de payer le loyer » :
+ * la Loi sur la concurrence (ca-c-34) marquait 4,0909 pour le SEUL token « commercial »,
+ * capté par le libellé « Pratiques commerciales restrictives » — exactement le même score
+ * que sur la requête « bail commercial », où ce token est 1 des 2 et non 1 des 6. Le Code
+ * de procédure pénale sortait de la même façon, sur le mot « défaut » présent dans sa
+ * description de matière. Un candidat qui n'explique qu'un sixième de la question ne peut
+ * pas primer un candidat qui en explique la moitié.
+ *
+ * ⚠️ CONTINU, pas un seuil — même raison qu'à `specificityFactor` ci-dessus (invariant 12) :
+ * une falaise sur un décompte de tokens basculerait selon la longueur de la requête.
+ * Une requête à UN token est inchangée (couverture 1/1 -> facteur 1).
+ *
+ *   facteur(appariés, total) = FLOOR + (1 - FLOOR) × min(1, appariés / total)
+ *   1/6 -> ×0,583   2/6 -> ×0,667   1/2 -> ×0,750   2/3 -> ×0,833   1/1 -> ×1,00
+ */
+export const COVERAGE_FLOOR = 0.5;
+
+export function coverageFactor(apparies: number, total: number): number {
+  if (total <= 0) return 1;
+  return COVERAGE_FLOOR + (1 - COVERAGE_FLOOR) * Math.min(1, apparies / total);
+}
+
+/**
+ * Rendement minimal d'un barreau leave-one-out pour ARRÊTER l'échelle de recherche.
+ *
+ * POURQUOI. L'échelle s'arrêtait au premier barreau rendant au moins UN résultat, si bien
+ * qu'une liste d'un seul article masquait le barreau OU suivant. Mesuré en production le
+ * 2026-09-17 : « vice caché garantie qualité » rendait 1 résultat par leave-one-out
+ * (p-40.1 art. 53.1, sur les automobiles gravement défectueuses) et s'arrêtait là, alors
+ * que le OU met C.c.Q. 1726, 1728 et 1727 en tête — la garantie de qualité, soit la réponse.
+ *
+ * POURQUOI 2 ET NON 3. Le cas fondateur de l'échelle (art. 490 C.p.c., « signification hors
+ * du Québec délai ») rend 8 résultats SUR LE CORPUS mais seulement **2** restreint au C.p.c.
+ * — mesuré le 2026-09-17, en abaissant `limit` à 1 pour lire le rendement réel. Un plancher
+ * à 3 le faisait donc basculer au OU : cpc 490 restait en tête, mais sa liste précise de
+ * deux articles devenait une liste de 579. À 2, AUCUN cas mesuré ne se déplace et le défaut
+ * est fermé quand même. Une valeur plus haute corrige davantage que ce qui est cassé.
+ *
+ * La marge est donc de UN, et c'est assumé : un leave-one-out qui rend un seul document ne
+ * rend pas un ensemble de résultats mais une coïncidence — rien n'y corrobore rien. Deux
+ * documents, si. C'est cette frontière-là qui est calibrée, pas une quantité.
+ *
+ * Les deux autres bornes de l'échelle (`RELAX_MIN_TERMS`, `RELAX_MAX_LOO_TERMS`) vivent
+ * encore dans `src/lib.ts` : elles n'ont jamais été citées à la page publique, donc rien
+ * ne les a tirées ici. Celle-ci l'est (catalogue.json, section « echelle »), et
+ * `tests/catalogue.test.mjs` exige que toute constante citée se trouve DANS ce fichier.
+ */
+export const RELAX_MIN_LOO_TOTAL = 2;
+
+/**
  * Fusion RRF de la recherche hybride (plan v2, 2.3) : score(d) = Σ 1/(k + rang_liste(d)).
  * k = 60 (valeur canonique du plan). La calibration vit ICI, avec les poids S1–S4.
  */
@@ -274,6 +328,11 @@ const keyOf = (lawId: string, path: string) => `${lawId}|${path}`;
  * Classe les candidats. Un même candidat cumule les signaux ; un signal cumule aussi
  * par token distinct (une division dont l'intitulé contient « bail » ET « logement » est
  * plus pertinente pour « bail de logement » qu'une qui n'en contient qu'un).
+ *
+ * Deux rééchelonnages bornent ce cumul, tous deux CONTINUS (invariant 12) : la spécificité
+ * de chaque token (`specificityFactor`) et la couverture de la requête par le candidat
+ * (`coverageFactor`). Sans le second, un candidat n'appariant qu'un token sur six marquait
+ * autant que sur une requête de deux tokens — le score ne dépendait pas de la question.
  */
 export function rank(input: RelevanceInput, limit: number): Candidate[] {
   const { tokens } = input;
@@ -311,6 +370,18 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
     for (const t of tokens) {
       if (!wordMatch(hay, t)) continue;
       for (const m of bySubject.get(s.id) ?? []) {
+        // ⚠️ REPLI SILENCIEUX CONNU, non corrigé, et c'est délibéré (relevé le 2026-09-17).
+        // Les chemins de `subject_map` sont FRANÇAIS ; en anglais ils passent par le pont des
+        // numéros d'articles (`translatePaths`). Si la traduction manque, la ligne ci-dessous
+        // retombe sur le chemin français avec un intitulé nul — une piste que
+        // `get_division(lang='en')` n'ouvre pas, servie comme si elle était ouvrable.
+        // POURQUOI ON N'Y TOUCHE PAS ICI : retomber sur la LOI ENTIÈRE serait honnête, mais
+        // ferait FUSIONNER sur `law_id|''` tous les candidats de toutes les matières mappant
+        // cette loi, en cumulant leurs scores — un super-candidat au comportement non mesuré,
+        // pour réparer une panne qui ne se produit pas (les miroirs anglais de
+        // `tests/evals.mjs` passent). L'asymétrie de risque est mauvaise. La condition
+        // nécessaire est gardée par `pipeline/discovery/verify.py` (§2bis) ; le chantier
+        // propre est de faire ÉCHOUER la traduction bruyamment, avec son propre avant/après.
         const cible = m.division_path
           ? input.mappedHeadings.get(keyOf(m.law_id, m.division_path))
           : undefined;
@@ -351,11 +422,20 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
 
   // Portée de chaque token = nombre d'entités distinctes qu'il touche. Les tokens à faible
   // portée sont discriminants et pèsent davantage (cf. SPECIFIC_TOKEN_FACTOR).
+  //
+  // Le MÊME balayage rend le tableau croisé : quels tokens chaque candidat apparie. C'est
+  // la base du facteur de couverture (cf. COVERAGE_FLOOR) — les deux lectures de `hits`
+  // sont symétriques, l'une par token, l'autre par candidat.
   const reach = new Map<string, Set<string>>();
+  const tokensOf = new Map<string, Set<string>>();
   for (const h of hits) {
+    const k = keyOf(h.lawId, h.path);
     const set = reach.get(h.token) ?? new Set<string>();
-    set.add(keyOf(h.lawId, h.path));
+    set.add(k);
     reach.set(h.token, set);
+    const toks = tokensOf.get(k) ?? new Set<string>();
+    toks.add(h.token);
+    tokensOf.set(k, toks);
   }
   const factorOf = (t: string) => specificityFactor(reach.get(t)?.size ?? 0);
 
@@ -373,6 +453,14 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
   };
   for (const h of hits) {
     add(h.lawId, h.path, h.heading, h.weight * factorOf(h.token), h.why);
+  }
+
+  // Couverture : rééchelonnage par la part de la REQUÊTE que le candidat explique. Appliqué
+  // ici, donc APRÈS la sommation S1–S3 et AVANT S4 — l'appoint de graphe n'est pas
+  // rééchelonné, cohérent avec le fait qu'il échappe déjà au facteur de spécificité (il ne
+  // vient d'aucun token, il n'a donc pas de couverture à mesurer).
+  for (const [k, c] of cands) {
+    c.score *= coverageFactor(tokensOf.get(k)?.size ?? 0, tokens.length);
   }
 
   // S4 — voisinage de graphe, UN SEUL saut depuis les entités déjà retenues (S1–S3), et

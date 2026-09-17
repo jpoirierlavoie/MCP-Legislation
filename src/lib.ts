@@ -14,6 +14,7 @@ import {
   DIVISION_MATCH_MAX,
   DIVISION_MATCH_MIN_SCORE,
   normalize,
+  RELAX_MIN_LOO_TOTAL,
   RRF_K,
   SEMANTIC_MIN_SCORE,
   VECTOR_TOP_K,
@@ -1951,7 +1952,12 @@ export async function searchText(
       const sum = r.hits.reduce((acc, h) => acc + (h.score ?? 0), 0);
       if (!best || sum < best.sum) best = { ...r, omitted: tokens[i], sum };
     }
-    if (best) {
+    // Le rendement est une CONDITION D'ARRÊT, pas un filtre de résultats : une liste trop
+    // maigre laisse l'échelle continuer vers le OU, qui apparie les flexions que l'ET ne
+    // peut pas atteindre (FTS5 sur D1 n'a aucune racinisation française). Cf.
+    // RELAX_MIN_LOO_TOTAL, dont le commentaire porte la mesure des deux cas limites.
+    // Le `Math.min` évite de rejeter une liste qui remplit déjà la page demandée.
+    if (best && best.total >= Math.min(RELAX_MIN_LOO_TOTAL, page.limit)) {
       return {
         hits: await fuse(best, vec),
         total: best.total,
@@ -2002,7 +2008,12 @@ export async function searchText(
       if (hits.length) {
         return {
           hits,
-          total: hits.length,
+          // `total` compte les appariements LEXICAUX, et rien d'autre — ici il n'y en a
+          // aucun, par construction. Il valait `hits.length` : le champ changeait donc de
+          // NATURE selon le barreau (décompte de corpus non paginé aux barreaux 1-4, taille
+          // de page ici), et nul ne pouvait l'interpréter sans lire `fallback`. Le nombre
+          // réellement rendu est publié à part (`returned`, cf. src/tools.ts).
+          total: 0,
           fallback: "semantic",
           elsewhere: null,
           divisions: semDivs,

@@ -1163,11 +1163,25 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
           .join("\n")
       : "";
     const enrich = (h: (typeof res.hits)[number]) => ({ ...h, breadcrumb: crumbOf(h) });
+    // Trois décomptes, trois sens distincts — parce qu'UN seul était servi et qu'il était
+    // lu pour ce qu'il n'est pas. `total: 1` avec cinq résultats rendus n'est pas une
+    // incohérence : c'est un appariement lexical plus quatre voisins sémantiques. Corollaire
+    // structuré de R4 (décision 001) : ce qui BORNE un résultat voyage dans l'objet typé,
+    // pas seulement dans la prose — un client peut jeter la prose et garder l'objet.
+    //
+    // ⚠️ `sources.lexical` compte « présent dans la liste FTS », NON « non influencé par les
+    // vecteurs » : un article trouvé par les DEUX voies garde son SearchHit lexical et n'est
+    // jamais marqué `semantic`, bien que la fusion RRF ait déplacé son rang.
+    const nSem = res.hits.filter((h) => h.semantic).length;
     return ok(`${header}\n${body}${structures}${elsewhere}`, {
       query,
       lang,
       law: law ?? null,
+      /** Appariements LEXICAUX au corpus, non paginés. Vaut 0 sur un repli sémantique seul. */
       total: res.total,
+      /** Taille de la page réellement rendue, toutes sources confondues. */
+      returned: res.hits.length,
+      sources: { lexical: res.hits.length - nSem, semantique: nSem },
       fallback: fallbackLog,
       elsewhere: res.elsewhere
         ? { total: res.elsewhere.total, results: res.elsewhere.hits.map(enrich) }

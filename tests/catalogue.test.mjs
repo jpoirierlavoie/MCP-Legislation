@@ -169,8 +169,12 @@ test("les constantes de calibration citées existent et ne sont PAS recopiées",
 
   // R10 : la prose dit ce que la constante FAIT ; elle n'écrit jamais sa VALEUR — la page
   // l'importe de src/relevance.ts. Un nombre recopié ici deviendrait faux en silence.
+  // ⚠️ Liste FERMÉE, à élargir à la main : ce n'est pas une détection générique de nombres.
+  // Une constante de calibration nouvelle dont la valeur n'est pas inscrite ici peut entrer
+  // dans la prose sans que rien ne rougisse. Rien pour RELAX_MIN_LOO_TOTAL : « 3 » est trop
+  // générique pour être interdit sans faux positif (« Trois correctifs… »).
   const prose = JSON.stringify(catalogue.retrieval);
-  for (const interdit of ["0,40", "0.40", "k = 60", "k=60"]) {
+  for (const interdit of ["0,40", "0.40", "k = 60", "k=60", "0,50", "0.50"]) {
     assert.ok(
       !prose.includes(interdit),
       `la prose contient la valeur « ${interdit} » : importer la constante depuis ` +
