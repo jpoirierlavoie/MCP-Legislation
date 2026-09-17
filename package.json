@@ -26,6 +26,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
     "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@poirierlavoie/socle-juridique": "github:jpoirierlavoie/MCP-Socle-Juridique#v0.1.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.11",
     "wrangler": "^4.112.0"
