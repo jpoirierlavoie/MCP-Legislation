@@ -9,8 +9,11 @@ Exécutée le 2026-07-20. Aucun changement de comportement du serveur (contrôl�
 
 ## 1. Écarts d'hypothèses (plan v2 §2 vs réalité)
 
-Détail complet dans `docs/ARCHITECTURE-NOTES.md` §5. L'essentiel, avec effet sur les
-phases à venir :
+Détail complet dans `docs/ARCHITECTURE-NOTES.md` **§2** (« Écarts entre le plan Discovery v2
+et la réalité constatée »). Le renvoi disait « §5 » : il était juste à la rédaction, et il a
+été rendu mort par la réduction de ce document le 2026-07-30, qui l'a ramené à deux sections.
+Corrigé le 2026-09-17 — on corrige un POINTEUR cassé dans une archive, jamais un fait daté.
+L'essentiel, avec effet sur les phases à venir :
 
 | Écart | Effet |
 |---|---|

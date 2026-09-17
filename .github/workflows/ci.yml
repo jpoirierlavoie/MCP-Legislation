@@ -57,6 +57,15 @@ jobs:
       - run: pip install "beautifulsoup4>=4.13"
       - run: python -m unittest pipeline.tests.test_config -v
 
+      # Numérotage des annexes (pipeline/parser.py). Mesure du 2026-09-16 : les 24 annexes
+      # françaises du Code municipal portaient TOUTES le numéro `formulaire-ule` — dans
+      # l'alternance des labels, `form` s'accrochait comme PRÉFIXE du mot « formule » et la
+      # branche fourre-tout `[a-z]+` avalait le radical à la place du numéro. `get_article`
+      # rendait donc une annexe sur 24, au hasard, EN SILENCE. Le défaut était unilatéral
+      # (l'anglais « FORM 23 » passait), ce qui cassait aussi le pont FR/EN. Le contrôle qui
+      # compte : 24 intitulés doivent rendre 24 clés. Aucun réseau.
+      - run: python -m unittest pipeline.tests.test_disposition_number -v
+
       # Le validateur de la couche de curation (phase 3) : il REFUSE de charger un lien ou
       # un concept dont la cible ne résout pas. `pipeline/discovery/` n'avait aucun test —
       # la porte anti-données-fausses n'était elle-même gardée par rien. Fausse base en

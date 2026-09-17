@@ -1,8 +1,15 @@
 # Propositions — rattachement taxonomique des 18 textes fédéraux (2026-09-11)
 
-**⛔ PROPOSITION. Rien n'est appliqué.** `taxonomy.json` est la vérité éditoriale de Jason
-(invariant 16) : ce document propose, il ne modifie pas. Aucune ligne de `taxonomy.json`,
-`relations.json`, `eval/cases.json` ni `curation/` n'a été touchée.
+**⛔ PROPOSITION — MAIS APPLIQUÉE DEPUIS.** Ce document portait « Rien n'est appliqué. […]
+Aucune ligne de `taxonomy.json` n'a été touchée ». C'était vrai le 2026-09-11, et ça ne l'est
+plus. Mesuré le **2026-09-17** : `subject_map` porte **18 rattachements sur 14 matières**
+pour les textes `ca-*`, et `taxonomy.json` les déclare sous sa clé `mappings`. Le document ne
+propose donc plus rien — il explique POURQUOI ces rattachements-là, ce qu'aucune surface
+vivante ne porte.
+
+`taxonomy.json` reste la vérité éditoriale de Jason (invariant 16) : ce document a proposé,
+c'est une passe éditoriale de Jason qui a tranché. `relations.json`, `eval/cases.json` et
+`curation/` n'ont, eux, pas été touchés.
 
 **Document DATÉ, au passé.** Il rapporte l'état mesuré le 2026-09-11 et ne fait pas foi sur
 l'état courant (politique `docs/`). Les décomptes qu'il contient valaient ce jour-là.

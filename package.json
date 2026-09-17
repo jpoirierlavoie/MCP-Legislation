@@ -4,8 +4,8 @@
   "private": true,
   "description": "Serveur MCP « Lois du Québec » — Worker Cloudflare (lecture seule sur D1).",
   "scripts": {
-    "dev": "wrangler dev",
-    "start": "wrangler dev",
+    "dev": "wrangler dev --var MCP_TOKEN:local-a --var MCP_TOKEN_VEILLE:local-b",
+    "start": "wrangler dev --var MCP_TOKEN:local-a --var MCP_TOKEN_VEILLE:local-b",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
     "type-check": "tsc --noEmit",
