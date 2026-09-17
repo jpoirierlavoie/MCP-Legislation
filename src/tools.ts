@@ -267,7 +267,10 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ fonction, forum, subject, structure, lang }) => {
+    async ({ fonction, forum, subject, structure: structureArg, lang: langArg }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
+      const structure = structureArg ?? true;
       const laws = await listLaws(db, { fonction, forum, subject }, lang as Lang, env);
       // 1.4 : le signal de repérage est souvent au Titre, pas au Livre (post-mortem :
       // Livre V C.p.c. muet, Titre IV parlant) — plan profondeur 2 des lois à Livres.
@@ -343,7 +346,9 @@ export function registerTools(server: McpServer, env: Env): void {
       inputSchema: { lang: LANG.optional() },
       annotations: READONLY,
     },
-    async ({ lang }) => {
+    async ({ lang: langArg }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
       const en = lang === "en";
       const subs = await listSubjects(db, env);
       if (subs.length === 0) return err("Aucune matière chargée (taxonomie absente).");
@@ -423,7 +428,10 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ law, rel_type, direction, limit, lang }) => {
+    async ({ law, rel_type, direction: directionArg, limit, lang: langArg }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
+      const direction = directionArg ?? "both";
       const L = REL_LABEL[lang as Lang] ?? REL_LABEL.fr;
       if (!(await getLaw(db, law, env))) {
         const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
@@ -510,7 +518,9 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ query, limit, lang }) => {
+    async ({ query, limit, lang: langArg }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
       const tokens = tokenize(query);
       const page = paginate(limit, 0, 8, 50);
       if (tokens.length === 0) {
@@ -578,7 +588,9 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ law, article, lang }) => {
+    async ({ law, article, lang: langArg }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
       const lawRow = await getLaw(db, law, env);
       if (!lawRow) {
         const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
@@ -639,7 +651,9 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ law, from, to, numbers, lang, limit, offset }) => {
+    async ({ law, from, to, numbers, lang: langArg, limit, offset }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
       if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       const useRange = from != null && to != null;
       if (!useRange && !numbers?.length) {
@@ -720,7 +734,9 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ law, lang, root_path, depth }) => {
+    async ({ law, lang: langArg, root_path, depth }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
       if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       const d = depth ?? 2;
       let tree = await getStructure(db, law, lang as Lang, root_path, d);
@@ -779,7 +795,18 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ law, path, division_id, lang, include_text, limit, offset }) => {
+    async ({
+      law,
+      path,
+      division_id,
+      lang: langArg,
+      include_text: includeTextArg,
+      limit,
+      offset,
+    }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
+      const include_text = includeTextArg ?? true;
       if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       if (path == null && division_id == null) return err("Fournir path ou division_id.");
       let div = await getDivision(db, law, lang as Lang, { path, id: division_id });
@@ -880,7 +907,9 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ query, law, lang, limit, offset }) => {
+    async ({ query, law, lang: langArg, limit, offset }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
       if (law && !(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
       // Recherche corpus : viser 12-15 résultats (1.3) ; restreinte : 10 comme avant.
       const page = paginate(limit, offset, law ? 10 : 14, 50);
@@ -1045,7 +1074,9 @@ export function registerTools(server: McpServer, env: Env): void {
       },
       annotations: READONLY,
     },
-    async ({ citation, lang }) => {
+    async ({ citation, lang: langArg }) => {
+      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+      const lang: Lang = (langArg ?? "fr") as Lang;
       const all = await listLaws(db, {}, "fr", env);
       const parsed = parseCitation(citation, all);
       if (!parsed.article) return err(`Aucun numéro d'article détecté dans « ${citation} ».`);

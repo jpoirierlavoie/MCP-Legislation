@@ -324,19 +324,46 @@ def _parse_preliminary(soup: BeautifulSoup, marker: str) -> tuple[Division, Arti
     return None
 
 
-_DISP_CANON = {"schedule": "annexe", "form": "formulaire"}
+_DISP_CANON = {
+    "schedule": "annexe",
+    "schedules": "annexe",
+    "annexes": "annexe",
+    "form": "formulaire",
+    "forms": "formulaire",
+    "formule": "formulaire",
+    "formules": "formulaire",
+    "formulaires": "formulaire",
+}
 
 
 def _disposition_number(heading: str) -> tuple[str, str]:
     """(numéro-slug, kind) d'un bloc `sc-nb:N` d'après son intitulé : DISPOSITIONS FINALES ->
     ('finales','disposition') ; ANNEXE 1 -> ('annexe-1','annexe') ; FORMULAIRE VI ->
-    ('formulaire-vi','annexe') ; FORMULES -> ('formules','annexe')."""
+    ('formulaire-vi','annexe') ; FORMULE 23 -> ('formulaire-23','annexe')."""
     h = normalize(heading or "") or ""
     if "final" in h:
         return "finales", "disposition"
     # label + son 1er repère (romain/chiffre, ou mot comme « abrogative ») — l'en-tête d36e
     # peut contenir un sous-titre après (ex. « ANNEXE I TARIF DES DROITS… »), qu'on écarte.
-    m = re.match(r"(annexe|formulaire|formules|schedule|form)\.?\s*([ivxlcdm\d][ivxlcdm\d.]*|[a-z]+)?", h)
+    #
+    # ⚠️ LE `\b` N'EST PAS DÉCORATIF, ET LES PLURIELS NON PLUS. Sans eux, un label
+    # s'accroche comme PRÉFIXE d'un mot plus long et la branche fourre-tout `[a-z]+` avale
+    # le RADICAL restant à la place du numéro. Mesuré en production le 2026-09-16 :
+    #   « FORMULE 23 » -> `form` colle, puis `[a-z]+` avale « ule » -> `formulaire-ule`,
+    #   et le vrai numéro tombe hors du match. Les 24 formules du Code municipal
+    #   partageaient donc UN SEUL numéro : `get_article` en rendait une au hasard, en
+    #   silence, sous la citation inexistante « art. formulaire-ule ».
+    #   « ANNEXES ABROGATIVES » -> `annexe` colle, `[a-z]+` avale « s » -> `annexe-s`.
+    # Le défaut était UNILATÉRAL : « FORM 23 » en anglais rendait bien `formulaire-23`,
+    # ce qui cassait au passage le pont FR/EN que `_DISP_CANON` existe pour garantir
+    # (c-19 : `formules-1` en FR contre `formulaire-s` en EN).
+    # Les alternatives sont ordonnées du PLUS LONG au plus court : Python apparie de
+    # gauche à droite, donc `form` placé avant `formule` reprendrait le défaut.
+    m = re.match(
+        r"(annexes?|formulaires?|formules?|schedules?|forms?)\b\.?\s*"
+        r"([ivxlcdm\d][ivxlcdm\d.]*|[a-z]+)?",
+        h,
+    )
     if m:
         # label canonique (FR) pour que l'annexe ait le MÊME numéro en FR et EN
         # (schedule->annexe, form->formulaire) : symétrie inter-langues.

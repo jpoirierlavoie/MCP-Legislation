@@ -134,8 +134,17 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
     const rows = (
       await db
         .prepare(
+          // Départage par `id`, EXACTEMENT pour la raison écrite au-dessus de la requête
+          // des articles — et qui n'avait jamais été appliquée ici. `sort_order` n'est pas
+          // unique : deux divisions d'une même loi peuvent le partager (mesuré le
+          // 2026-09-16 : c-73.2-r.6 en a deux au MÊME chemin). Sans ordre total, la
+          // pagination LIMIT/OFFSET peut sauter une division ou en embarquer deux fois, et
+          // c'est INVISIBLE depuis l'API : seul le compte `embedded` est rendu, et il est
+          // juste dans les deux cas. Corollaire d'honnêteté : tant que ce départage
+          // manquait, on ne pouvait pas affirmer qu'un écart entre upserts annoncés et
+          // vecteurs présents s'expliquait ENTIÈREMENT par des collisions d'identifiants.
           `SELECT path, heading FROM divisions
-         WHERE law_id = ? AND lang = 'fr' ORDER BY sort_order LIMIT ? OFFSET ?`,
+         WHERE law_id = ? AND lang = 'fr' ORDER BY sort_order, id LIMIT ? OFFSET ?`,
         )
         .bind(law, count, offset)
         .all<{ path: string; heading: string | null }>()

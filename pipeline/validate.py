@@ -174,6 +174,50 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
     else:
         r.check("lacunes dans la plage entière", gaps if gaps else "aucune", "aucune")
     r.check("doublons d'entiers", dups if dups else "aucun", "aucun")
+
+    # ── UNICITÉ RÉELLE DES CLÉS ────────────────────────────────────────────────────────
+    # LE CONTRÔLE CI-DESSUS EST STRUCTURELLEMENT AVEUGLE À UNE FAMILLE ENTIÈRE, et ça a
+    # coûté cher. Il ne lit que `occupes`, bâti sur `real` — donc les pseudo-articles de
+    # disposition (annexes, formulaires) en sont EXCLUS PAR CONSTRUCTION — et, même chez
+    # `real`, il exige `isdigit()` sans point, donc les décimaux n'y entrent pas non plus.
+    #
+    # CE QUE ÇA A LAISSÉ PASSER (mesuré en production le 2026-09-16, corrigé le même jour) :
+    # les 24 annexes françaises du Code municipal portaient TOUTES le numéro
+    # `formulaire-ule`, parce que le motif du parseur avalait le radical de « FORMULE » à
+    # la place du numéro. `get_article(law='c-27.1', article='formulaire-ule')` rendait la
+    # FORMULE 23 — une sur 24, arbitrairement, SANS LE DIRE. Trois lois touchées, et la
+    # même cause cassait aussi le pont FR/EN de c-19.
+    #
+    # Les deux contrôles ci-dessous jugent donc les clés TELLES QU'ELLES SERVIRONT :
+    # `(law, lang, number)` est ce que résout `get_article`, et `(law, lang, path)` est ce
+    # que résolvent `get_division` et le fil d'Ariane. Un doublon ici n'est jamais bénin —
+    # c'est une réponse juste en apparence, tirée au sort entre plusieurs.
+    tous_numeros = [n for a in articles for n in numeros_effectifs(a)]
+    vus: set[str] = set()
+    num_doubles: dict[str, int] = {}
+    for n in tous_numeros:
+        if n in vus:
+            num_doubles[n] = num_doubles.get(n, 1) + 1
+        vus.add(n)
+    r.check(
+        "numéros d'article uniques (annexes et décimaux COMPRIS)",
+        ", ".join(f"{k} ×{v}" for k, v in sorted(num_doubles.items())) if num_doubles else "oui",
+        "oui",
+    )
+
+    chemins = [d.path for d in divisions if d.path]
+    vus_p: set[str] = set()
+    path_doubles: dict[str, int] = {}
+    for p in chemins:
+        if p in vus_p:
+            path_doubles[p] = path_doubles.get(p, 1) + 1
+        vus_p.add(p)
+    r.check(
+        "chemins de division uniques",
+        ", ".join(f"{k} ×{v}" for k, v in sorted(path_doubles.items())) if path_doubles else "oui",
+        "oui",
+    )
+    # ───────────────────────────────────────────────────────────────────────────────────
     no_div = [a.number for a in real if not a.division_path]
     if not div_no_disp:
         r.check("articles sans division", "n/a (texte plat, 0 division)")
