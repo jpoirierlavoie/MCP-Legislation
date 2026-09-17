@@ -10,6 +10,21 @@ invalidées en cours de route (les écarts sont consignés dans `../reports/`).
 | `plan-couche-decouverte.md` | Couche découverte v1 (phases A–E : taxonomie, graphe, 36 textes, outils d'orientation) | Exécuté (2026-07) |
 | `qclaw-discovery-v2-implementation-plan.md` | Discovery v2 (phases 0–3 : relaxation, hybride sémantique, curation) | Phases 0–2 exécutées ; **la phase 3 (curation ⛔) reste à faire** — ce document demeure sa spécification |
 | `phase4-cpc-en-reconnaissance.md` | Reconnaissance du C.p.c. anglais (phase 4 v1) | Ingestion faite |
+| `note-legislation-federale.md` | Note de cadrage du corpus fédéral : sources, licence, format LIMS, plan par phases | Exécutée (2026-09) — **arrivée de la racine le 2026-09-17** |
+| `SPEC-corpus-federal.md` | Spécification du corpus fédéral : 16 lois + 2 règlements de Justice Canada, parseur LIMS, veille à deux publieurs | Exécutée (2026-09) — **arrivée de la racine le 2026-09-17** |
+
+### Pourquoi ces deux-là sont descendus de la racine
+
+Le chantier qu'ils décrivent est **livré et déployé** (18 textes servis depuis le
+2026-09-11), mais ils étaient rédigés au FUTUR et ne portaient leur date que dans une phrase
+perdue : posés à la racine, ils se lisaient comme des consignes courantes. Ils nommaient en
+outre des outils `qclaw_*` qui n'existent plus, et la table de recette de la SPEC exigeait un
+`node --test` inatteignable depuis le passage à vitest. Aucun fichier du dépôt ne les citait —
+vérifié : `git ls-files | xargs grep -l` ne rendait rien.
+
+Ce qu'ils portaient de DURABLE a été rapatrié dans `CLAUDE.md` AVANT le déplacement
+(invariant 17 et sa clause de portée). Ils restent ici pour le RAISONNEMENT : pourquoi ces
+choix-là, et ce qui avait été mesuré pour les arrêter.
 
 ## Rapports de reconnaissance — retirés le 2026-07-30
 

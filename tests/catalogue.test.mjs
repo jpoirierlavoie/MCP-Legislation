@@ -1,4 +1,4 @@
-// Garde anti-dérive de la documentation (R10). node --test, SANS réseau, SANS D1, SANS
+// Garde anti-dérive de la documentation (R10). vitest (projet « node »), SANS réseau, SANS D1, SANS
 // serveur : une incohérence de documentation doit faire rougir une PR, pas exiger une
 // infrastructure. Même précédent que scripts/check-consolidation.test.mjs, et tourne en CI.
 //

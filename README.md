@@ -147,8 +147,9 @@ de tri, limites D1/Vectorize, échelle de recherche).
 descriptions, schéma, ce README et la [page publique](https://legislation.poirierlavoie.ca/)
 (`catalogue.json`) — et inclure les mises à jour requises dans le même commit. C'est une
 condition de fin de tâche, pas une recommandation : voir l'obligation préalable en tête de
-[CLAUDE.md](CLAUDE.md) et la règle R10. Gardes en CI :
-`node --test tests/catalogue.test.mjs` (parité outils ↔ documentation) et
-`node --test tests/page-client.test.mjs` (comportement du JS de la page, sans navigateur).
+[CLAUDE.md](CLAUDE.md) et la règle R10. Garde en CI : **`npm test`** — la suite vitest à deux
+projets, qui porte notamment la parité outils ↔ documentation (`tests/catalogue.test.mjs`) et
+le comportement du JS de la page sans navigateur (`tests/page-client.test.mjs`). C'est bien
+cette commande unique que lance `.github/workflows/ci.yml`.
 
 Trajectoire mesurée du repérage : recall@10 **40 % → 88 % → 98 %** (`docs/reports/`).

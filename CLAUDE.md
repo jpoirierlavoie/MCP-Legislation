@@ -31,8 +31,12 @@ qu'une seule ligne fausse servie à un modèle dans un outil juridique.
 
 1. Pour chacune des cinq surfaces : dire si elle est touchée, et pourquoi (« non touchée »
    est une réponse valable, mais elle doit être ÉNONCÉE, jamais passée sous silence).
-2. `node --test tests/catalogue.test.mjs` — garde de parité, hors réseau. Il attrape les
-   ruptures structurelles ; il n'attrape PAS un sens qui a changé.
+2. `npm test` — la suite vitest, hors réseau, dont la garde de parité
+   (`tests/catalogue.test.mjs`). Elle attrape les ruptures structurelles ; elle n'attrape
+   PAS un sens qui a changé. **Ne PAS employer `node --test`** : depuis le passage à vitest
+   le 2026-09-16, ce lanceur rend « pass 0, fail 1 » sur un fichier intact — cette consigne
+   l'a elle-même prescrit jusqu'au 2026-09-17, et un agent qui l'aurait suivie serait parti
+   réparer un catalogue sain, ou aurait appris à sauter l'étape.
 3. Si une surface bouge : `npx tsc --noEmit`, puis `npm run evals` contre la cible.
 4. Si le schéma bouge : migration numérotée + bookmark Time Travel AVANT `--remote`
    (invariant 6), et vérifier que `structuredContent` n'a pas rétréci en silence
@@ -93,7 +97,9 @@ recherche, fusion RRF), `src/relevance.ts` (TOUTES les constantes de calibration
 S1–S4, RRF_K, SEMANTIC_MIN_SCORE…), `src/backfill.ts` (route admin vecteurs), `src/site.ts` (page publique servie à `/` — ses
 décomptes sont LUS en D1, jamais recopiés ; elle ne contient JAMAIS le jeton et n'appelle
 jamais `/mcp`), `pipeline/ingest.py` (orchestrateur),
-`pipeline/discovery/` (recon/migrate/load/relations/verify).
+`pipeline/discovery/` (recon/recon_lims/migrate/load/relations/curation/verify — SEPT
+modules ; `recon_lims.py` recense le XML fédéral, `curation.py` charge la couche phase 3 v2
+et refuse toute cible non résolue, gardé en CI par `test_curation`).
 Un seul « backfill » subsiste, celui des VECTEURS (`src/backfill.ts` + `scripts/backfill-vectors.mjs`) :
 l'homonyme Python remplissait `name_norm`/`heading_norm` avant que l'invariant n° 3 ne les
 fasse calculer au chargement, il est supprimé.
@@ -257,6 +263,20 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
     n'a jamais été ingéré en articles : 14 articles seulement sous `fs:%` en FR, tous du
     Tarif A en français authentique, et les sondes « whereas », « hereby », « sworn » rendent
     ZÉRO. À rouvrir SI l'on ingère un jour ces annexes plus profondément.
+    **PORTÉE DU CORPUS FÉDÉRAL — décisions arrêtées, à ne pas rouvrir** (rapatriées le
+    2026-09-17 de `SPEC-corpus-federal.md` §0-§1 avant son archivage ; elles n'existaient
+    nulle part ailleurs, et sans elles la question « pourquoi pas le Code criminel ? » se
+    rouvre à chaque extension) : **une seule base, un seul serveur, les dix outils
+    existants** — aucun serveur « Législation du Canada » séparé, et R2 tient. **16 lois
+    fédérales + 2 règlements**, et **le Code criminel est EXCLU** — attention, il apparaît
+    aussi plus haut dans cet invariant comme TERRAIN DE MESURE d'un piège de parseur : c'est
+    un texte qu'on a mesuré, pas un texte qu'on sert. Également **hors portée** : la *Loi de
+    l'impôt sur le revenu*, les lois constitutionnelles (publiées hors `fra/lois`), les
+    3 894 autres règlements, les lois annuelles, le point-in-time historique.
+    **Canal d'acquisition** : le dépôt Git `justicecanada/laws-lois-xml`, en clone partiel
+    (`--filter=blob:none`) hors de l'arbre du dépôt. **Ne PAS parser le HTML de
+    `lois.justice.gc.ca`, ne PAS employer les ZIP du portail de données ouvertes** — seule
+    la page sert, et uniquement pour la DATE (voir les trois dates ci-dessus).
 
 ## Règles de conception actives (héritées du plan v2, toujours en vigueur)
 
@@ -495,6 +515,24 @@ agrégé, un blocage TOTAL du fédéral pesait 36/194 = 18,6 %, donc sous les 25
 passait vert pendant que 18 textes sur 97 n'étaient vérifiés par rien. Défauts trouvés par
 revue adversariale (2026-07-21 et 2026-09-14) et corrigés avant le commit.
 
+## Échéances en cours (ce qui doit DISPARAÎTRE, et quand)
+
+Trois objets du dépôt sont **volontairement temporaires**. Chacun documentait sa propre
+péremption — mais uniquement dans le fichier qu'elle concerne, donc lisible seulement par qui
+l'ouvre déjà. C'est exactement ainsi qu'un jetable devient un résidu six mois plus tard.
+
+| Objet | Disparaît quand | Geste |
+|---|---|---|
+| `wrangler.transit.jsonc` + le Worker `legislation-transit` | après le repos de la bascule `qclaw` → `legislation` | `npx wrangler delete -c wrangler.transit.jsonc`, puis retirer le fichier |
+| `scripts/capturer-tools-list.mjs` | avec la dépendance `@modelcontextprotocol/sdk` | **⚠️ À RELANCER AVANT la bascule vers le routeur du socle, jamais après** : le SDK retiré, la référence n'est plus reproductible |
+| `fixtures/tools-list.reference.json` | idem | la fixture RESTE ensuite comme trace de ce qui était servi |
+
+Les deux derniers servent la marche 2 de la phase 1 (remplacement de `McpAgent` et du SDK par
+le routeur du socle, qui oblige à réécrire les dix `inputSchema` de Zod vers du JSON Schema).
+**Rien ne lit la fixture aujourd'hui** — sa valeur est une comparaison À FAIRE À LA MAIN
+après bascule, octet pour octet. Toute évolution de `src/tools.ts` d'ici là la périme en
+silence : la régénérer alors, tant que le SDK est encore là.
+
 ## Où trouver quoi
 
 - **Sondes FTS5** (tokenizer `unicode61`, `remove_diacritics` ACTIF, AUCUN stemming
@@ -508,9 +546,19 @@ revue adversariale (2026-07-21 et 2026-09-14) et corrigés avant le commit.
   les invariants 4, 6 et 10 existent.
 - `docs/reports/phase-{0,1,2}.md` — mesures, décisions, coûts réels de Discovery v2, et les
   **bookmarks Time Travel** consignés avant chaque migration.
-- `docs/phase0-structure-epub.md` — format EPUB Irosoft. **Référence vivante du parseur** :
-  citée par `pipeline/__init__.py`, `parser.py` et `validate.py`, dont les valeurs témoins
-  en viennent. C'est le seul document de `docs/` que du code appelle.
+- `docs/phase0-structure-epub.md` — format EPUB Irosoft. **Référence vivante du parseur
+  québécois** : citée par `pipeline/__init__.py`, `parser.py` et `validate.py`, dont les
+  valeurs témoins en viennent.
+- `docs/phase0-structure-lims.md` — format XML LIMS de Justice Canada. **Référence vivante du
+  parseur fédéral**, et le dire ici n'est pas décoratif : `parser_lims.py` renvoie l'humain
+  vers ses §5 et §6 dans DEUX messages d'ARRÊT, et il est cité par `recon_lims.py`,
+  `test_lims_tags.py`, `test_parser_lims.py`, `src/lib.ts` et `src/paths.ts`.
+  **⚠️ `docs/` est une archive PAR DÉFAUT — ces deux-là sont l'exception, avec
+  `docs/archive/PLAN.md` et `docs/archive/plan-couche-decouverte.md` que le code cite aussi
+  par numéro de §.** Corrigé le 2026-09-17 : cette section affirmait que le document EPUB
+  était « le seul que du code appelle », ce qui était devenu faux à l'arrivée du corpus
+  fédéral. Un agent lisant la politique d'archive PLUS cette phrase aurait conclu que le
+  document LIMS était jetable — et le supprimer casse les messages d'arrêt du parseur.
 - `docs/archive/` — plans exécutés (la **phase 3 v2 — curation ⛔ — y reste à faire** :
   `qclaw-discovery-v2-implementation-plan.md`). Les vidages de reconnaissance en ont été
   retirés le 2026-07-30 : sorties reproductibles de `recon.py`, pas des décisions.
@@ -523,6 +571,11 @@ revue adversariale (2026-07-21 et 2026-09-14) et corrigés avant le commit.
   baselines. Seule une réingestion du C.c.Q. ou du C.p.c. peut l'invalider.
 - `docs/propositions-journal-2026-07-30.md` — premier dépouillement de `search_log` :
   cas d'éval et entrées de gazetteer **proposés** (⛔, rien d'appliqué).
+- `docs/propositions-taxonomie-federale-2026-09-11.md` — rattachement taxonomique des
+  18 textes fédéraux. **APPLIQUÉ**, contrairement à son jumeau ci-dessus : mesuré en base le
+  2026-09-17, `subject_map` porte 18 rattachements sur 14 matières pour les `ca-*`, et
+  `taxonomy.json` les déclare sous sa clé `mappings`. Le document ne propose donc plus rien ;
+  il explique POURQUOI ces rattachements-là, ce qu'aucune surface vivante ne porte.
 
 ## Mise en forme (Biome, depuis le 2026-09-16)
 

@@ -1,3 +1,20 @@
+> ## ⛔ ARCHIVE — NE FAIT PAS FOI SUR L'ÉTAT COURANT
+>
+> **Note de cadrage EXÉCUTÉE.** Rédigée le **2026-09-04** en amont du chantier « corpus
+> fédéral », livré depuis. Archivée le **2026-09-17**.
+>
+> Son §10 « Décisions à trancher avant la phase 1 » est intégralement TRANCHÉ, et ses §2-§4
+> sur le format LIMS sont remplacés par `docs/phase0-structure-lims.md` — la version
+> MESURÉE, que le code cite par numéro de §, et que cette note appelait elle-même de ses
+> vœux. Elle nomme aussi des outils `qclaw_*` qui n'existent plus.
+>
+> **⚠️ UNE PISTE DE CE DOCUMENT A ÉTÉ ÉCARTÉE, ne pas la remonter** : son §1 propose de
+> détecter la consolidation par `git log -1 -- fra/lois/<X>.xml`. La veille EN PRODUCTION
+> lit `<p id="assentedDate">` sur la page de Justice Canada, et `CLAUDE.md` explique
+> pourquoi un SHA ne peut pas répondre à « à quelle date le texte est-il à jour ».
+>
+> Elle reste ici pour le RAISONNEMENT sur les sources et la licence.
+
 # Intégrer la législation fédérale au serveur « Législation du Québec »
 
 **Note de conception — 2026-09-04.** Toutes les mesures ci-dessous ont été prises sur le

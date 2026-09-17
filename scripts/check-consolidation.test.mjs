@@ -1,4 +1,4 @@
-// Contrôles permanents du détecteur de veille (node --test, sans réseau).
+// Contrôles permanents du détecteur de veille (vitest, projet « node », sans réseau).
 // Chaque cas verrouille un défaut trouvé par la revue adversariale du 2026-07-21 : ils ne
 // doivent PLUS jamais réapparaître silencieusement.
 

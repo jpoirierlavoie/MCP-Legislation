@@ -1,3 +1,23 @@
+> ## ⛔ ARCHIVE — NE FAIT PAS FOI SUR L'ÉTAT COURANT
+>
+> **Plan EXÉCUTÉ.** Spécification du chantier « corpus fédéral », arrêtée le **2026-09-04**
+> et **livrée** : les 18 textes sont en base et servis depuis le 2026-09-11. Archivée le
+> **2026-09-17**.
+>
+> Elle est rédigée au FUTUR sur un chantier fait, elle nomme des outils `qclaw_*` qui
+> n'existent plus (renommés `legislation_*` le 2026-09-16), et son tableau de recette exige
+> un `node --test` qui ne fonctionne plus depuis le passage à vitest. **Ne pas l'appliquer,
+> ne pas en tirer une commande.**
+>
+> Ce qu'elle portait de DURABLE a été rapatrié dans `CLAUDE.md` avant l'archivage —
+> invariant 17 : le parseur LIMS et l'interdiction de `root.iter('Section')`, les trois
+> dates dont une piège, `LIMS_REF`, la réserve sur les annexes bilingues, et les décisions
+> de PORTÉE de son §0 (une seule base et dix outils, 16 lois + 2 règlements, Code criminel
+> EXCLU, canal d'acquisition `justicecanada/laws-lois-xml` en clone partiel).
+>
+> Elle reste ici pour le RAISONNEMENT : pourquoi ces choix-là, et ce qui a été mesuré pour
+> les arrêter.
+
 # SPEC — Corpus fédéral (lois et règlements) dans le serveur MCP « Législation »
 
 **Destinataire : Claude Code, dans `MCP-Legislation-Quebec`.**
