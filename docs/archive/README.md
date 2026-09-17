@@ -9,7 +9,6 @@ invalidées en cours de route (les écarts sont consignés dans `../reports/`).
 | `PLAN.md` | Plan initial du serveur MCP (phases 0–5 : parseur EPUB, schéma D1, Worker, outils, déploiement) | Exécuté (2026-07) |
 | `plan-couche-decouverte.md` | Couche découverte v1 (phases A–E : taxonomie, graphe, 36 textes, outils d'orientation) | Exécuté (2026-07) |
 | `qclaw-discovery-v2-implementation-plan.md` | Discovery v2 (phases 0–3 : relaxation, hybride sémantique, curation) | Phases 0–2 exécutées ; **la phase 3 (curation ⛔) reste à faire** — ce document demeure sa spécification |
-| `phase4-cpc-en-reconnaissance.md` | Reconnaissance du C.p.c. anglais (phase 4 v1) | Ingestion faite |
 | `note-legislation-federale.md` | Note de cadrage du corpus fédéral : sources, licence, format LIMS, plan par phases | Exécutée (2026-09) — **arrivée de la racine le 2026-09-17** |
 | `SPEC-corpus-federal.md` | Spécification du corpus fédéral : 16 lois + 2 règlements de Justice Canada, parseur LIMS, veille à deux publieurs | Exécutée (2026-09) — **arrivée de la racine le 2026-09-17** |
 
@@ -25,6 +24,22 @@ vérifié : `git ls-files | xargs grep -l` ne rendait rien.
 Ce qu'ils portaient de DURABLE a été rapatrié dans `CLAUDE.md` AVANT le déplacement
 (invariant 17 et sa clause de portée). Ils restent ici pour le RAISONNEMENT : pourquoi ces
 choix-là, et ce qui avait été mesuré pour les arrêter.
+
+### `phase4-cpc-en-reconnaissance.md` — supprimé le 2026-09-17, après promotion
+
+Ce vidage de reconnaissance du C.p.c. anglais ne portait plus que deux choses, toutes deux
+remontées là où on en a besoin au moment où on en a besoin :
+
+- **le piège `sc-nb:1`** — le même identifiant désigne les DISPOSITIONS FINALES dans le
+  C.c.Q. et l'ANNEXE dans le C.p.c., et chercher le mot « annexe » dans le contenu se
+  tromperait aussi (l'historique des finales du C.c.Q. le contient sans en être une)
+  → docstring de `_parse_sc_block_el`, dans `pipeline/parser.py`, à l'endroit du classement ;
+- **l'ancien C.p.c. (C-25) non couvert** → `README.md` (ce que le dépôt annonce servir) et
+  un refus NOMMÉ dans `legislation_resolve_reference`, au lieu d'un rabattement silencieux
+  sur le code de 2016.
+
+Le reste était reproductible par `recon.py`. Même raison que pour les trois vidages
+ci-dessous.
 
 ## Rapports de reconnaissance — retirés le 2026-07-30
 

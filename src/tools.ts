@@ -1081,6 +1081,21 @@ export function registerTools(server: McpServer, env: Env): void {
       const parsed = parseCitation(citation, all);
       if (!parsed.article) return err(`Aucun numéro d'article détecté dans « ${citation} ».`);
       if (!parsed.law) {
+        // Refus NOMMÉ de l'ancien C.p.c. Il passe AVANT le refus générique parce qu'il dit la
+        // seule chose qui compte pour un juriste : la numérotation a changé, donc l'article
+        // du même numéro dans le code en vigueur n'est PAS l'équivalent.
+        if (parsed.hors_corpus === "C-25") {
+          return err(
+            "L'ANCIEN Code de procédure civile (RLRQ, c. C-25) n'est pas au corpus : il a été " +
+              "abrogé et remplacé le 1er janvier 2016 par le Code de procédure civile " +
+              "(RLRQ, c. C-25.01), le seul des deux que ce serveur porte. " +
+              "⚠️ La recodification a RENUMÉROTÉ le code : l'article " +
+              `${parsed.article ?? "N"} de l'ancien C.p.c. n'est PAS l'article ${parsed.article ?? "N"} ` +
+              "du code en vigueur, et aucune correspondance automatique n'est faite ici. " +
+              "Pour le texte en vigueur, citer sans « ancien » (ex. « art. " +
+              `${parsed.article ?? "N"} C.p.c. ») ; pour l'ancien, consulter une autre source.`,
+          );
+        }
         return err(
           parsed.chapitre_inconnu
             ? `Le chapitre « ${parsed.chapitre_inconnu} » n'est pas au corpus — aucune loi n'a été ` +

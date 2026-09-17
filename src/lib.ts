@@ -1126,6 +1126,11 @@ export interface ParsedCitation {
   law_source: "chapitre" | "abreviation" | "defaut" | null;
   /** Chapitre RLRQ cité explicitement mais absent du corpus (pour un refus circonstancié). */
   chapitre_inconnu: string | null;
+  /**
+   * Texte NOMMÉMENT hors corpus, reconnu comme tel plutôt que rabattu sur son successeur.
+   * Aujourd'hui une seule valeur : « C-25 », l'ANCIEN Code de procédure civile.
+   */
+  hors_corpus: string | null;
 }
 
 /**
@@ -1185,8 +1190,23 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
       motif = re;
     }
   }
-  // abréviations usuelles, seulement si aucun chapitre du corpus n'a été reconnu
-  if (!law) {
+  // L'ANCIEN Code de procédure civile (C-25) EST NOMMÉ, PAS RABATTU. Mesuré en production le
+  // 2026-09-17 : « art. 2 ancien C.p.c. » rendait `RLRQ, c. C-25.01, art. 2` — l'abréviation
+  // « C.p.c. » appariait et le mot « ancien » était ignoré. Or la recodification de 2016 a
+  // TOUT renuméroté : l'article N de l'ancien code n'est pas l'article N du nouveau. C'était
+  // donc une réponse FAUSSE et ASSURÉE, la pire espèce — pire qu'un silence, parce qu'elle
+  // cite une disposition réelle et à jour, qui n'a simplement rien à voir avec la demande.
+  // Un refus circonstancié vaut mieux : le corpus ne porte que C-25.01.
+  const ancienCpc =
+    !law &&
+    /c\.?\s*p\.?\s*c\.?|\bcpc\b|code\s+de\s+proc[ée]dure\s+civile|code\s+of\s+civil\s+procedure|\bc\.?\s*c\.?\s*p\.?\b/i.test(
+      citation,
+    ) &&
+    /\bancien(?:ne)?s?\b|\bold\b|\bformer\b|\b1965\b/i.test(citation);
+
+  // abréviations usuelles, seulement si aucun chapitre du corpus n'a été reconnu — et JAMAIS
+  // quand la citation désigne explicitement l'ancien code.
+  if (!law && !ancienCpc) {
     if (/c\.?\s*p\.?\s*c\.?|cpc/i.test(citation)) {
       law = "cpc";
       lawSource = "abreviation";
@@ -1205,7 +1225,18 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   // sur une loi voisine (« c. B-1.1 » n'est pas « c. B-1 »).
   const explicite = law ? null : (citation.match(CHAPITRE_EXPLICITE)?.[1]?.trim() ?? null);
 
-  return { law, article, law_source: law ? lawSource : null, chapitre_inconnu: explicite };
+  // « RLRQ, c. C-25 » tombe déjà en chapitre inconnu (l'ancrage de `chapterRegex` empêche
+  // C-25 d'apparier C-25.01) : on le NOMME ici pour servir le même refus circonstancié que
+  // la formulation en toutes lettres, plutôt qu'un « pas au corpus » générique.
+  const horsCorpus = law ? null : ancienCpc || /^C-25$/i.test(explicite ?? "") ? "C-25" : null;
+
+  return {
+    law,
+    article,
+    law_source: law ? lawSource : null,
+    chapitre_inconnu: horsCorpus ? null : explicite,
+    hors_corpus: horsCorpus,
+  };
 }
 
 // --- données de pertinence (legislation_find_relevant) ------------------------------

@@ -73,6 +73,18 @@ en base et affichés sur la [page publique](https://legislation.poirierlavoie.ca
 par l'outil `legislation_list_laws` — ils ne sont pas recopiés ici (R10). Rafraîchissement
 semestriel.
 
+**Ce que le corpus NE couvre PAS, et qu'il vaut mieux savoir avant d'en avoir besoin.**
+Le corpus sert le **droit en vigueur**, dans sa version consolidée courante — il n'y a ni
+versions antérieures, ni point de vue historique. En particulier, l'**ancien Code de
+procédure civile** (RLRQ, c. C-25), abrogé et remplacé le 1er janvier 2016 par le Code
+actuel (c. C-25.01), **n'y figure pas** : c'est une décision de portée, pas un oubli.
+Comme la recodification a **renuméroté** le code, l'article N de l'ancien n'est pas
+l'article N du nouveau — aussi `legislation_resolve_reference` refuse-t-il NOMMÉMENT une
+citation de l'ancien code (« ancien C.p.c. », « c. C-25 », « C.p.c. de 1965 ») plutôt que de
+la rabattre en silence sur son successeur. Côté fédéral, la portée exclut également le Code
+criminel, la Loi de l'impôt sur le revenu et les lois constitutionnelles (voir l'invariant 17
+de [CLAUDE.md](CLAUDE.md)).
+
 ## Les 10 outils
 
 Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extraire**.

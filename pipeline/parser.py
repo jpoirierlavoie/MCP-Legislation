@@ -380,7 +380,15 @@ def _disposition_number(heading: str) -> tuple[str, str]:
 
 def _parse_sc_block_el(cont: Tag, cfg: dict) -> tuple[Division, Article]:
     """Extrait UN bloc `sc-nb:N` (dispositions finales OU annexe/formulaire). Classé et numéroté
-    sur l'INTITULÉ (div d'en-tête d36e) — un même EPUB peut avoir sc-nb:1..N (une annexe chacun)."""
+    sur l'INTITULÉ (div d'en-tête d36e) — un même EPUB peut avoir sc-nb:1..N (une annexe chacun).
+
+    ⚠️ CLASSER SUR L'ID SERAIT FAUX, et classer sur le TEXTE aussi. Mesuré en phase 4 : l'id
+    `sc-nb:1` désigne les DISPOSITIONS FINALES dans le C.c.Q. et l'ANNEXE dans le C.p.c. — le
+    même identifiant, deux natures. Seul l'intitulé du bloc les sépare.
+    Et le piège dans le piège : chercher le mot « annexe » dans le CONTENU se tromperait aussi,
+    parce que l'historique des finales du C.c.Q. porte « 1991, c. 64, annexe. » sans en être
+    une. D'où la lecture du seul en-tête `d36e`, et rien d'autre.
+    """
     head_el = cont.find(id=re.compile(r"^d\d+e"))
     heading = _norm(head_el.get_text()).split("\n")[0][:50] if head_el else cfg["finales"]
     number, kind = _disposition_number(heading)
