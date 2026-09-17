@@ -303,3 +303,51 @@ describe("la chaîne intergicielle", () => {
     }
   });
 });
+
+describe("les deux chemins acceptent les MÊMES secrets", () => {
+  it("le jeton de la VEILLE est admis par le routeur du socle", async () => {
+    // Défaut réel, corrigé : `PORTE.nomsSecrets` recopiait la liste au lieu de la partager.
+    // Elle nommait encore `MCP_TOKEN_ATHENA`, retiré le 2026-09-16, et ignorait
+    // `MCP_TOKEN_VEILLE` — la veille mensuelle recevait donc 404 en production dès la
+    // bascule. Une liste recopiée devient fausse sans que rien n'échoue.
+    const garde = e.MCP_TOKEN;
+    e.MCP_TOKEN = undefined;
+    e.MCP_TOKEN_VEILLE = "jeton-de-veille";
+    try {
+      const r = await SELF.fetch(URL_MCP, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer jeton-de-veille",
+          "MCP-Protocol-Version": HERITEE,
+        },
+        body: JSON.stringify(rpc("tools/list")),
+      });
+      expect(r.status).toBe(200);
+    } finally {
+      e.MCP_TOKEN = garde;
+      e.MCP_TOKEN_VEILLE = undefined;
+    }
+  });
+
+  it("un nom de secret hors liste n'ouvre rien", async () => {
+    const garde = e.MCP_TOKEN;
+    e.MCP_TOKEN = undefined;
+    e.MCP_TOKEN_ATHENA = "jeton-retire";
+    try {
+      const r = await SELF.fetch(URL_MCP, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer jeton-retire",
+          "MCP-Protocol-Version": HERITEE,
+        },
+        body: JSON.stringify(rpc("tools/list")),
+      });
+      expect(r.status).toBe(404);
+    } finally {
+      e.MCP_TOKEN = garde;
+      e.MCP_TOKEN_ATHENA = undefined;
+    }
+  });
+});

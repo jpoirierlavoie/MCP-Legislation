@@ -54,7 +54,15 @@ function porteDAcces() {
   const queryKey = (authTs.match(/const QUERY_KEY = '([^']+)'|const QUERY_KEY = "([^"]+)"/) ?? [])
     .slice(1)
     .find(Boolean);
-  const secrets = [...authTs.matchAll(/e\.(MCP_TOKEN[A-Z0-9_]*)/g)].map((m) => m[1]);
+  // Les noms de secrets se lisent désormais dans LA constante qui pilote le runtime —
+  // `NOMS_SECRETS`, employée à la fois par `secretsOf` (chemin McpAgent) et par `PORTE`
+  // (chemin du socle). Auparavant on balayait les occurrences de `e.MCP_TOKEN…`, ce qui
+  // a cessé de fonctionner quand la lecture est passée par un index. Surtout, les deux
+  // chemins avaient alors DEUX listes, et celle du socle nommait un secret retiré tout en
+  // ignorant celui de la veille : la veille mensuelle recevait 404. Une seule liste, lue
+  // ici, ferme les deux défauts d'un coup.
+  const bloc = (authTs.match(/const NOMS_SECRETS = \[([^\]]+)\]/) ?? [])[1] ?? "";
+  const secrets = [...bloc.matchAll(/"([A-Z0-9_]+)"/g)].map((m) => m[1]);
   assert.ok(
     mount && queryKey && secrets.length >= 2,
     `MOUNT / QUERY_KEY / la liste de secrets sont introuvables dans src/auth.ts. Ce test les LIT pour ne pas les recopier (R10) : si leur forme a changé, mettre à jour l'extraction ci-dessus — ne pas la contourner, elle est la SEULE source de ce contrôle.`,

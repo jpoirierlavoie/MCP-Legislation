@@ -133,11 +133,13 @@ function decodeOrNull(segment: string): string | null {
  *
  * FERMÉ PAR DÉFAUT : liste vide ⇒ la boucle d'appariement ne trouve rien ⇒ tout est refusé.
  */
+export const NOMS_SECRETS = ["MCP_TOKEN", "MCP_TOKEN_VEILLE"] as const;
+
 function secretsOf(env: Env): string[] {
-  const e = env as EnvWithSecrets;
-  return [e.MCP_TOKEN, e.MCP_TOKEN_VEILLE]
-    .map((s) => s?.trim())
-    .filter((s): s is string => s !== undefined && s.length > 0);
+  const e = env as unknown as Record<string, unknown>;
+  return NOMS_SECRETS.map((nom) => e[nom])
+    .map((v) => (typeof v === "string" ? v.trim() : undefined))
+    .filter((v): v is string => v !== undefined && v.length > 0);
 }
 
 /**
@@ -211,6 +213,11 @@ export function gateMcp(request: Request, url: URL, env: Env): Request | null {
 export const PORTE = {
   mount: MOUNT,
   queryKey: QUERY_KEY,
-  nomsSecrets: ["MCP_TOKEN", "MCP_TOKEN_ATHENA"] as const,
+  // LA MÊME liste que `secretsOf`, et non une copie. La première rédaction en recopiait
+  // une : elle nommait encore `MCP_TOKEN_ATHENA`, retiré le 2026-09-16, et ignorait
+  // `MCP_TOKEN_VEILLE`, ajouté depuis — si bien que la veille mensuelle recevait 404 dès
+  // que le routeur du socle servait. Une liste recopiée devient fausse sans que rien
+  // n'échoue : c'est précisément le mode de panne que ce dépôt combat partout ailleurs.
+  nomsSecrets: NOMS_SECRETS,
   segmentBorne: true,
 } as const;
