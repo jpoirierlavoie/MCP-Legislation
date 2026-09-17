@@ -113,12 +113,20 @@
       "description_en": "Administrative justice, review of decisions of the Administration, Administrative Tribunal of Québec (TAQ)."
     },
     {
+      "id": "louage",
+      "label_fr": "Louage (bail)",
+      "label_en": "Lease",
+      "kind": "prive-ccq",
+      "description_fr": "Bail et louage : locateur, locataire, loyer, durée du bail, reconduction, résiliation du bail, sous-location, cession de bail, réparations, bail commercial, bail d'un local, éviction (Livre 5 C.c.Q., chapitre du louage).",
+      "description_en": "Lease: lessor, lessee, rent, term of the lease, renewal, resiliation of the lease, sublease, assignment of lease, repairs, commercial lease, lease of premises, eviction (Book Five, C.C.Q., chapter on leases)."
+    },
+    {
       "id": "louage-residentiel",
       "label_fr": "Louage résidentiel",
       "label_en": "Residential Lease",
       "kind": "specialise",
-      "description_fr": "Bail de logement et Tribunal administratif du logement; renvoie aussi au louage du C.c.Q.",
-      "description_en": "Lease of a dwelling and the Administrative Housing Tribunal; also refers to the lease provisions of the C.C.Q."
+      "description_fr": "Bail de logement et Tribunal administratif du logement : logement, habitation, fixation de loyer, reprise du logement, droit au maintien dans les lieux, logement à loyer modique, avis de modification du bail.",
+      "description_en": "Lease of a dwelling and the Administrative Housing Tribunal: dwelling, housing, fixing of rent, repossession of a dwelling, right to maintain occupancy, low-rental housing, notice of modification of the lease."
     },
     {
       "id": "protection-consommateur",
@@ -533,9 +541,14 @@
       "division_path": "ga:l_cinquieme-gb:l_premier-gc:l_troisieme"
     },
     {
-      "subject": "louage-residentiel",
+      "subject": "louage",
       "law": "ccq",
       "division_path": "ga:l_cinquieme-gb:l_deuxieme-gc:l_quatrieme"
+    },
+    {
+      "subject": "louage-residentiel",
+      "law": "ccq",
+      "division_path": "ga:l_cinquieme-gb:l_deuxieme-gc:l_quatrieme-gd:l_iv"
     },
     {
       "subject": "travail-emploi",

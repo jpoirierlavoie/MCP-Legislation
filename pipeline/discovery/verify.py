@@ -19,19 +19,45 @@ def verify(db) -> bool:
         print(f"  {tbl:14}: {n}")
     print("  laws (métadonnées) :", db.run("SELECT COUNT(*) AS n FROM laws")[0]["n"])
 
-    # 2. Chaque division_path de subject_map résout dans divisions (même loi)
+    # 2. Chaque division_path de subject_map résout dans divisions, EN FRANÇAIS (les chemins
+    #    y sont français par construction — invariant 4).
     total_paths = db.run("SELECT COUNT(*) AS n FROM subject_map WHERE division_path != ''")[0]["n"]
     unresolved = db.run(
         "SELECT sm.subject_id, sm.law_id, sm.division_path FROM subject_map sm "
         "WHERE sm.division_path != '' AND NOT EXISTS "
-        "(SELECT 1 FROM divisions d WHERE d.law_id = sm.law_id AND d.path = sm.division_path)"
+        "(SELECT 1 FROM divisions d WHERE d.law_id = sm.law_id AND d.path = sm.division_path "
+        " AND d.lang = 'fr')"
     )
-    print(f"\n  division_path non vides : {total_paths} | non résolus : {len(unresolved)}")
+    print(f"\n  division_path non vides : {total_paths} | non résolus (fr) : {len(unresolved)}")
     for u in unresolved:
         ok = False
         print("   ✗ NON RÉSOLU :", u)
     if not unresolved:
-        print("   ✓ tous les division_path de subject_map résolvent")
+        print("   ✓ tous les division_path de subject_map résolvent en français")
+
+    # 2bis. Condition NÉCESSAIRE à l'adressage anglais — et seulement nécessaire.
+    #
+    # En `lang='en'`, `src/lib.ts` traduit chaque chemin français par le pont des numéros
+    # d'articles (`translatePaths`). Si la traduction échoue, `find_relevant` retombe EN
+    # SILENCE sur le chemin FRANÇAIS avec un intitulé nul : la piste est servie à un client
+    # anglais qui ne peut pas l'ouvrir avec `get_division(lang='en')`. Un cul-de-sac présenté
+    # comme une piste.
+    #
+    # ⚠️ Ce contrôle NE VÉRIFIE PAS la traduction. Refaire le pont ici en Python créerait le
+    # miroir dont la divergence est précisément le mode de défaut de ce dépôt (invariants 2
+    # et 4). Il vérifie la condition sans laquelle AUCUN pont ne peut exister : que la loi
+    # porte des divisions anglaises. Une loi qui la remplit peut encore échouer chemin par
+    # chemin — cela se voit à l'éval, par les miroirs anglais de `tests/evals.mjs`.
+    sans_en = db.run(
+        "SELECT DISTINCT sm.law_id FROM subject_map sm "
+        "WHERE sm.division_path != '' AND NOT EXISTS "
+        "(SELECT 1 FROM divisions d WHERE d.law_id = sm.law_id AND d.lang = 'en')"
+    )
+    for r in sans_en:
+        ok = False
+        print("   ✗ AUCUNE division anglaise, chemin mappé inadressable en EN :", r["law_id"])
+    if not sans_en:
+        print("   ✓ toute loi à chemin mappé porte aussi des divisions anglaises")
 
     # 3. Non-destruction : ccq = 3525, cpc = 878 (articles, toutes langues)
     print("\n  Non-destruction (articles) :")

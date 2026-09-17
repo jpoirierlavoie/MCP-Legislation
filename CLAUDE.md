@@ -88,7 +88,7 @@ inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
    `PYTHONUTF8=1`) — télécharge/parse les EPUB Irosoft, charge D1 par
    staging → validation → bascule. Ne JAMAIS écrire directement en production.
 3. **Données versionnées** — `laws.config.json` (79 lois), `catalogue.json` (doc publique
-   des outils et des aides au repérage, bilingue — R10), `taxonomy.json` (43 matières
+   des outils et des aides au repérage, bilingue — R10), `taxonomy.json` (44 matières
    bilingues), `relations.json` (relations curées), `schema.sql` + `schema-decouverte.sql`
    + `migrations/` (wrangler d1 migrations).
 
@@ -114,8 +114,8 @@ npm run evals                                      # contrôles bout-en-bout (le
 npm run eval                                       # harnais d'éval : 21 cas, recall@10/MRR (production)
 node eval/run.mjs --refresh-paths                  # revalide eval/cases.resolved.json et SORT — diff à VIDER avant de mesurer
 node scripts/journal.mjs [--local|--jours N|--tout] # dépouille search_log (lecture seule) : replis et reformulations
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # 131 tests
-npm test                                           # vitest, DEUX projets : 8 fichiers, 94 contrôles (sans réseau, en CI)
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # 144 tests
+npm test                                           # vitest, DEUX projets : 17 fichiers, 202 contrôles (sans réseau, en CI)
 #   ^ « workerd » (test/**/*.test.ts, via wrangler.test.jsonc) et « node » (tests/**, scripts/**) :
 #     garde anti-dérive doc (R10), JS client de la page, détecteur de veille, plages, chemins…
 #     NE PLUS lancer ces fichiers avec `node --test` : ils sont passés à vitest le 2026-09-16
@@ -201,6 +201,20 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
    vecteurs ; le sémantique SEUL est l'ultime barreau, sous plancher
    `SEMANTIC_MIN_SCORE=0,40` **calibré par mesure** (réel EN→FR 0,525 ; charabia 0,303).
    Tout chemin de repli est ÉTIQUETÉ dans la réponse et journalisé (`search_log`).
+   **Un barreau n'arrête la descente que s'il REND ASSEZ** (`RELAX_MIN_LOO_TOTAL`, posé le
+   2026-09-17) : l'arrêt au premier barreau non vide était le défaut, pas la règle. Mesuré —
+   « vice caché garantie qualité » rendait UN résultat par leave-one-out (p-40.1 art. 53.1,
+   sur les automobiles) et masquait le OU, qui met C.c.Q. 1726 en tête.
+   **La valeur est 2, et le piège est de la croire réglable vers le haut** : le cas fondateur
+   de l'art. 490 C.p.c. rend 8 résultats SUR LE CORPUS mais seulement **2** restreint au
+   C.p.c. — un plancher à 3 le faisait donc basculer au OU (cpc 490 restait en tête, mais sa
+   liste de 2 articles devenait 579). Le RENDEMENT D'UN BARREAU DÉPEND DE LA PORTÉE : mesurer
+   un cas sans `law` ne dit rien du même cas avec `law`. Pour lire le rendement réel d'un
+   leave-one-out sans instrumenter le serveur, abaisser `limit` à 1 — le `Math.min` du
+   plancher le laisse alors passer, et `total` livre son compte.
+   Les deux cas sont épinglés ENSEMBLE (`test/repere-echelle.test.ts` hors ligne,
+   `tests/evals.mjs` contre le serveur) : c'est le couple qui prouve que le plancher est bien
+   placé, jamais l'un seul.
 8. **Vectorize** : ids ≤ 64 octets (chemins de divisions hachés SHA-256/24hex) ; index de
    métadonnées créés AVANT toute insertion (pas rétroactifs) ; fenêtre bge-m3 consommée
    en lot × PLUS LONG texte (rembourrage) → l'embed du backfill se scinde récursivement
@@ -219,7 +233,11 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
     corpus. En passant de 47 à 78 lois, « récusation » a franchi le seuil de spécificité
     et le bon chapitre du C.p.c. a disparu du top 8 — sans erreur. Les pondérations sont
     désormais continues (`specificityFactor`). Se méfier de tout `<=` sur un décompte
-    d'entités dans `src/relevance.ts`.
+    d'entités dans `src/relevance.ts`. **Second exemplaire, 2026-09-17** : `coverageFactor`
+    pèse la part de la requête qu'un candidat explique. Il est continu pour la même raison —
+    un seuil aurait une position dépendant de la LONGUEUR de la requête, ce qui est pire
+    encore qu'une dépendance à la taille du corpus, car l'usager la fait varier à chaque
+    question.
 13. **Une `description` de matière est une SURFACE D'APPARIEMENT, pas de la prose.** S1
     apparie des tokens et ignore la négation : écrire « distincte de la procédure civile »
     dans la matière *Procédure pénale* lui a fait capter « appel civil » et évincer le
@@ -277,6 +295,20 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
     (`--filter=blob:none`) hors de l'arbre du dépôt. **Ne PAS parser le HTML de
     `lois.justice.gc.ca`, ne PAS employer les ZIP du portail de données ouvertes** — seule
     la page sert, et uniquement pour la DATE (voir les trois dates ci-dessus).
+18. **Le LIBELLÉ d'une matière est un MOTIF SERVI, pas une étiquette de rangement.**
+    `find_relevant` rend « matière : <libellé> » comme la preuve de son rapprochement : un
+    libellé plus étroit que la division rattachée produit un motif FAUX, servi à un modèle,
+    sans qu'aucune erreur ne survienne. Mesuré le 2026-09-17 : le chapitre « DU LOUAGE » du
+    C.c.Q. (art. 1851 à 1978) portait la matière **« Louage résidentiel »**, et elle seule —
+    or ses Sections I à III sont le régime général du BAIL COMMERCIAL, et l'art. 1851 dit
+    lui-même « le louage, aussi appelé bail ». Vérifié : 1851, 1863 et 1883 — définition,
+    recours en résiliation, résiliation pour défaut de paiement — sont TOUS hors de la
+    Section IV, la seule qui soit propre au logement. Corrigé par une matière `louage`
+    distincte ; gardé par `tests/taxonomie.test.mjs`, qui refuse qu'une même matière couvre
+    le chapitre ET la section du logement, et qu'un libellé résidentiel coiffe le chapitre.
+    Corollaire : avant de rattacher une division, lire jusqu'où elle VA, pas son titre.
+    (Invariant 13 régit la `description`, surface d'appariement ; celui-ci régit le `label`,
+    surface de JUSTIFICATION. Les deux dérivent séparément.)
 
 ## Règles de conception actives (héritées du plan v2, toujours en vigueur)
 

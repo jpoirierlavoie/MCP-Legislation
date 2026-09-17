@@ -90,7 +90,14 @@ def validate(db, taxonomy: dict, relations: dict) -> list[str]:
     v: list[str] = []
     law_ids = {r["id"] for r in db.run("SELECT id FROM laws")}
     subject_ids = {s["id"] for s in taxonomy["subjects"]}
-    div_paths = {(r["law_id"], r["path"]) for r in db.run("SELECT DISTINCT law_id, path FROM divisions")}
+    # lang='fr' EXPLICITEMENT : les chemins de `subject_map` sont français par construction
+    # (les identifiants Irosoft sont propres à la langue — invariant 4), et c'est la moitié
+    # française que `src/lib.ts` interroge directement. Sans ce filtre, un chemin qui
+    # n'existe QU'EN ANGLAIS passait la validation, puis ne résolvait jamais côté serveur.
+    div_paths = {
+        (r["law_id"], r["path"])
+        for r in db.run("SELECT DISTINCT law_id, path FROM divisions WHERE lang = 'fr'")
+    }
     div_laws = {law for (law, _) in div_paths}
 
     seen: set[tuple] = set()

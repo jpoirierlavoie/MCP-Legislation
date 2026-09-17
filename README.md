@@ -95,7 +95,7 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 |---|---|---|
 | `legislation_find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats, avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
 | `legislation_list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, loi habilitante, plan des grands codes ; filtres `fonction`/`forum`/`subject` | `fonction=tarif` → les 4 tarifs |
-| `legislation_list_subjects` | Les 43 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
+| `legislation_list_subjects` | Les 44 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
 | `legislation_related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées | `law=cpc` → ses 6 règlements de cour |
 
 ### Extraction
@@ -118,7 +118,10 @@ résultats** :
    recherche restreinte à une loi ne donne rien, elle est automatiquement **élargie au
    corpus** ; sinon l'échelle de **relaxation** s'applique (retrait d'un terme à la fois,
    puis OU pondéré bm25), chaque étape étiquetée : *« résultats approchés (terme ignoré :
-   « hors ») »*.
+   « hors ») »*. Un barreau n'arrête la descente que s'il rend **assez** de résultats : une
+   liste d'un seul article laisse l'échelle continuer, car le moteur lexical ne connaît
+   aucune famille de mots en français — une question posée avec *« garantie »* n'atteint pas
+   d'elle-même un texte qui dit *« garantir »*.
 2. **Sémantique** (embeddings multilingues) — fusionné au lexical par RRF ; il fait le
    pont de vocabulaire (*« congédiement »* trouve *« délai de congé »*) et de langue
    (une requête en anglais trouve le texte français). Les résultats issus du seul chemin
@@ -126,6 +129,12 @@ résultats** :
 
 Chaque résultat est auto-explicatif : `C.p.c. — Livre V, Titre IV : LES DEMANDES
 INTÉRESSANT LE DROIT INTERNATIONAL PRIVÉ › art. 490 [ga:l_v-gb:l_iv-gc:l_i]` + extrait.
+
+Trois décomptes accompagnent la réponse, et ils ne disent pas la même chose : `total` compte
+les appariements **lexicaux** dans le corpus entier, `returned` la taille de la page rendue,
+et `sources` départage ce qui vient du lexical de ce qui vient du sémantique. Un `total` de 1
+avec cinq résultats n'est donc pas une incohérence : c'est un appariement lexical et quatre
+voisins de sens.
 Les recherches corpus sont regroupées par loi (max 6 par loi).
 
 ## Avertissement
