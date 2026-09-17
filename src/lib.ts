@@ -1225,10 +1225,12 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   // sur une loi voisine (« c. B-1.1 » n'est pas « c. B-1 »).
   const explicite = law ? null : (citation.match(CHAPITRE_EXPLICITE)?.[1]?.trim() ?? null);
 
-  // « RLRQ, c. C-25 » tombe déjà en chapitre inconnu (l'ancrage de `chapterRegex` empêche
-  // C-25 d'apparier C-25.01) : on le NOMME ici pour servir le même refus circonstancié que
-  // la formulation en toutes lettres, plutôt qu'un « pas au corpus » générique.
-  const horsCorpus = law ? null : ancienCpc || /^C-25$/i.test(explicite ?? "") ? "C-25" : null;
+  // Le chapitre C-25 cité SOUS N'IMPORTE QUELLE FORME — « RLRQ, c. C-25 » comme « art. 110
+  // C-25 », qui ne porte pas le « c. » qu'exige CHAPITRE_EXPLICITE. On réutilise
+  // `chapterRegex` plutôt qu'une comparaison de chaîne : c'est lui qui porte l'ancrage
+  // empêchant C-25 de mordre sur C-25.01 (même défaut que « c. B-1 » ⊂ « c. B-1.1 »), et le
+  // vérifier deux fois de deux façons finirait par diverger.
+  const horsCorpus = law ? null : ancienCpc || chapterRegex("C-25").test(citation) ? "C-25" : null;
 
   return {
     law,

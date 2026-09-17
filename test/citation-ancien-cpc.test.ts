@@ -51,11 +51,17 @@ describe("ancien C.p.c. (C-25) — nommé, jamais rabattu", () => {
     }
   });
 
-  it("nomme aussi le chapitre C-25 cité explicitement", () => {
-    const p = parseCitation("RLRQ, c. C-25, art. 110", LOIS);
-    expect(p.hors_corpus).toBe("C-25");
-    // Et il ne repart pas en « chapitre inconnu » générique : le refus est circonstancié.
-    expect(p.chapitre_inconnu).toBeNull();
+  it("nomme le chapitre C-25 sous toutes ses formes de citation", () => {
+    for (const c of [
+      "RLRQ, c. C-25, art. 110",
+      "art. 110 C-25", // sans « c. » : CHAPITRE_EXPLICITE ne le voit pas, chapterRegex si
+      "chapitre C-25, article 110",
+    ]) {
+      const p = parseCitation(c, LOIS);
+      expect(p.hors_corpus, c).toBe("C-25");
+      // Et il ne repart pas en « chapitre inconnu » générique : le refus est circonstancié.
+      expect(p.chapitre_inconnu, c).toBeNull();
+    }
   });
 
   it("C-25 n'apparie PAS C-25.01 — l'ancrage du chapitre tient", () => {
