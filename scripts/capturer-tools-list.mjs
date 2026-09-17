@@ -17,7 +17,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { registerTools } from "../src/tools.ts";
+import { construireOutils } from "../src/tools.ts";
 
 // `tools/list` ne touche aucune liaison : un environnement creux suffit. Les drapeaux sont
 // posés à leur valeur de production pour le cas où un descripteur en dépendrait.
@@ -35,7 +35,7 @@ const server = new McpServer(
   { name: "MCP Legislation", version: "0.2.0" },
   { instructions: "capture" },
 );
-registerTools(server, env);
+construireOutils(env, server);
 
 // On passe par le gestionnaire réel plutôt que par une lecture des internes : c'est le même
 // chemin que celui qu'emprunte un client, conversion Zod -> JSON Schema comprise.

@@ -4,7 +4,7 @@ import { McpAgent } from "agents/mcp";
 import { gateMcp } from "./auth";
 import { handleBackfill } from "./backfill";
 import { renderSite } from "./site";
-import { registerTools } from "./tools";
+import { construireOutils } from "./tools";
 
 /**
  * Serveur MCP « MCP Legislation » (paquet mcp-legislation).
@@ -57,7 +57,7 @@ export class QclawMCP extends McpAgent {
   );
 
   async init() {
-    registerTools(this.server, this.env);
+    construireOutils(this.env, this.server);
   }
 }
 

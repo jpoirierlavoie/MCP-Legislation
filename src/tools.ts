@@ -176,8 +176,28 @@ function renderArticle(a: ArticleJoined, loi: LawRow, consol: string | null, lan
   return `${head}\n\n${a.text}${hist}`;
 }
 
-export function registerTools(server: McpServer, env: Env): void {
+/**
+ * Un gestionnaire d'outil vu du registre : arguments déjà validés, résultat d'outil.
+ *
+ * Les gestionnaires sont typés PRÉCISÉMENT, chacun par le `z.infer` de sa propre forme.
+ * La conversion vers ce type commun n'a lieu qu'au dépôt, là où le nom de l'outil — et donc
+ * la forme de ses arguments — est de toute façon perdu.
+ */
+export type Gestionnaire = (args: never) => Promise<ToolResult>;
+
+/** Les gestionnaires par nom d'outil. Consommé par le routeur du socle. */
+export type Registre = Record<string, Gestionnaire>;
+
+/**
+ * Construit les outils et, si un serveur est fourni, les enregistre auprès du SDK.
+ *
+ * DEUX CONSOMMATEURS, UN SEUL CORPS DE GESTIONNAIRE. Tant que `McpAgent` et le routeur du
+ * socle coexistent (marche 2), le serveur SDK est passé et les deux chemins appellent
+ * exactement la même fonction. Le jour où `McpAgent` part, l'argument devient inutile.
+ */
+export function construireOutils(env: Env, server?: McpServer): Registre {
   const db = env.DB;
+  const outils: Registre = {};
 
   // 1) legislation_list_laws ---------------------------------------------------------
   //
@@ -232,7 +252,102 @@ export function registerTools(server: McpServer, env: Env): void {
     return `${head}${attrs ? `\n    ${attrs}` : ""}${scope}${divs}${plan}`;
   };
 
-  server.registerTool(
+  const S_LIST_LAWS = {
+    fonction: z
+      .string()
+      .optional()
+      .describe("Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'."),
+    forum: z
+      .string()
+      .optional()
+      .describe("Filtrer par forum, ex. 'Tribunal administratif du logement', 'Cour d'appel'."),
+    subject: z
+      .string()
+      .optional()
+      .describe(
+        "Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. legislation_list_subjects).",
+      ),
+    structure: z
+      .boolean()
+      .default(true)
+      .describe(
+        "Inclure le plan profondeur 2 (Livres et leurs Titres) des grands codes (défaut true).",
+      ),
+    lang: LANG.optional(),
+  };
+  const H_LIST_LAWS = async ({
+    fonction,
+    forum,
+    subject,
+    structure: structureArg,
+    lang: langArg,
+  }: z.infer<z.ZodObject<typeof S_LIST_LAWS>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    const structure = structureArg ?? true;
+    const laws = await listLaws(db, { fonction, forum, subject }, lang as Lang, env);
+    // 1.4 : le signal de repérage est souvent au Titre, pas au Livre (post-mortem :
+    // Livre V C.p.c. muet, Titre IV parlant) — plan profondeur 2 des lois à Livres.
+    const outlines =
+      structure === false
+        ? new Map<string, import("./lib").OutlineNode[]>()
+        : await lawOutlines(
+            db,
+            (lang ?? "fr") as Lang,
+            laws.map((l) => l.id).filter((id) => OUTLINE_LAWS.includes(id)),
+          );
+    if (laws.length === 0) {
+      const applied = [
+        fonction ? `fonction='${fonction}'` : null,
+        forum ? `forum='${forum}'` : null,
+        subject ? `subject='${subject}'` : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      return err(
+        applied
+          ? `Aucune loi pour ${applied}. Vérifiez les valeurs (legislation_list_subjects pour les matières) ` +
+              "ou appelez legislation_list_laws sans filtre."
+          : "Aucune loi chargée dans la base.",
+      );
+    }
+    const header = `${laws.length} loi(s) au corpus :`;
+    const body = laws
+      .map((l) => renderLaw(l, outlines.get(l.id), (lang ?? "fr") as Lang))
+      .join("\n");
+    return ok(`${header}\n${body}`, {
+      filters: { fonction: fonction ?? null, forum: forum ?? null, subject: subject ?? null },
+      count: laws.length,
+      laws: laws.map((l) => ({
+        id: l.id,
+        name_fr: l.name_fr,
+        name_en: l.name_en,
+        // Clé HISTORIQUE conservée le temps de la migration : la retirer ici serait
+        // une rupture de contrat pour tout consommateur du champ typé. Le passage à
+        // `official_cite` seul est un commit séparé, annoncé.
+        rlrq_cite: citeOf(l),
+        official_cite: citeOf(l),
+        langs: l.langs,
+        consol_date_fr: l.consol_date_fr,
+        consol_date_en: l.consol_date_en,
+        article_count: l.article_count,
+        fonction: l.fonction,
+        forum: l.forum,
+        // PAS de repli sur name_fr : la portée éditoriale n'a jamais été rédigée (79 lois
+        // sur 79 à NULL), et substituer le titre servait au client un champ VIDE AYANT
+        // L'AIR PLEIN — sans rien qui dise que c'en était un repli. La sortie texte, elle,
+        // omettait honnêtement la ligne (voir renderLaw) : les deux surfaces du même outil
+        // se contredisaient. Corollaire structuré de R4, décision 001.
+        scope: l.scope_fr,
+        parent_law_id: l.parent_law_id,
+        subjects: l.subjects,
+        mapped_divisions: l.mapped_divisions,
+        structure: outlines.get(l.id) ?? null,
+      })),
+    });
+  };
+  outils.legislation_list_laws = H_LIST_LAWS as Gestionnaire;
+  server?.registerTool(
     "legislation_list_laws",
     {
       title: titre("legislation_list_laws"),
@@ -242,100 +357,66 @@ export function registerTools(server: McpServer, env: Env): void {
         "matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). " +
         "Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; " +
         "pour partir d'un problème concret, préférer legislation_find_relevant.",
-      inputSchema: {
-        fonction: z
-          .string()
-          .optional()
-          .describe("Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'."),
-        forum: z
-          .string()
-          .optional()
-          .describe("Filtrer par forum, ex. 'Tribunal administratif du logement', 'Cour d'appel'."),
-        subject: z
-          .string()
-          .optional()
-          .describe(
-            "Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. legislation_list_subjects).",
-          ),
-        structure: z
-          .boolean()
-          .default(true)
-          .describe(
-            "Inclure le plan profondeur 2 (Livres et leurs Titres) des grands codes (défaut true).",
-          ),
-        lang: LANG.optional(),
-      },
+      inputSchema: S_LIST_LAWS,
       annotations: READONLY,
     },
-    async ({ fonction, forum, subject, structure: structureArg, lang: langArg }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      const structure = structureArg ?? true;
-      const laws = await listLaws(db, { fonction, forum, subject }, lang as Lang, env);
-      // 1.4 : le signal de repérage est souvent au Titre, pas au Livre (post-mortem :
-      // Livre V C.p.c. muet, Titre IV parlant) — plan profondeur 2 des lois à Livres.
-      const outlines =
-        structure === false
-          ? new Map<string, import("./lib").OutlineNode[]>()
-          : await lawOutlines(
-              db,
-              (lang ?? "fr") as Lang,
-              laws.map((l) => l.id).filter((id) => OUTLINE_LAWS.includes(id)),
-            );
-      if (laws.length === 0) {
-        const applied = [
-          fonction ? `fonction='${fonction}'` : null,
-          forum ? `forum='${forum}'` : null,
-          subject ? `subject='${subject}'` : null,
-        ]
-          .filter(Boolean)
-          .join(", ");
-        return err(
-          applied
-            ? `Aucune loi pour ${applied}. Vérifiez les valeurs (legislation_list_subjects pour les matières) ` +
-                "ou appelez legislation_list_laws sans filtre."
-            : "Aucune loi chargée dans la base.",
-        );
-      }
-      const header = `${laws.length} loi(s) au corpus :`;
-      const body = laws
-        .map((l) => renderLaw(l, outlines.get(l.id), (lang ?? "fr") as Lang))
-        .join("\n");
-      return ok(`${header}\n${body}`, {
-        filters: { fonction: fonction ?? null, forum: forum ?? null, subject: subject ?? null },
-        count: laws.length,
-        laws: laws.map((l) => ({
-          id: l.id,
-          name_fr: l.name_fr,
-          name_en: l.name_en,
-          // Clé HISTORIQUE conservée le temps de la migration : la retirer ici serait
-          // une rupture de contrat pour tout consommateur du champ typé. Le passage à
-          // `official_cite` seul est un commit séparé, annoncé.
-          rlrq_cite: citeOf(l),
-          official_cite: citeOf(l),
-          langs: l.langs,
-          consol_date_fr: l.consol_date_fr,
-          consol_date_en: l.consol_date_en,
-          article_count: l.article_count,
-          fonction: l.fonction,
-          forum: l.forum,
-          // PAS de repli sur name_fr : la portée éditoriale n'a jamais été rédigée (79 lois
-          // sur 79 à NULL), et substituer le titre servait au client un champ VIDE AYANT
-          // L'AIR PLEIN — sans rien qui dise que c'en était un repli. La sortie texte, elle,
-          // omettait honnêtement la ligne (voir renderLaw) : les deux surfaces du même outil
-          // se contredisaient. Corollaire structuré de R4, décision 001.
-          scope: l.scope_fr,
-          parent_law_id: l.parent_law_id,
-          subjects: l.subjects,
-          mapped_divisions: l.mapped_divisions,
-          structure: outlines.get(l.id) ?? null,
-        })),
-      });
-    },
+    H_LIST_LAWS,
   );
 
   // 1b) legislation_list_subjects ----------------------------------------------------
-  server.registerTool(
+  const S_LIST_SUBJECTS = { lang: LANG.optional() };
+  const H_LIST_SUBJECTS = async ({
+    lang: langArg,
+  }: z.infer<z.ZodObject<typeof S_LIST_SUBJECTS>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    const en = lang === "en";
+    const subs = await listSubjects(db, env);
+    if (subs.length === 0) return err("Aucune matière chargée (taxonomie absente).");
+    const KIND: Record<string, string> = en
+      ? { "prive-ccq": "Private law (C.C.Q.)", specialise: "Specialized areas" }
+      : { "prive-ccq": "Droit privé (C.c.Q.)", specialise: "Matières spécialisées" };
+    const libelle = (s: (typeof subs)[number]) => (en ? s.label_en || s.label_fr : s.label_fr);
+    const descr = (s: (typeof subs)[number]) =>
+      en ? s.description_en || s.description_fr : s.description_fr;
+    const groups = new Map<string, typeof subs>();
+    for (const s of subs) {
+      const g = groups.get(s.kind);
+      if (g) g.push(s);
+      else groups.set(s.kind, [s]);
+    }
+    const body = [...groups.entries()]
+      .map(
+        ([kind, items]) =>
+          `\n${KIND[kind] ?? kind} :\n` +
+          items
+            .map(
+              (s) =>
+                `  • ${s.id} — ${libelle(s)} (${s.laws_count} ${en ? "law(s)" : "loi(s)"}` +
+                `${s.divisions_count ? `, ${s.divisions_count} division(s)` : ""})` +
+                `${descr(s) ? `\n      ${descr(s)}` : ""}`,
+            )
+            .join("\n"),
+      )
+      .join("\n");
+    return ok(`${subs.length} ${en ? "subject areas" : "matières"} :${body}`, {
+      count: subs.length,
+      subjects: subs.map((s) => ({
+        id: s.id,
+        label_fr: s.label_fr,
+        label_en: s.label_en,
+        kind: s.kind,
+        label: libelle(s),
+        description: descr(s),
+        description_fr: s.description_fr,
+        description_en: s.description_en,
+        laws_count: s.laws_count,
+        divisions_count: s.divisions_count,
+      })),
+    });
+  };
+  outils.legislation_list_subjects = H_LIST_SUBJECTS as Gestionnaire;
+  server?.registerTool(
     "legislation_list_subjects",
     {
       title: titre("legislation_list_subjects"),
@@ -343,61 +424,106 @@ export function registerTools(server: McpServer, env: Env): void {
         "Liste les matières de la taxonomie (droit privé du C.c.Q. et matières spécialisées) : " +
         "identifiant, libellé, description, et nombre de lois / divisions rattachées. " +
         "Sert à choisir un domaine, puis à filtrer legislation_list_laws (subject=…).",
-      inputSchema: { lang: LANG.optional() },
+      inputSchema: S_LIST_SUBJECTS,
       annotations: READONLY,
     },
-    async ({ lang: langArg }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      const en = lang === "en";
-      const subs = await listSubjects(db, env);
-      if (subs.length === 0) return err("Aucune matière chargée (taxonomie absente).");
-      const KIND: Record<string, string> = en
-        ? { "prive-ccq": "Private law (C.C.Q.)", specialise: "Specialized areas" }
-        : { "prive-ccq": "Droit privé (C.c.Q.)", specialise: "Matières spécialisées" };
-      const libelle = (s: (typeof subs)[number]) => (en ? s.label_en || s.label_fr : s.label_fr);
-      const descr = (s: (typeof subs)[number]) =>
-        en ? s.description_en || s.description_fr : s.description_fr;
-      const groups = new Map<string, typeof subs>();
-      for (const s of subs) {
-        const g = groups.get(s.kind);
-        if (g) g.push(s);
-        else groups.set(s.kind, [s]);
-      }
-      const body = [...groups.entries()]
-        .map(
-          ([kind, items]) =>
-            `\n${KIND[kind] ?? kind} :\n` +
-            items
-              .map(
-                (s) =>
-                  `  • ${s.id} — ${libelle(s)} (${s.laws_count} ${en ? "law(s)" : "loi(s)"}` +
-                  `${s.divisions_count ? `, ${s.divisions_count} division(s)` : ""})` +
-                  `${descr(s) ? `\n      ${descr(s)}` : ""}`,
-              )
-              .join("\n"),
-        )
-        .join("\n");
-      return ok(`${subs.length} ${en ? "subject areas" : "matières"} :${body}`, {
-        count: subs.length,
-        subjects: subs.map((s) => ({
-          id: s.id,
-          label_fr: s.label_fr,
-          label_en: s.label_en,
-          kind: s.kind,
-          label: libelle(s),
-          description: descr(s),
-          description_fr: s.description_fr,
-          description_en: s.description_en,
-          laws_count: s.laws_count,
-          divisions_count: s.divisions_count,
-        })),
-      });
-    },
+    H_LIST_SUBJECTS,
   );
 
   // 1c) legislation_related_laws -----------------------------------------------------
-  server.registerTool(
+  const S_RELATED_LAWS = {
+    law: z
+      .string()
+      .describe(
+        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws.",
+      ),
+    rel_type: z
+      .string()
+      .optional()
+      .describe(
+        "Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe'.",
+      ),
+    direction: z
+      .enum(["out", "in", "both"])
+      .default("both")
+      .describe("'out' : depuis la loi ; 'in' : vers la loi ; 'both' (défaut)."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Max d'arêtes (défaut 50, max 200)."),
+    lang: LANG.optional(),
+  };
+  const H_RELATED_LAWS = async ({
+    law,
+    rel_type,
+    direction: directionArg,
+    limit,
+    lang: langArg,
+  }: z.infer<z.ZodObject<typeof S_RELATED_LAWS>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    const direction = directionArg ?? "both";
+    const L = REL_LABEL[lang as Lang] ?? REL_LABEL.fr;
+    if (!(await getLaw(db, law, env))) {
+      const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
+      return err(`${L.inconnue(law)} ${L.dispo} ${all || L.aucune}.`);
+    }
+    const all = await relatedLaws(db, law, rel_type, direction, lang as Lang, env);
+    if (all.length === 0) {
+      return err(
+        `${L.aucuneRel(law)}` +
+          `${rel_type ? L.deType(rel_type) : ""}` +
+          `${direction !== "both" ? L.enDirection(direction) : ""}. ${L.essayez}`,
+      );
+    }
+    const page = paginate(limit, 0, 50, 200);
+    const edges = all.slice(0, page.limit);
+    const lines = edges.map((e) => {
+      const arrow = e.direction === "out" ? "→" : "←";
+      const dispo = e.in_corpus ? (e.other_name ? ` — ${e.other_name}` : "") : ` — ${L.horsCorpus}`;
+      const w = e.rel_type === "renvoie-a" ? ` ; ${e.weight} ${L.renvois}` : "";
+      // Les notes curées n'existent QU'EN FRANÇAIS (law_relations n'a pas de colonne
+      // note_en) : sous lang='en' on les rend marquées [fr] plutôt que de laisser croire
+      // à une traduction. Même motif que l'intitulé emprunté de get_division.
+      const note = e.note ? `${e.note}${lang === "en" ? " [fr]" : ""}` : null;
+      return (
+        `  ${arrow} ${e.other_id} [${e.rel_type}, ${e.source}${w}]${dispo}` +
+        `${note ? `\n      ${note}` : ""}`
+      );
+    });
+    const hors = edges.filter((e) => !e.in_corpus).length;
+    const head =
+      `${all.length} ${L.relations} '${law}'` +
+      `${edges.length < all.length ? L.affichees(edges.length) : ""}` +
+      `${hors ? L.dontHors(hors) : ""} :`;
+    return ok(`${head}\n${lines.join("\n")}`, {
+      law,
+      lang,
+      rel_type: rel_type ?? null,
+      direction,
+      total: all.length,
+      count: edges.length,
+      relations: edges.map((e) => ({
+        direction: e.direction,
+        other_id: e.other_id,
+        other_name: e.other_name,
+        rel_type: e.rel_type,
+        source: e.source,
+        weight: e.weight,
+        in_corpus: !!e.in_corpus,
+        note: e.note,
+        // La langue de la note est DANS la charge utile (corollaire structuré de R4) :
+        // un client qui jette la prose garde l'information que la note n'est pas traduite.
+        note_lang: e.note ? "fr" : null,
+      })),
+    });
+  };
+  outils.legislation_related_laws = H_RELATED_LAWS as Gestionnaire;
+  server?.registerTool(
     "legislation_related_laws",
     {
       title: titre("legislation_related_laws"),
@@ -405,101 +531,83 @@ export function registerTools(server: McpServer, env: Env): void {
         "Graphe d'interconnexion d'une loi : règlements pris sous son autorité, loi habilitante, " +
         "renvois vers d'autres textes, et relations curées (met-en-oeuvre, applique, complète…). " +
         "Signale les cibles NON disponibles au corpus. Ex. : law='cpc' pour voir ses règlements de cour.",
-      inputSchema: {
-        law: z
-          .string()
-          .describe(
-            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws.",
-          ),
-        rel_type: z
-          .string()
-          .optional()
-          .describe(
-            "Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe'.",
-          ),
-        direction: z
-          .enum(["out", "in", "both"])
-          .default("both")
-          .describe("'out' : depuis la loi ; 'in' : vers la loi ; 'both' (défaut)."),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(200)
-          .optional()
-          .describe("Max d'arêtes (défaut 50, max 200)."),
-        lang: LANG.optional(),
-      },
+      inputSchema: S_RELATED_LAWS,
       annotations: READONLY,
     },
-    async ({ law, rel_type, direction: directionArg, limit, lang: langArg }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      const direction = directionArg ?? "both";
-      const L = REL_LABEL[lang as Lang] ?? REL_LABEL.fr;
-      if (!(await getLaw(db, law, env))) {
-        const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
-        return err(`${L.inconnue(law)} ${L.dispo} ${all || L.aucune}.`);
-      }
-      const all = await relatedLaws(db, law, rel_type, direction, lang as Lang, env);
-      if (all.length === 0) {
-        return err(
-          `${L.aucuneRel(law)}` +
-            `${rel_type ? L.deType(rel_type) : ""}` +
-            `${direction !== "both" ? L.enDirection(direction) : ""}. ${L.essayez}`,
-        );
-      }
-      const page = paginate(limit, 0, 50, 200);
-      const edges = all.slice(0, page.limit);
-      const lines = edges.map((e) => {
-        const arrow = e.direction === "out" ? "→" : "←";
-        const dispo = e.in_corpus
-          ? e.other_name
-            ? ` — ${e.other_name}`
-            : ""
-          : ` — ${L.horsCorpus}`;
-        const w = e.rel_type === "renvoie-a" ? ` ; ${e.weight} ${L.renvois}` : "";
-        // Les notes curées n'existent QU'EN FRANÇAIS (law_relations n'a pas de colonne
-        // note_en) : sous lang='en' on les rend marquées [fr] plutôt que de laisser croire
-        // à une traduction. Même motif que l'intitulé emprunté de get_division.
-        const note = e.note ? `${e.note}${lang === "en" ? " [fr]" : ""}` : null;
-        return (
-          `  ${arrow} ${e.other_id} [${e.rel_type}, ${e.source}${w}]${dispo}` +
-          `${note ? `\n      ${note}` : ""}`
-        );
-      });
-      const hors = edges.filter((e) => !e.in_corpus).length;
-      const head =
-        `${all.length} ${L.relations} '${law}'` +
-        `${edges.length < all.length ? L.affichees(edges.length) : ""}` +
-        `${hors ? L.dontHors(hors) : ""} :`;
-      return ok(`${head}\n${lines.join("\n")}`, {
-        law,
-        lang,
-        rel_type: rel_type ?? null,
-        direction,
-        total: all.length,
-        count: edges.length,
-        relations: edges.map((e) => ({
-          direction: e.direction,
-          other_id: e.other_id,
-          other_name: e.other_name,
-          rel_type: e.rel_type,
-          source: e.source,
-          weight: e.weight,
-          in_corpus: !!e.in_corpus,
-          note: e.note,
-          // La langue de la note est DANS la charge utile (corollaire structuré de R4) :
-          // un client qui jette la prose garde l'information que la note n'est pas traduite.
-          note_lang: e.note ? "fr" : null,
-        })),
-      });
-    },
+    H_RELATED_LAWS,
   );
 
   // 1d) legislation_find_relevant ----------------------------------------------------
-  server.registerTool(
+  const S_FIND_RELEVANT = {
+    query: z.string().describe("Thème ou description libre du problème, ex. « bail de logement »."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Nombre de candidats (défaut 8, max 50)."),
+    lang: LANG,
+  };
+  const H_FIND_RELEVANT = async ({
+    query,
+    limit,
+    lang: langArg,
+  }: z.infer<z.ZodObject<typeof S_FIND_RELEVANT>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    const tokens = tokenize(query);
+    const page = paginate(limit, 0, 8, 50);
+    if (tokens.length === 0) {
+      return err(
+        `Aucun terme exploitable dans « ${query} ». Reformulez avec des mots porteurs ` +
+          "(ex. « bail de logement », « congédiement »), ou consultez legislation_list_subjects.",
+      );
+    }
+    const data = await loadRelevanceData(db, tokens, lang as Lang, env);
+    const cands = rank({ tokens, ...data }, page.limit);
+    await logSearch(db, {
+      tool: "find_relevant",
+      query,
+      lang,
+      result_count: cands.length,
+    });
+    if (cands.length === 0) {
+      return err(
+        `Aucun rapprochement pour « ${query} » (termes retenus : ${tokens.join(", ")}). ` +
+          "Le corpus est une SÉLECTION FERMÉE de textes du Québec et du fédéral : une absence " +
+          "ici ne dit rien de l'existence d'une règle ailleurs. " +
+          "Voir les domaines avec legislation_list_subjects, ou chercher dans le texte avec legislation_search_text.",
+      );
+    }
+    const lines = cands.map((c, i) => {
+      const cible = c.division_path
+        ? `${c.law_id} › ${c.heading ?? c.division_path} [${c.division_path}]`
+        : `${c.law_id} (loi entière)`;
+      return `${i + 1}. ${cible}  — score ${c.score}\n     pourquoi : ${c.pourquoi.join(" ; ")}`;
+    });
+    return ok(
+      `${cands.length} piste(s) pour « ${query} » (termes : ${tokens.join(", ")}) :\n` +
+        `${lines.join("\n")}\n\n${GARDE_FOU}`,
+      {
+        query,
+        lang,
+        tokens,
+        weights: WEIGHTS,
+        count: cands.length,
+        avertissement: GARDE_FOU,
+        candidates: cands.map((c) => ({
+          law: c.law_id,
+          division_path: c.division_path || null,
+          heading: c.heading,
+          score: c.score,
+          pourquoi: c.pourquoi,
+        })),
+      },
+    );
+  };
+  outils.legislation_find_relevant = H_FIND_RELEVANT as Gestionnaire;
+  server?.registerTool(
     "legislation_find_relevant",
     {
       title: titre("legislation_find_relevant"),
@@ -509,78 +617,62 @@ export function registerTools(server: McpServer, env: Env): void {
         "les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', " +
         "'congédiement', 'bail commercial'. Enchaîner ensuite avec legislation_get_structure / " +
         "legislation_get_division.",
-      inputSchema: {
-        query: z
-          .string()
-          .describe("Thème ou description libre du problème, ex. « bail de logement »."),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(50)
-          .optional()
-          .describe("Nombre de candidats (défaut 8, max 50)."),
-        lang: LANG,
-      },
+      inputSchema: S_FIND_RELEVANT,
       annotations: READONLY,
     },
-    async ({ query, limit, lang: langArg }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      const tokens = tokenize(query);
-      const page = paginate(limit, 0, 8, 50);
-      if (tokens.length === 0) {
-        return err(
-          `Aucun terme exploitable dans « ${query} ». Reformulez avec des mots porteurs ` +
-            "(ex. « bail de logement », « congédiement »), ou consultez legislation_list_subjects.",
-        );
-      }
-      const data = await loadRelevanceData(db, tokens, lang as Lang, env);
-      const cands = rank({ tokens, ...data }, page.limit);
-      await logSearch(db, {
-        tool: "find_relevant",
-        query,
-        lang,
-        result_count: cands.length,
-      });
-      if (cands.length === 0) {
-        return err(
-          `Aucun rapprochement pour « ${query} » (termes retenus : ${tokens.join(", ")}). ` +
-            "Le corpus est une SÉLECTION FERMÉE de textes du Québec et du fédéral : une absence " +
-            "ici ne dit rien de l'existence d'une règle ailleurs. " +
-            "Voir les domaines avec legislation_list_subjects, ou chercher dans le texte avec legislation_search_text.",
-        );
-      }
-      const lines = cands.map((c, i) => {
-        const cible = c.division_path
-          ? `${c.law_id} › ${c.heading ?? c.division_path} [${c.division_path}]`
-          : `${c.law_id} (loi entière)`;
-        return `${i + 1}. ${cible}  — score ${c.score}\n     pourquoi : ${c.pourquoi.join(" ; ")}`;
-      });
-      return ok(
-        `${cands.length} piste(s) pour « ${query} » (termes : ${tokens.join(", ")}) :\n` +
-          `${lines.join("\n")}\n\n${GARDE_FOU}`,
-        {
-          query,
-          lang,
-          tokens,
-          weights: WEIGHTS,
-          count: cands.length,
-          avertissement: GARDE_FOU,
-          candidates: cands.map((c) => ({
-            law: c.law_id,
-            division_path: c.division_path || null,
-            heading: c.heading,
-            score: c.score,
-            pourquoi: c.pourquoi,
-          })),
-        },
-      );
-    },
+    H_FIND_RELEVANT,
   );
 
   // 2) legislation_get_article -------------------------------------------------------
-  server.registerTool(
+  const S_GET_ARTICLE = {
+    law: z
+      .string()
+      .describe(
+        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+          "legislation_find_relevant.",
+      ),
+    article: z.coerce.string().describe("Numéro d'article, ex. '1457', '2926.1', '132.0.1'."),
+    lang: LANG,
+  };
+  const H_GET_ARTICLE = async ({
+    law,
+    article,
+    lang: langArg,
+  }: z.infer<z.ZodObject<typeof S_GET_ARTICLE>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    const lawRow = await getLaw(db, law, env);
+    if (!lawRow) {
+      const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
+      return err(`Loi '${law}' inconnue. Lois disponibles : ${all || "aucune"}.`);
+    }
+    const row = await getArticle(db, law, lang as Lang, article);
+    if (!row) {
+      const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
+      return err(
+        `Article ${article} introuvable dans ${law} (${lang}). ` +
+          `Vérifiez le numéro et la langue. Articles proches : ${near.join(", ") || "aucun"}.`,
+      );
+    }
+    const consol = consolOf(lawRow, lang as Lang);
+    return ok(renderArticle(row, lawRow, consol, lang as Lang), {
+      law,
+      number: row.number,
+      lang,
+      citation: citationOf(lawRow, row.number, lang as Lang),
+      division_path: row.division_path,
+      division: row.d_kind
+        ? { kind: row.d_kind, number: row.d_number, heading: row.d_heading }
+        : null,
+      consolidation: consol,
+      history: row.history,
+      repealed: !!row.repealed,
+      text: row.text,
+    });
+  };
+  outils.legislation_get_article = H_GET_ARTICLE as Gestionnaire;
+  server?.registerTool(
     "legislation_get_article",
     {
       title: titre("legislation_get_article"),
@@ -589,55 +681,112 @@ export function registerTools(server: McpServer, env: Env): void {
         "date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions " +
         "se demandent avec article='préliminaire' ou 'finales'." +
         DEUX_TEMPS,
-      inputSchema: {
-        law: z
-          .string()
-          .describe(
-            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-              "legislation_find_relevant.",
-          ),
-        article: z.coerce.string().describe("Numéro d'article, ex. '1457', '2926.1', '132.0.1'."),
-        lang: LANG,
-      },
+      inputSchema: S_GET_ARTICLE,
       annotations: READONLY,
     },
-    async ({ law, article, lang: langArg }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      const lawRow = await getLaw(db, law, env);
-      if (!lawRow) {
-        const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
-        return err(`Loi '${law}' inconnue. Lois disponibles : ${all || "aucune"}.`);
-      }
-      const row = await getArticle(db, law, lang as Lang, article);
-      if (!row) {
-        const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
-        return err(
-          `Article ${article} introuvable dans ${law} (${lang}). ` +
-            `Vérifiez le numéro et la langue. Articles proches : ${near.join(", ") || "aucun"}.`,
-        );
-      }
-      const consol = consolOf(lawRow, lang as Lang);
-      return ok(renderArticle(row, lawRow, consol, lang as Lang), {
-        law,
-        number: row.number,
-        lang,
-        citation: citationOf(lawRow, row.number, lang as Lang),
-        division_path: row.division_path,
-        division: row.d_kind
-          ? { kind: row.d_kind, number: row.d_number, heading: row.d_heading }
-          : null,
-        consolidation: consol,
-        history: row.history,
-        repealed: !!row.repealed,
-        text: row.text,
-      });
-    },
+    H_GET_ARTICLE,
   );
 
   // 3) legislation_get_articles ------------------------------------------------------
-  server.registerTool(
+  const S_GET_ARTICLES = {
+    law: z
+      .string()
+      .describe(
+        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+          "legislation_find_relevant.",
+      ),
+    from: z.coerce.string().optional().describe("Borne basse d'une plage, ex. '1457'."),
+    to: z.coerce.string().optional().describe("Borne haute d'une plage, ex. '1460'."),
+    numbers: z
+      .array(z.coerce.string())
+      .optional()
+      .describe("Liste de numéros, ex. ['1457','1590']."),
+    lang: LANG,
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Max d'articles (défaut 50, max 200)."),
+    offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
+  };
+  const H_GET_ARTICLES = async ({
+    law,
+    from,
+    to,
+    numbers,
+    lang: langArg,
+    limit,
+    offset,
+  }: z.infer<z.ZodObject<typeof S_GET_ARTICLES>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const useRange = from != null && to != null;
+    if (!useRange && !numbers?.length) {
+      return err("Fournir soit (from ET to), soit numbers[].");
+    }
+    // LES DEUX MODES ENSEMBLE : on REFUSE au lieu de servir la moitié de la demande.
+    // Mesuré en production le 2026-09-17 : { from:'1457', to:'1459', numbers:['1590'] }
+    // rendait 1457-1459 et jetait le 1590 SANS RIEN DIRE — le mode plage gagnait en
+    // silence. « Les art. 1457 à 1460, plus 1590 » est pourtant l'assemblage le plus
+    // naturel qu'un modèle produise, et la réponse avait l'air complète.
+    if (useRange && numbers?.length) {
+      return err(
+        "Modes INCOMPATIBLES : (from, to) et numbers[] ont été fournis ensemble. Ce serveur " +
+          "refuse plutôt que d'en servir un et d'abandonner l'autre en silence. " +
+          "Faire DEUX appels : un pour la plage, un pour la liste.",
+      );
+    }
+    const page = paginate(limit, offset);
+    let rows: Partial<ArticleRow>[];
+    let total: number;
+    let resolution: "document" | "cle" | null = null;
+    if (useRange) {
+      // bornes LUES en base (insensible à l'échelle de sort_key) — cf. boundRef
+      const [b1, b2] = await Promise.all([
+        boundRef(db, law, lang as Lang, from!),
+        boundRef(db, law, lang as Lang, to!),
+      ]);
+      const r = await articlesByRange(db, law, lang as Lang, b1, b2, page);
+      rows = r.rows;
+      total = r.total;
+      resolution = r.resolution;
+    } else {
+      rows = await articlesByNumbers(db, law, lang as Lang, numbers!);
+      total = rows.length;
+    }
+    if (rows.length === 0) return err("Aucun article dans cette plage/liste.");
+    const body = rows
+      .map((a) => `— art. ${a.number}${a.repealed ? " (abrogé)" : ""} —\n${a.text}`)
+      .join("\n\n");
+    return ok(body, {
+      law,
+      lang,
+      count: rows.length,
+      total,
+      pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
+      // Comment la plage a été bornée. Champ TOUJOURS présent (null hors mode plage) :
+      // « absent » et « borné par le texte » ne doivent pas être confondus.
+      //   'document' — étendue exacte, de la première borne à la seconde, dans l'ordre
+      //                du texte officiel ;
+      //   'cle'      — au moins une borne est ouverte ou désigne un pseudo-article : la
+      //                plage est bornée par la clé de tri, qui n'est pas un ordre total
+      //                et peut donc sur-inclure.
+      range_resolution: resolution,
+      articles: rows.map((a) => ({
+        number: a.number,
+        text: a.text,
+        history: a.history,
+        division_path: a.division_path,
+        repealed: !!a.repealed,
+      })),
+    });
+  };
+  outils.legislation_get_articles = H_GET_ARTICLES as Gestionnaire;
+  server?.registerTool(
     "legislation_get_articles",
     {
       title: titre("legislation_get_articles"),
@@ -645,101 +794,56 @@ export function registerTools(server: McpServer, env: Env): void {
         "Retourne plusieurs articles : soit une plage (from..to), soit une liste explicite (numbers). " +
         "Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']." +
         DEUX_TEMPS,
-      inputSchema: {
-        law: z
-          .string()
-          .describe(
-            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-              "legislation_find_relevant.",
-          ),
-        from: z.coerce.string().optional().describe("Borne basse d'une plage, ex. '1457'."),
-        to: z.coerce.string().optional().describe("Borne haute d'une plage, ex. '1460'."),
-        numbers: z
-          .array(z.coerce.string())
-          .optional()
-          .describe("Liste de numéros, ex. ['1457','1590']."),
-        lang: LANG,
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(200)
-          .optional()
-          .describe("Max d'articles (défaut 50, max 200)."),
-        offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
-      },
+      inputSchema: S_GET_ARTICLES,
       annotations: READONLY,
     },
-    async ({ law, from, to, numbers, lang: langArg, limit, offset }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
-      const useRange = from != null && to != null;
-      if (!useRange && !numbers?.length) {
-        return err("Fournir soit (from ET to), soit numbers[].");
-      }
-      // LES DEUX MODES ENSEMBLE : on REFUSE au lieu de servir la moitié de la demande.
-      // Mesuré en production le 2026-09-17 : { from:'1457', to:'1459', numbers:['1590'] }
-      // rendait 1457-1459 et jetait le 1590 SANS RIEN DIRE — le mode plage gagnait en
-      // silence. « Les art. 1457 à 1460, plus 1590 » est pourtant l'assemblage le plus
-      // naturel qu'un modèle produise, et la réponse avait l'air complète.
-      if (useRange && numbers?.length) {
-        return err(
-          "Modes INCOMPATIBLES : (from, to) et numbers[] ont été fournis ensemble. Ce serveur " +
-            "refuse plutôt que d'en servir un et d'abandonner l'autre en silence. " +
-            "Faire DEUX appels : un pour la plage, un pour la liste.",
-        );
-      }
-      const page = paginate(limit, offset);
-      let rows: Partial<ArticleRow>[];
-      let total: number;
-      let resolution: "document" | "cle" | null = null;
-      if (useRange) {
-        // bornes LUES en base (insensible à l'échelle de sort_key) — cf. boundRef
-        const [b1, b2] = await Promise.all([
-          boundRef(db, law, lang as Lang, from!),
-          boundRef(db, law, lang as Lang, to!),
-        ]);
-        const r = await articlesByRange(db, law, lang as Lang, b1, b2, page);
-        rows = r.rows;
-        total = r.total;
-        resolution = r.resolution;
-      } else {
-        rows = await articlesByNumbers(db, law, lang as Lang, numbers!);
-        total = rows.length;
-      }
-      if (rows.length === 0) return err("Aucun article dans cette plage/liste.");
-      const body = rows
-        .map((a) => `— art. ${a.number}${a.repealed ? " (abrogé)" : ""} —\n${a.text}`)
-        .join("\n\n");
-      return ok(body, {
-        law,
-        lang,
-        count: rows.length,
-        total,
-        pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
-        // Comment la plage a été bornée. Champ TOUJOURS présent (null hors mode plage) :
-        // « absent » et « borné par le texte » ne doivent pas être confondus.
-        //   'document' — étendue exacte, de la première borne à la seconde, dans l'ordre
-        //                du texte officiel ;
-        //   'cle'      — au moins une borne est ouverte ou désigne un pseudo-article : la
-        //                plage est bornée par la clé de tri, qui n'est pas un ordre total
-        //                et peut donc sur-inclure.
-        range_resolution: resolution,
-        articles: rows.map((a) => ({
-          number: a.number,
-          text: a.text,
-          history: a.history,
-          division_path: a.division_path,
-          repealed: !!a.repealed,
-        })),
-      });
-    },
+    H_GET_ARTICLES,
   );
 
   // 4) legislation_get_structure -----------------------------------------------------
-  server.registerTool(
+  const S_GET_STRUCTURE = {
+    law: z
+      .string()
+      .describe(
+        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+          "legislation_find_relevant.",
+      ),
+    lang: LANG,
+    root_path: z.string().optional().describe("Restreindre à ce sous-arbre (path d'une division)."),
+    depth: z.number().int().min(1).max(9).optional().describe("Profondeur affichée (défaut 2)."),
+  };
+  const H_GET_STRUCTURE = async ({
+    law,
+    lang: langArg,
+    root_path,
+    depth,
+  }: z.infer<z.ZodObject<typeof S_GET_STRUCTURE>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const d = depth ?? 2;
+    let tree = await getStructure(db, law, lang as Lang, root_path, d);
+    if (tree.length === 0 && root_path) {
+      // 1.5 : les chemins Irosoft sont propres à la langue — un chemin venu de l'autre
+      // langue est traduit par le pont des numéros d'articles, au lieu d'échouer.
+      const t = await translateDivisionPath(db, law, root_path, lang as Lang);
+      if (t) tree = await getStructure(db, law, lang as Lang, t.path, d);
+    }
+    if (tree.length === 0) return err(`Aucune division${root_path ? ` sous '${root_path}'` : ""}.`);
+    const render = (nodes: StructureNode[], level: number): string =>
+      nodes
+        .map(
+          (n) =>
+            `${"  ".repeat(level)}${divisionLabel(n.kind, n.number, n.heading, lang as Lang)}` +
+            `${n.repealed ? " (abrogé)" : ""}  [${n.path}]` +
+            (n.children.length ? `\n${render(n.children, level + 1)}` : ""),
+        )
+        .join("\n");
+    return ok(render(tree, 0), { law, lang, root_path: root_path ?? null, depth: d, tree });
+  };
+  outils.legislation_get_structure = H_GET_STRUCTURE as Gestionnaire;
+  server?.registerTool(
     "legislation_get_structure",
     {
       title: titre("legislation_get_structure"),
@@ -749,58 +853,122 @@ export function registerTools(server: McpServer, env: Env): void {
         "heading et son 'path' (à passer à legislation_get_division). Utiliser root_path pour un sous-arbre " +
         "et depth pour limiter la profondeur (défaut 2 : livres et titres)." +
         DEUX_TEMPS,
-      inputSchema: {
-        law: z
-          .string()
-          .describe(
-            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-              "legislation_find_relevant.",
-          ),
-        lang: LANG,
-        root_path: z
-          .string()
-          .optional()
-          .describe("Restreindre à ce sous-arbre (path d'une division)."),
-        depth: z
-          .number()
-          .int()
-          .min(1)
-          .max(9)
-          .optional()
-          .describe("Profondeur affichée (défaut 2)."),
-      },
+      inputSchema: S_GET_STRUCTURE,
       annotations: READONLY,
     },
-    async ({ law, lang: langArg, root_path, depth }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
-      const d = depth ?? 2;
-      let tree = await getStructure(db, law, lang as Lang, root_path, d);
-      if (tree.length === 0 && root_path) {
-        // 1.5 : les chemins Irosoft sont propres à la langue — un chemin venu de l'autre
-        // langue est traduit par le pont des numéros d'articles, au lieu d'échouer.
-        const t = await translateDivisionPath(db, law, root_path, lang as Lang);
-        if (t) tree = await getStructure(db, law, lang as Lang, t.path, d);
-      }
-      if (tree.length === 0)
-        return err(`Aucune division${root_path ? ` sous '${root_path}'` : ""}.`);
-      const render = (nodes: StructureNode[], level: number): string =>
-        nodes
-          .map(
-            (n) =>
-              `${"  ".repeat(level)}${divisionLabel(n.kind, n.number, n.heading, lang as Lang)}` +
-              `${n.repealed ? " (abrogé)" : ""}  [${n.path}]` +
-              (n.children.length ? `\n${render(n.children, level + 1)}` : ""),
-          )
-          .join("\n");
-      return ok(render(tree, 0), { law, lang, root_path: root_path ?? null, depth: d, tree });
-    },
+    H_GET_STRUCTURE,
   );
 
   // 5) legislation_get_division ------------------------------------------------------
-  server.registerTool(
+  const S_GET_DIVISION = {
+    law: z
+      .string()
+      .describe(
+        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
+          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
+          "legislation_find_relevant.",
+      ),
+    path: z
+      .string()
+      .optional()
+      .describe("Chemin de la division (ex. 'ga:l_cinquieme-gb:l_premier')."),
+    division_id: z.number().int().optional().describe("Identifiant numérique de la division."),
+    lang: LANG,
+    include_text: z
+      .boolean()
+      .default(true)
+      .describe("Inclure le texte des articles (défaut true)."),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Max d'articles (défaut 50, max 200)."),
+    offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
+  };
+  const H_GET_DIVISION = async ({
+    law,
+    path,
+    division_id,
+    lang: langArg,
+    include_text: includeTextArg,
+    limit,
+    offset,
+  }: z.infer<z.ZodObject<typeof S_GET_DIVISION>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    const include_text = includeTextArg ?? true;
+    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    if (path == null && division_id == null) return err("Fournir path ou division_id.");
+    let div = await getDivision(db, law, lang as Lang, { path, id: division_id });
+    if (!div && path) {
+      // 1.5 : chemin de l'autre langue -> pont par numéros d'articles.
+      const t = await translateDivisionPath(db, law, path, lang as Lang);
+      if (t) div = await getDivision(db, law, lang as Lang, { path: t.path });
+    }
+    if (!div) return err(`Division introuvable (${path ?? division_id}).`);
+    // repli d'intitulé : si la division n'en a pas dans la langue demandée, montrer
+    // celui de l'autre langue, marqué (plan v2, 1.5).
+    let headingShown = div.heading;
+    if (!headingShown) {
+      const other = await headingInOtherLang(db, law, div.path, lang as Lang);
+      if (other) headingShown = `${other} [${lang === "fr" ? "en" : "fr"}]`;
+    }
+    const kids = await childDivisions(db, div.id);
+    const page = paginate(limit, offset);
+    const { rows, total } = await articlesInDivision(
+      db,
+      law,
+      lang as Lang,
+      div.path,
+      page,
+      include_text,
+    );
+    const header = `${divisionLabel(div.kind, div.number, headingShown, lang as Lang)}${div.repealed ? " (abrogé)" : ""} [${div.path}]`;
+    const subs = kids.length
+      ? `\n\nSous-divisions :\n` +
+        kids
+          .map((k) => `  • ${divisionLabel(k.kind, k.number, k.heading, lang as Lang)} [${k.path}]`)
+          .join("\n")
+      : "";
+    const arts = rows.length
+      ? `\n\nArticles (${page.offset + 1}–${page.offset + rows.length} / ${total}) :\n` +
+        rows
+          .map((a) => (include_text ? `\n— art. ${a.number} —\n${a.text}` : `art. ${a.number}`))
+          .join(include_text ? "\n" : ", ")
+      : "\n\n(aucun article)";
+    return ok(`${header}${subs}${arts}`, {
+      law,
+      lang,
+      division: {
+        division_id: div.id,
+        path: div.path,
+        kind: div.kind,
+        number: div.number,
+        heading: div.heading,
+        history: div.history,
+        repealed: !!div.repealed,
+      },
+      children: kids.map((k) => ({
+        division_id: k.id,
+        path: k.path,
+        kind: k.kind,
+        number: k.number,
+        heading: k.heading,
+        repealed: !!k.repealed,
+      })),
+      articles: rows.map((a) => ({
+        number: a.number,
+        division_path: a.division_path,
+        repealed: !!a.repealed,
+        ...(include_text ? { text: a.text, history: a.history } : {}),
+      })),
+      pagination: { limit: page.limit, offset: page.offset, total },
+    });
+  };
+  outils.legislation_get_division = H_GET_DIVISION as Gestionnaire;
+  server?.registerTool(
     "legislation_get_division",
     {
       title: titre("legislation_get_division"),
@@ -810,121 +978,207 @@ export function registerTools(server: McpServer, env: Env): void {
         "path (recommandé, via legislation_get_structure) ou division_id. include_text=false pour n'avoir " +
         "que les numéros d'articles." +
         DEUX_TEMPS,
-      inputSchema: {
-        law: z
-          .string()
-          .describe(
-            "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-              "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-              "legislation_find_relevant.",
-          ),
-        path: z
-          .string()
-          .optional()
-          .describe("Chemin de la division (ex. 'ga:l_cinquieme-gb:l_premier')."),
-        division_id: z.number().int().optional().describe("Identifiant numérique de la division."),
-        lang: LANG,
-        include_text: z
-          .boolean()
-          .default(true)
-          .describe("Inclure le texte des articles (défaut true)."),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(200)
-          .optional()
-          .describe("Max d'articles (défaut 50, max 200)."),
-        offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
-      },
+      inputSchema: S_GET_DIVISION,
       annotations: READONLY,
     },
-    async ({
-      law,
-      path,
-      division_id,
-      lang: langArg,
-      include_text: includeTextArg,
-      limit,
-      offset,
-    }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      const include_text = includeTextArg ?? true;
-      if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
-      if (path == null && division_id == null) return err("Fournir path ou division_id.");
-      let div = await getDivision(db, law, lang as Lang, { path, id: division_id });
-      if (!div && path) {
-        // 1.5 : chemin de l'autre langue -> pont par numéros d'articles.
-        const t = await translateDivisionPath(db, law, path, lang as Lang);
-        if (t) div = await getDivision(db, law, lang as Lang, { path: t.path });
-      }
-      if (!div) return err(`Division introuvable (${path ?? division_id}).`);
-      // repli d'intitulé : si la division n'en a pas dans la langue demandée, montrer
-      // celui de l'autre langue, marqué (plan v2, 1.5).
-      let headingShown = div.heading;
-      if (!headingShown) {
-        const other = await headingInOtherLang(db, law, div.path, lang as Lang);
-        if (other) headingShown = `${other} [${lang === "fr" ? "en" : "fr"}]`;
-      }
-      const kids = await childDivisions(db, div.id);
-      const page = paginate(limit, offset);
-      const { rows, total } = await articlesInDivision(
-        db,
-        law,
-        lang as Lang,
-        div.path,
-        page,
-        include_text,
-      );
-      const header = `${divisionLabel(div.kind, div.number, headingShown, lang as Lang)}${div.repealed ? " (abrogé)" : ""} [${div.path}]`;
-      const subs = kids.length
-        ? `\n\nSous-divisions :\n` +
-          kids
-            .map(
-              (k) => `  • ${divisionLabel(k.kind, k.number, k.heading, lang as Lang)} [${k.path}]`,
-            )
-            .join("\n")
-        : "";
-      const arts = rows.length
-        ? `\n\nArticles (${page.offset + 1}–${page.offset + rows.length} / ${total}) :\n` +
-          rows
-            .map((a) => (include_text ? `\n— art. ${a.number} —\n${a.text}` : `art. ${a.number}`))
-            .join(include_text ? "\n" : ", ")
-        : "\n\n(aucun article)";
-      return ok(`${header}${subs}${arts}`, {
-        law,
-        lang,
-        division: {
-          division_id: div.id,
-          path: div.path,
-          kind: div.kind,
-          number: div.number,
-          heading: div.heading,
-          history: div.history,
-          repealed: !!div.repealed,
-        },
-        children: kids.map((k) => ({
-          division_id: k.id,
-          path: k.path,
-          kind: k.kind,
-          number: k.number,
-          heading: k.heading,
-          repealed: !!k.repealed,
-        })),
-        articles: rows.map((a) => ({
-          number: a.number,
-          division_path: a.division_path,
-          repealed: !!a.repealed,
-          ...(include_text ? { text: a.text, history: a.history } : {}),
-        })),
-        pagination: { limit: page.limit, offset: page.offset, total },
-      });
-    },
+    H_GET_DIVISION,
   );
 
   // 6) legislation_search_text -------------------------------------------------------
-  server.registerTool(
+  const S_SEARCH_TEXT = {
+    query: z.string().describe("Termes à rechercher, ex. 'responsabilité préjudice'."),
+    law: z
+      .string()
+      .optional()
+      .describe(
+        "Restreindre à une loi par son identifiant court de corpus (ex. 'ccq') ; " +
+          "défaut : tout le corpus.",
+      ),
+    lang: LANG,
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Max de résultats (défaut 10, max 50)."),
+    offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
+  };
+  const H_SEARCH_TEXT = async ({
+    query,
+    law,
+    lang: langArg,
+    limit,
+    offset,
+  }: z.infer<z.ZodObject<typeof S_SEARCH_TEXT>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    if (law && !(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    // Recherche corpus : viser 12-15 résultats (1.3) ; restreinte : 10 comme avant.
+    const page = paginate(limit, offset, law ? 10 : 14, 50);
+    let res;
+    try {
+      // Recherche corpus : sur-échantillonner (3×) pour pouvoir plafonner à 6 résultats
+      // par loi sans se retrouver avec la seule loi dominante au classement bm25.
+      const fetchPage = law ? page : { limit: Math.min(45, page.limit * 3), offset: page.offset };
+      // RELAX_SEARCH / HYBRID_SEARCH (R8) : chemins débrayables sans redéploiement
+      const flags = env as unknown as { RELAX_SEARCH?: string; HYBRID_SEARCH?: string };
+      res = await searchText(db, query, lang as Lang, law, fetchPage, {
+        relax: flags.RELAX_SEARCH !== "0",
+        vector: flags.HYBRID_SEARCH === "1" ? { ai: env.AI, index: env.VECTORS } : undefined,
+        // FEDERAL_CORPUS : sans ce passage, la recherche plein texte servait des
+        // résultats fédéraux pendant que `list_laws` annonçait 79 lois — mesuré.
+        env,
+      });
+      if (!law) {
+        const perLaw = new Map<string, number>();
+        const picked: typeof res.hits = [];
+        for (const h of res.hits) {
+          const n = perLaw.get(h.law_id) ?? 0;
+          if (n >= 6) continue;
+          perLaw.set(h.law_id, n + 1);
+          picked.push(h);
+          if (picked.length >= page.limit) break;
+        }
+        res = { ...res, hits: picked };
+      }
+    } catch {
+      await logSearch(db, { tool: "search_text", query, law, lang, result_count: 0 });
+      // L'exception n'est PAS liée, et c'est le correctif : on renvoyait `e.message`, qui
+      // vient de SQLite/FTS5 et publiait au premier venu la syntaxe du moteur
+      // (« fts5: syntax error near … »). Sans intérêt pour l'appelant, et c'est de
+      // l'intérieur donné à voir une fois l'endpoint public. L'échec reste journalisé.
+      return err(
+        "Recherche invalide : la requête contient des caractères que le moteur de recherche " +
+          "réserve (guillemets, parenthèses, astérisque, NEAR/AND/OR). Réessayer avec des " +
+          "mots simples séparés par des espaces.",
+      );
+    }
+    const fallbackLog =
+      res.fallback === null
+        ? null
+        : typeof res.fallback === "object"
+          ? `loo:${res.fallback.loo}`
+          : res.fallback;
+    await logSearch(db, {
+      tool: "search_text",
+      query,
+      law,
+      lang,
+      result_count: res.hits.length,
+      fallback: fallbackLog,
+    });
+    // « Aucun résultat » DOIT dire dans quoi on a cherché. Sans ça, un modèle public lit
+    // l'absence comme « aucune règle n'existe » et la relaie comme une réponse — une absence
+    // présentée comme un fait. Deux causes dominent et se disent en une phrase : le corpus
+    // est une sélection fermée, et l'appariement est LEXICAL (aucun stemming français,
+    // mesuré : « congédiement » n'attrape pas « congédier »).
+    if (res.hits.length === 0)
+      return err(
+        `Aucun résultat pour « ${query} » (${lang}). Cela ne signifie pas qu'aucune règle ` +
+          "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
+          "LEXICAL (pas de familles de mots — « congédiement » ne trouve pas « congédier »). " +
+          "Essayer d'autres mots exacts du texte, ou legislation_find_relevant pour partir du " +
+          "problème plutôt que des mots.",
+      );
+
+    // 1.3 : fils d'Ariane (résultats auto-explicatifs) + regroupement par loi.
+    const semDivRefs = (res.divisions ?? []).map((d) => ({
+      law_id: d.law_id,
+      division_path: d.path,
+    }));
+    const allRefs = [...res.hits, ...(res.elsewhere?.hits ?? []), ...semDivRefs];
+    const chains = await breadcrumbChains(db, lang as Lang, allRefs);
+    const names = await lawNames(db, [...new Set(allRefs.map((h) => h.law_id))]);
+    const ABBREV: Record<string, string> = { ccq: "C.c.Q.", cpc: "C.p.c." };
+    const crumbOf = (h: { law_id: string; division_path: string }): string => {
+      const chain = chains.get(`${h.law_id}|${h.division_path}`) ?? [];
+      // seuls les nœuds AVEC ordinal portent un repère utile (« Livre V, Titre IV ») ;
+      // les autres produiraient des « Livre, Titre, » vides.
+      const kinds = chain
+        .filter((n) => n.number)
+        .map((n) => `${(KIND_LABEL[lang as Lang] ?? KIND_LABEL.fr)[n.kind] ?? n.kind} ${n.number}`)
+        .join(", ");
+      const titled = [...chain].reverse().find((n) => n.heading);
+      if (!kinds) return titled?.heading ?? "";
+      return `${kinds}${titled ? ` : ${titled.heading}` : ""}`;
+    };
+    const line = (h: (typeof res.hits)[number]) => {
+      const crumb = crumbOf(h);
+      return (
+        `${ABBREV[h.law_id] ?? h.law_id}${crumb ? ` — ${crumb}` : ""} › art. ${h.number}` +
+        `${h.semantic ? " (repérage sémantique)" : ""}  [${h.division_path}]\n` +
+        `   « ${h.snippet} »`
+      );
+    };
+    // corps : groupé par loi dès que les résultats en couvrent plusieurs (max 6 par loi)
+    const lawsInHits = [...new Set(res.hits.map((h) => h.law_id))];
+    let body: string;
+    if (lawsInHits.length > 1) {
+      const byLaw = new Map<string, typeof res.hits>();
+      for (const h of res.hits) {
+        const arr = byLaw.get(h.law_id);
+        if (arr) arr.push(h);
+        else byLaw.set(h.law_id, [h]);
+      }
+      body = [...byLaw.entries()]
+        .map(([id, hs]) => {
+          const nm = names.get(id);
+          const title = nm ? (lang === "en" ? nm.name_en : nm.name_fr) : id;
+          const shown = hs.slice(0, 6);
+          return (
+            `— ${title} (${shown.length}${hs.length > shown.length ? ` / ${hs.length}` : ""} affiché(s)) —\n` +
+            shown.map(line).join("\n")
+          );
+        })
+        .join("\n\n");
+    } else {
+      body = res.hits.map(line).join("\n");
+    }
+    // En-tête étiqueté selon le chemin qui a produit les résultats (R7 : fail open, dit)
+    const nTerms = query.trim().split(/\s+/).length;
+    const header =
+      res.fallback === "widened"
+        ? `Aucun résultat dans ${law} ; ${res.total} résultat(s) ailleurs dans le corpus :`
+        : res.fallback !== null && typeof res.fallback === "object"
+          ? `Correspondance exacte introuvable ; résultats approchés (terme ignoré : « ${res.fallback.loo} ») :`
+          : res.fallback === "or_relax"
+            ? `Résultats partiels (au moins un terme sur ${nTerms}) :`
+            : res.fallback === "semantic"
+              ? "Aucune correspondance lexicale ; repérage sémantique :"
+              : `${res.total} résultat(s) pour « ${query} » :`;
+    // Recherche restreinte avec résultats : signaler ce que la restriction cache (post-mortem)
+    const elsewhere = res.elsewhere
+      ? `\n\nAilleurs au corpus (${res.elsewhere.total} résultat(s) hors ${law}) — aperçu :\n` +
+        res.elsewhere.hits.map(line).join("\n") +
+        "\nRelancer sans `law` pour la vue complète."
+      : "";
+    const structures = res.divisions?.length
+      ? "\n\nStructures pertinentes (repérage sémantique) :\n" +
+        res.divisions
+          .map((d) => {
+            const crumb = crumbOf({ law_id: d.law_id, division_path: d.path });
+            return `  • ${ABBREV[d.law_id] ?? d.law_id} — ${crumb || d.heading || d.path}  [${d.path}]`;
+          })
+          .join("\n")
+      : "";
+    const enrich = (h: (typeof res.hits)[number]) => ({ ...h, breadcrumb: crumbOf(h) });
+    return ok(`${header}\n${body}${structures}${elsewhere}`, {
+      query,
+      lang,
+      law: law ?? null,
+      total: res.total,
+      fallback: fallbackLog,
+      elsewhere: res.elsewhere
+        ? { total: res.elsewhere.total, results: res.elsewhere.hits.map(enrich) }
+        : null,
+      divisions_semantiques: res.divisions ?? [],
+      pagination: { limit: page.limit, offset: page.offset },
+      results: res.hits.map(enrich),
+    });
+  };
+  outils.legislation_search_text = H_SEARCH_TEXT as Gestionnaire;
+  server?.registerTool(
     "legislation_search_text",
     {
       title: titre("legislation_search_text"),
@@ -936,200 +1190,79 @@ export function registerTools(server: McpServer, env: Env): void {
         // +1 phrase (plan v2, 1.1 — delta consigné au rapport de phase)
         " Omettre `law` sauf raison précise de restreindre ; une recherche restreinte sans " +
         "résultat est automatiquement élargie au corpus.",
-      inputSchema: {
-        query: z.string().describe("Termes à rechercher, ex. 'responsabilité préjudice'."),
-        law: z
-          .string()
-          .optional()
-          .describe(
-            "Restreindre à une loi par son identifiant court de corpus (ex. 'ccq') ; " +
-              "défaut : tout le corpus.",
-          ),
-        lang: LANG,
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(50)
-          .optional()
-          .describe("Max de résultats (défaut 10, max 50)."),
-        offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
-      },
+      inputSchema: S_SEARCH_TEXT,
       annotations: READONLY,
     },
-    async ({ query, law, lang: langArg, limit, offset }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      if (law && !(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
-      // Recherche corpus : viser 12-15 résultats (1.3) ; restreinte : 10 comme avant.
-      const page = paginate(limit, offset, law ? 10 : 14, 50);
-      let res;
-      try {
-        // Recherche corpus : sur-échantillonner (3×) pour pouvoir plafonner à 6 résultats
-        // par loi sans se retrouver avec la seule loi dominante au classement bm25.
-        const fetchPage = law ? page : { limit: Math.min(45, page.limit * 3), offset: page.offset };
-        // RELAX_SEARCH / HYBRID_SEARCH (R8) : chemins débrayables sans redéploiement
-        const flags = env as unknown as { RELAX_SEARCH?: string; HYBRID_SEARCH?: string };
-        res = await searchText(db, query, lang as Lang, law, fetchPage, {
-          relax: flags.RELAX_SEARCH !== "0",
-          vector: flags.HYBRID_SEARCH === "1" ? { ai: env.AI, index: env.VECTORS } : undefined,
-          // FEDERAL_CORPUS : sans ce passage, la recherche plein texte servait des
-          // résultats fédéraux pendant que `list_laws` annonçait 79 lois — mesuré.
-          env,
-        });
-        if (!law) {
-          const perLaw = new Map<string, number>();
-          const picked: typeof res.hits = [];
-          for (const h of res.hits) {
-            const n = perLaw.get(h.law_id) ?? 0;
-            if (n >= 6) continue;
-            perLaw.set(h.law_id, n + 1);
-            picked.push(h);
-            if (picked.length >= page.limit) break;
-          }
-          res = { ...res, hits: picked };
-        }
-      } catch {
-        await logSearch(db, { tool: "search_text", query, law, lang, result_count: 0 });
-        // L'exception n'est PAS liée, et c'est le correctif : on renvoyait `e.message`, qui
-        // vient de SQLite/FTS5 et publiait au premier venu la syntaxe du moteur
-        // (« fts5: syntax error near … »). Sans intérêt pour l'appelant, et c'est de
-        // l'intérieur donné à voir une fois l'endpoint public. L'échec reste journalisé.
-        return err(
-          "Recherche invalide : la requête contient des caractères que le moteur de recherche " +
-            "réserve (guillemets, parenthèses, astérisque, NEAR/AND/OR). Réessayer avec des " +
-            "mots simples séparés par des espaces.",
-        );
-      }
-      const fallbackLog =
-        res.fallback === null
-          ? null
-          : typeof res.fallback === "object"
-            ? `loo:${res.fallback.loo}`
-            : res.fallback;
-      await logSearch(db, {
-        tool: "search_text",
-        query,
-        law,
-        lang,
-        result_count: res.hits.length,
-        fallback: fallbackLog,
-      });
-      // « Aucun résultat » DOIT dire dans quoi on a cherché. Sans ça, un modèle public lit
-      // l'absence comme « aucune règle n'existe » et la relaie comme une réponse — une absence
-      // présentée comme un fait. Deux causes dominent et se disent en une phrase : le corpus
-      // est une sélection fermée, et l'appariement est LEXICAL (aucun stemming français,
-      // mesuré : « congédiement » n'attrape pas « congédier »).
-      if (res.hits.length === 0)
-        return err(
-          `Aucun résultat pour « ${query} » (${lang}). Cela ne signifie pas qu'aucune règle ` +
-            "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
-            "LEXICAL (pas de familles de mots — « congédiement » ne trouve pas « congédier »). " +
-            "Essayer d'autres mots exacts du texte, ou legislation_find_relevant pour partir du " +
-            "problème plutôt que des mots.",
-        );
-
-      // 1.3 : fils d'Ariane (résultats auto-explicatifs) + regroupement par loi.
-      const semDivRefs = (res.divisions ?? []).map((d) => ({
-        law_id: d.law_id,
-        division_path: d.path,
-      }));
-      const allRefs = [...res.hits, ...(res.elsewhere?.hits ?? []), ...semDivRefs];
-      const chains = await breadcrumbChains(db, lang as Lang, allRefs);
-      const names = await lawNames(db, [...new Set(allRefs.map((h) => h.law_id))]);
-      const ABBREV: Record<string, string> = { ccq: "C.c.Q.", cpc: "C.p.c." };
-      const crumbOf = (h: { law_id: string; division_path: string }): string => {
-        const chain = chains.get(`${h.law_id}|${h.division_path}`) ?? [];
-        // seuls les nœuds AVEC ordinal portent un repère utile (« Livre V, Titre IV ») ;
-        // les autres produiraient des « Livre, Titre, » vides.
-        const kinds = chain
-          .filter((n) => n.number)
-          .map(
-            (n) => `${(KIND_LABEL[lang as Lang] ?? KIND_LABEL.fr)[n.kind] ?? n.kind} ${n.number}`,
-          )
-          .join(", ");
-        const titled = [...chain].reverse().find((n) => n.heading);
-        if (!kinds) return titled?.heading ?? "";
-        return `${kinds}${titled ? ` : ${titled.heading}` : ""}`;
-      };
-      const line = (h: (typeof res.hits)[number]) => {
-        const crumb = crumbOf(h);
-        return (
-          `${ABBREV[h.law_id] ?? h.law_id}${crumb ? ` — ${crumb}` : ""} › art. ${h.number}` +
-          `${h.semantic ? " (repérage sémantique)" : ""}  [${h.division_path}]\n` +
-          `   « ${h.snippet} »`
-        );
-      };
-      // corps : groupé par loi dès que les résultats en couvrent plusieurs (max 6 par loi)
-      const lawsInHits = [...new Set(res.hits.map((h) => h.law_id))];
-      let body: string;
-      if (lawsInHits.length > 1) {
-        const byLaw = new Map<string, typeof res.hits>();
-        for (const h of res.hits) {
-          const arr = byLaw.get(h.law_id);
-          if (arr) arr.push(h);
-          else byLaw.set(h.law_id, [h]);
-        }
-        body = [...byLaw.entries()]
-          .map(([id, hs]) => {
-            const nm = names.get(id);
-            const title = nm ? (lang === "en" ? nm.name_en : nm.name_fr) : id;
-            const shown = hs.slice(0, 6);
-            return (
-              `— ${title} (${shown.length}${hs.length > shown.length ? ` / ${hs.length}` : ""} affiché(s)) —\n` +
-              shown.map(line).join("\n")
-            );
-          })
-          .join("\n\n");
-      } else {
-        body = res.hits.map(line).join("\n");
-      }
-      // En-tête étiqueté selon le chemin qui a produit les résultats (R7 : fail open, dit)
-      const nTerms = query.trim().split(/\s+/).length;
-      const header =
-        res.fallback === "widened"
-          ? `Aucun résultat dans ${law} ; ${res.total} résultat(s) ailleurs dans le corpus :`
-          : res.fallback !== null && typeof res.fallback === "object"
-            ? `Correspondance exacte introuvable ; résultats approchés (terme ignoré : « ${res.fallback.loo} ») :`
-            : res.fallback === "or_relax"
-              ? `Résultats partiels (au moins un terme sur ${nTerms}) :`
-              : res.fallback === "semantic"
-                ? "Aucune correspondance lexicale ; repérage sémantique :"
-                : `${res.total} résultat(s) pour « ${query} » :`;
-      // Recherche restreinte avec résultats : signaler ce que la restriction cache (post-mortem)
-      const elsewhere = res.elsewhere
-        ? `\n\nAilleurs au corpus (${res.elsewhere.total} résultat(s) hors ${law}) — aperçu :\n` +
-          res.elsewhere.hits.map(line).join("\n") +
-          "\nRelancer sans `law` pour la vue complète."
-        : "";
-      const structures = res.divisions?.length
-        ? "\n\nStructures pertinentes (repérage sémantique) :\n" +
-          res.divisions
-            .map((d) => {
-              const crumb = crumbOf({ law_id: d.law_id, division_path: d.path });
-              return `  • ${ABBREV[d.law_id] ?? d.law_id} — ${crumb || d.heading || d.path}  [${d.path}]`;
-            })
-            .join("\n")
-        : "";
-      const enrich = (h: (typeof res.hits)[number]) => ({ ...h, breadcrumb: crumbOf(h) });
-      return ok(`${header}\n${body}${structures}${elsewhere}`, {
-        query,
-        lang,
-        law: law ?? null,
-        total: res.total,
-        fallback: fallbackLog,
-        elsewhere: res.elsewhere
-          ? { total: res.elsewhere.total, results: res.elsewhere.hits.map(enrich) }
-          : null,
-        divisions_semantiques: res.divisions ?? [],
-        pagination: { limit: page.limit, offset: page.offset },
-        results: res.hits.map(enrich),
-      });
-    },
+    H_SEARCH_TEXT,
   );
 
   // 7) legislation_resolve_reference -------------------------------------------------
-  server.registerTool(
+  const S_RESOLVE_REFERENCE = {
+    citation: z.string().describe("Citation libre, ex. « article 1457 C.c.Q. »."),
+    lang: LANG,
+  };
+  const H_RESOLVE_REFERENCE = async ({
+    citation,
+    lang: langArg,
+  }: z.infer<z.ZodObject<typeof S_RESOLVE_REFERENCE>>) => {
+    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
+    const lang: Lang = (langArg ?? "fr") as Lang;
+    const all = await listLaws(db, {}, "fr", env);
+    const parsed = parseCitation(citation, all);
+    if (!parsed.article) return err(`Aucun numéro d'article détecté dans « ${citation} ».`);
+    if (!parsed.law) {
+      // Refus NOMMÉ de l'ancien C.p.c. Il passe AVANT le refus générique parce qu'il dit la
+      // seule chose qui compte pour un juriste : la numérotation a changé, donc l'article
+      // du même numéro dans le code en vigueur n'est PAS l'équivalent.
+      if (parsed.hors_corpus === "C-25") {
+        return err(
+          "L'ANCIEN Code de procédure civile (RLRQ, c. C-25) n'est pas au corpus : il a été " +
+            "abrogé et remplacé le 1er janvier 2016 par le Code de procédure civile " +
+            "(RLRQ, c. C-25.01), le seul des deux que ce serveur porte. " +
+            "⚠️ La recodification a RENUMÉROTÉ le code : l'article " +
+            `${parsed.article ?? "N"} de l'ancien C.p.c. n'est PAS l'article ${parsed.article ?? "N"} ` +
+            "du code en vigueur, et aucune correspondance automatique n'est faite ici. " +
+            "Pour le texte en vigueur, citer sans « ancien » (ex. « art. " +
+            `${parsed.article ?? "N"} C.p.c. ») ; pour l'ancien, consulter une autre source.`,
+        );
+      }
+      return err(
+        parsed.chapitre_inconnu
+          ? `Le chapitre « ${parsed.chapitre_inconnu} » n'est pas au corpus — aucune loi n'a été ` +
+              "résolue (il n'est PAS rabattu sur un chapitre voisin). " +
+              `Voir les ${all.length} textes disponibles avec legislation_list_laws. ` +
+              `Article détecté : ${parsed.article ?? "aucun"}.`
+          : `Loi non reconnue dans « ${citation} ». Précisez le chapitre RLRQ (ex. « RLRQ, c. T-16 ») ` +
+              "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez legislation_get_article avec law=… " +
+              `(voir legislation_list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
+      );
+    }
+    const law = parsed.law;
+    const article = parsed.article;
+    const row = await getArticle(db, law, lang as Lang, article);
+    if (!row) {
+      const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
+      return err(
+        `Référence « ${citation} » non résolue (loi ${law}, art. ${article}). Proches : ${near.join(", ")}.`,
+      );
+    }
+    const lawRow = await getLaw(db, law, env);
+    // `parseCitation` n'a reconnu `law` que parmi les lois LUES en base, donc lawRow
+    // existe ; le garde est là pour le type, pas pour un cas réel.
+    if (!lawRow) return err(`Loi '${law}' inconnue.`);
+    const consol = consolOf(lawRow, lang as Lang);
+    return ok(renderArticle(row, lawRow, consol, lang as Lang), {
+      resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
+      citation: citationOf(lawRow, row.number, lang as Lang),
+      division_path: row.division_path,
+      consolidation: consol,
+      history: row.history,
+      repealed: !!row.repealed,
+      text: row.text,
+    });
+  };
+  outils.legislation_resolve_reference = H_RESOLVE_REFERENCE as Gestionnaire;
+  server?.registerTool(
     "legislation_resolve_reference",
     {
       title: titre("legislation_resolve_reference"),
@@ -1138,68 +1271,11 @@ export function registerTools(server: McpServer, env: Env): void {
         "vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, " +
         "ainsi que les abréviations C.c.Q. et C.p.c." +
         DEUX_TEMPS,
-      inputSchema: {
-        citation: z.string().describe("Citation libre, ex. « article 1457 C.c.Q. »."),
-        lang: LANG,
-      },
+      inputSchema: S_RESOLVE_REFERENCE,
       annotations: READONLY,
     },
-    async ({ citation, lang: langArg }) => {
-      // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
-      const lang: Lang = (langArg ?? "fr") as Lang;
-      const all = await listLaws(db, {}, "fr", env);
-      const parsed = parseCitation(citation, all);
-      if (!parsed.article) return err(`Aucun numéro d'article détecté dans « ${citation} ».`);
-      if (!parsed.law) {
-        // Refus NOMMÉ de l'ancien C.p.c. Il passe AVANT le refus générique parce qu'il dit la
-        // seule chose qui compte pour un juriste : la numérotation a changé, donc l'article
-        // du même numéro dans le code en vigueur n'est PAS l'équivalent.
-        if (parsed.hors_corpus === "C-25") {
-          return err(
-            "L'ANCIEN Code de procédure civile (RLRQ, c. C-25) n'est pas au corpus : il a été " +
-              "abrogé et remplacé le 1er janvier 2016 par le Code de procédure civile " +
-              "(RLRQ, c. C-25.01), le seul des deux que ce serveur porte. " +
-              "⚠️ La recodification a RENUMÉROTÉ le code : l'article " +
-              `${parsed.article ?? "N"} de l'ancien C.p.c. n'est PAS l'article ${parsed.article ?? "N"} ` +
-              "du code en vigueur, et aucune correspondance automatique n'est faite ici. " +
-              "Pour le texte en vigueur, citer sans « ancien » (ex. « art. " +
-              `${parsed.article ?? "N"} C.p.c. ») ; pour l'ancien, consulter une autre source.`,
-          );
-        }
-        return err(
-          parsed.chapitre_inconnu
-            ? `Le chapitre « ${parsed.chapitre_inconnu} » n'est pas au corpus — aucune loi n'a été ` +
-                "résolue (il n'est PAS rabattu sur un chapitre voisin). " +
-                `Voir les ${all.length} textes disponibles avec legislation_list_laws. ` +
-                `Article détecté : ${parsed.article ?? "aucun"}.`
-            : `Loi non reconnue dans « ${citation} ». Précisez le chapitre RLRQ (ex. « RLRQ, c. T-16 ») ` +
-                "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez legislation_get_article avec law=… " +
-                `(voir legislation_list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
-        );
-      }
-      const law = parsed.law;
-      const article = parsed.article;
-      const row = await getArticle(db, law, lang as Lang, article);
-      if (!row) {
-        const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
-        return err(
-          `Référence « ${citation} » non résolue (loi ${law}, art. ${article}). Proches : ${near.join(", ")}.`,
-        );
-      }
-      const lawRow = await getLaw(db, law, env);
-      // `parseCitation` n'a reconnu `law` que parmi les lois LUES en base, donc lawRow
-      // existe ; le garde est là pour le type, pas pour un cas réel.
-      if (!lawRow) return err(`Loi '${law}' inconnue.`);
-      const consol = consolOf(lawRow, lang as Lang);
-      return ok(renderArticle(row, lawRow, consol, lang as Lang), {
-        resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
-        citation: citationOf(lawRow, row.number, lang as Lang),
-        division_path: row.division_path,
-        consolidation: consol,
-        history: row.history,
-        repealed: !!row.repealed,
-        text: row.text,
-      });
-    },
+    H_RESOLVE_REFERENCE,
   );
+
+  return outils;
 }

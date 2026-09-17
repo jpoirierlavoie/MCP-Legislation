@@ -25,11 +25,19 @@ import { test } from "vitest";
 
 const SRC = readFileSync(new URL("../src/tools.ts", import.meta.url), "utf8");
 
-/** Découpe la source en un bloc par outil enregistré. */
+/**
+ * Découpe la source en un bloc par outil.
+ *
+ * Le découpage se fait sur `const S_…`, qui ouvre chaque outil : forme hissée, puis
+ * gestionnaire, puis dépôt au registre, puis enregistrement SDK. Découper sur
+ * `registerTool(` — ce que faisait la première version — ne marche plus depuis que les
+ * gestionnaires en sont sortis : le marqueur est désormais APRÈS le corps, et le bloc
+ * obtenu ne contiendrait ni la forme ni le `??` qu'on vient y chercher.
+ */
 function blocs() {
-  const morceaux = SRC.split("server.registerTool(").slice(1);
+  const morceaux = SRC.split(/^ {2}const S_/m).slice(1);
   return morceaux.map((m) => {
-    const nom = /^\s*"([a-z_]+)"/.exec(m)?.[1] ?? "?";
+    const nom = /^\s*outils\.([a-z_]+)\s*=/m.exec(m)?.[1] ?? "?";
     return { nom, texte: m };
   });
 }
