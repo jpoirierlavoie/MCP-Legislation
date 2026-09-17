@@ -32,6 +32,10 @@ _tmp_*
 
 # Secrets locaux — ne JAMAIS versionner (jetons, .env)
 *.token
+# `mcp.url` porte l'URL DE CONNECTEUR, laquelle CONTIENT le jeton en clair (forme `?key=`).
+# Le motif `*.token` ne l'attrapait pas : trouvé en vérifiant, pas en le supposant. Le
+# jumeau l'ignore depuis toujours ; ici, le fichier n'avait simplement jamais existé.
+mcp.url
 .secrets/
 .dev.vars
 .env
