@@ -22,11 +22,20 @@ const { connect, callTool } = createMcpClient(MCP_URL);
 
 // --- évals du §8 --------------------------------------------------------------
 //
-// `top`     : le 1er candidat doit correspondre.
-// `present` : chacun doit figurer dans les candidats retournés.
-// `none`    : aucun rapprochement (message d'aide attendu).
+// `top`      : le 1er candidat doit correspondre.
+// `present`  : chacun doit figurer dans les candidats retournés.
+// `absent`   : aucun candidat ne doit correspondre.
+// `reculent` : s'il correspond, il doit marquer MOINS DE LA MOITIÉ du candidat de tête.
+// `none`     : aucun rapprochement (message d'aide attendu).
 // Une attente { law, pathPrefix? } matche un candidat de cette loi dont le
 // division_path commence par pathPrefix (absent = n'importe quelle cible de la loi).
+//
+// POURQUOI `reculent` ET NON `absent` pour un faux positif. Un texte rapproché par un seul
+// token l'est RÉELLEMENT : la Loi sur la concurrence partage « commercial » avec le libellé
+// « Pratiques commerciales restrictives », et l'outil ne mentirait pas en la montrant loin
+// derrière. Exiger son absence serait un test plus joli et une garantie plus faible — il
+// rougirait au premier élargissement du corpus qui la repousse d'un rang, et pousserait à
+// sur-corriger la calibration. Ce qu'on exige est qu'elle ne PRIME plus.
 
 const EVALS = [
   {
@@ -185,6 +194,60 @@ const EVALS = [
     top: { law: "d-9.2-r.10" },
     present: [{ law: "d-9.2" }, { law: "d-9.2-r.2" }],
   },
+  // --- LOUAGE COMMERCIAL, et le facteur de couverture (2026-09-17) ------------------
+  //
+  // Le chapitre « DU LOUAGE » du C.c.Q. (art. 1851 et s.) portait la matière « Louage
+  // résidentiel », et elle seule — alors que ses sections I à III sont le régime général
+  // applicable au BAIL COMMERCIAL. Mesuré avant correctif sur la requête ci-dessous : le
+  // chapitre était ABSENT du top 5, et les trois premiers après deux sous-sections du bail
+  // d'habitation étaient le Code de procédure pénale (sur le mot « défaut », présent dans
+  // sa description de matière), la Loi sur la confiscation, et la Loi sur la concurrence
+  // (sur « commercial », préfixe de « commerciales » dans son libellé de matière).
+  {
+    query: "bail commercial résiliation défaut de payer le loyer",
+    attendu:
+      "le chapitre GÉNÉRAL du louage en tête ; les lois pénales et la Loi sur la concurrence reculent",
+    top: { law: "ccq", pathPrefix: "ga:l_cinquieme-gb:l_deuxieme-gc:l_quatrieme" },
+    reculent: [{ law: "c-25.1" }, { law: "c-52.2" }, { law: "ca-c-34" }],
+  },
+  {
+    query: "bail commercial",
+    attendu: "le chapitre du louage en tête, devant la Loi sur la concurrence",
+    top: { law: "ccq", pathPrefix: "ga:l_cinquieme-gb:l_deuxieme-gc:l_quatrieme" },
+    reculent: [{ law: "ca-c-34" }],
+  },
+  {
+    // Miroir ANGLAIS, et il n'est pas décoratif : le défaut était STRUCTURELLEMENT
+    // francophone. L'intitulé anglais « LEASE » apparie le token « lease », donc S2
+    // s'allumait et le chapitre sortait au rang 2 ; l'intitulé français « DU LOUAGE » ne
+    // partage AUCUN token avec « bail », et l'appariement est unidirectionnel. Une suite
+    // unilingue n'aurait donc rien vu — ni le défaut, ni sa correction.
+    query: "commercial lease resiliation failure to pay rent",
+    lang: "en",
+    attendu: "miroir de « bail commercial » : le chapitre LEASE du C.c.Q. en tête",
+    top: { law: "ccq", pathPrefix: "ga:l_five-gb:l_two-gc:l_iv" },
+  },
+  {
+    query: "prescription trois ans",
+    attendu: "ccq / prescription (Livre 8) en tête — « ans » seul ne doit rien emporter",
+    top: { law: "ccq", pathPrefix: "ga:l_huitieme" },
+  },
+  {
+    query: "congédiement sans cause juste et suffisante",
+    attendu: "n-1.1, le recours lui-même, en tête (quatre tokens dans son intitulé)",
+    top: { law: "n-1.1", pathPrefix: "ga:l_v-gb:l_iii" },
+  },
+  {
+    // ⚠️ `present` et NON `top`, et c'est un CONSTAT, pas une facilité. Le chapitre de
+    // l'hypothèque légale est le bon candidat, mais `cpc ga:l_v-gb:l_iii` est mappé à TROIS
+    // matières (successions, biens, sûretés) sur un seul chemin : il récolte trois signaux
+    // S1 et reste difficile à dépasser. C'est un défaut de diversité voisin de l'invariant
+    // 15, DISTINCT de ceux corrigés ici, et qui se traite avec son propre avant/après.
+    query: "hypothèque légale de la construction",
+    attendu:
+      "le chapitre de l'hypothèque légale présent (cf. la note : il n'est pas encore en tête)",
+    present: [{ law: "ccq", pathPrefix: "ga:l_sixieme-gb:l_troisieme-gc:l_troisieme" }],
+  },
   {
     query: "zzzzq wxyv",
     attendu: "aucun rapprochement, message d'aide",
@@ -232,6 +295,13 @@ async function runEval(e) {
   for (const exp of e.absent ?? []) {
     const parasite = cands.find((c) => matches(c, exp));
     if (parasite) failures.push(`présent à tort : ${fmt(parasite)}`);
+  }
+  for (const exp of e.reculent ?? []) {
+    const c = cands.find((x) => matches(x, exp));
+    const tete = cands[0]?.score ?? 0;
+    if (c && c.score >= tete / 2) {
+      failures.push(`ne recule pas : ${fmt(c)} contre une tête à ${tete}`);
+    }
   }
   if (e.maxParMatiere) {
     const parMatiere = new Map();
@@ -292,21 +362,31 @@ async function smokeTests() {
     `count=${bySubject.structuredContent?.count}`,
   );
 
+  // DÉRIVÉ de taxonomy.json, plus écrit en dur — même motif que le décompte de lois
+  // ci-dessus. Un littéral `=== 43` a rougi le 2026-09-17 à l'ajout de la matière `louage`,
+  // c'est-à-dire au moment précis où l'on voulait mesurer l'effet de cet ajout. Le contrôle
+  // qui compte est la CONCORDANCE entre le JSON versionné et ce que la base sert : c'est
+  // elle qui attrape une taxonomie éditée sans rechargement, le défaut réel.
+  const matieres = JSON.parse(readFileSync(new URL("../taxonomy.json", import.meta.url), "utf8"))
+    .subjects.length;
   const subs = await callTool("legislation_list_subjects", {});
   add(
-    "list_subjects : 43 matières",
-    subs.structuredContent?.count === 43,
-    `count=${subs.structuredContent?.count}`,
+    `list_subjects : ${matieres} matières (taxonomy.json chargée en base)`,
+    subs.structuredContent?.count === matieres,
+    `count=${subs.structuredContent?.count}, taxonomy.json=${matieres}` +
+      (subs.structuredContent?.count === matieres
+        ? ""
+        : " — `discovery/load.py --target cloud` a-t-il été rejoué ?"),
   );
 
-  // Les 43 matières doivent être traduites : c'est la surface d'appariement du signal S1,
-  // sans quoi le routeur reste muet en anglais.
+  // Toutes les matières doivent être traduites : c'est la surface d'appariement du signal
+  // S1, sans quoi le routeur reste muet en anglais.
   const subsEn = await callTool("legislation_list_subjects", { lang: "en" });
   const sansEn = (subsEn.structuredContent?.subjects ?? [])
     .filter((s) => !s.label_en || !s.description_en)
     .map((s) => s.id);
   add(
-    "list_subjects (lang=en) : les 43 matières traduites",
+    `list_subjects (lang=en) : les ${matieres} matières traduites`,
     sansEn.length === 0,
     sansEn.length ? `sans traduction : ${sansEn.slice(0, 5).join(", ")}…` : "",
   );
@@ -692,6 +772,34 @@ async function smokeTests() {
       /repérage sémantique/.test(fond.content?.[0]?.text ?? "")) &&
       fondTop5.some((r) => r.law_id === "cpc" && r.number === "490"),
     fondTop5.map((r) => `${r.law_id}|${r.number}`).join(", "),
+  );
+
+  // PLANCHER DE RENDEMENT DU LEAVE-ONE-OUT (2026-09-17). Le pendant du cas fondateur, et
+  // son exact opposé : là où « hors » retiré rend 8 résultats, « qualité » retiré n'en rend
+  // qu'UN — p-40.1 art. 53.1, sur les automobiles gravement défectueuses — et ce résultat
+  // unique masquait le barreau OU, qui met C.c.Q. 1726 en tête. Les deux cas doivent tenir
+  // ENSEMBLE : c'est le couple qui prouve que le plancher est bien placé.
+  const flexion = await callTool("legislation_search_text", {
+    query: "vice caché garantie qualité",
+    limit: 5,
+  });
+  const flexTop3 = (flexion.structuredContent?.results ?? []).slice(0, 3);
+  add(
+    "repérage : un leave-one-out d'un seul résultat ne masque plus le OU (ccq 1726 top 3)",
+    flexion.structuredContent?.fallback === "or_relax" &&
+      flexTop3.some((r) => r.law_id === "ccq" && r.number === "1726"),
+    `${flexion.structuredContent?.fallback} — ${flexTop3.map((r) => `${r.law_id}|${r.number}`).join(", ")}`,
+  );
+
+  // Les TROIS décomptes, et leurs trois sens. `total: 1` avec cinq résultats rendus était
+  // lisible comme une incohérence : c'était un appariement lexical plus quatre voisins
+  // sémantiques, sans rien pour le dire. Corollaire structuré de R4 (décision 001).
+  const sc = flexion.structuredContent ?? {};
+  add(
+    "repérage : `returned` et `sources` rendent `total` interprétable",
+    sc.returned === (sc.results ?? []).length &&
+      sc.sources?.lexical + sc.sources?.semantique === sc.returned,
+    `total=${sc.total} returned=${sc.returned} sources=${JSON.stringify(sc.sources)}`,
   );
 
   // 1.2 : requête absurde -> échec propre
