@@ -32,7 +32,7 @@ const env = {
 };
 
 const server = new McpServer(
-  { name: "qclaw-mcp", version: "0.2.0" },
+  { name: "MCP Legislation", version: "0.2.0" },
   { instructions: "capture" },
 );
 registerTools(server, env);
@@ -42,6 +42,9 @@ registerTools(server, env);
 const handler = server.server._requestHandlers.get(ListToolsRequestSchema.shape.method.value);
 if (!handler) throw new Error("gestionnaire tools/list introuvable");
 
-const res = await handler({ method: "tools/list", params: {} }, { signal: new AbortController().signal });
+const res = await handler(
+  { method: "tools/list", params: {} },
+  { signal: new AbortController().signal },
+);
 
 process.stdout.write(`${JSON.stringify(res.tools, null, 2)}\n`);

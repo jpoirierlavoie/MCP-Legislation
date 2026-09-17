@@ -533,6 +533,15 @@ le routeur du socle, qui oblige à réécrire les dix `inputSchema` de Zod vers 
 après bascule, octet pour octet. Toute évolution de `src/tools.ts` d'ici là la périme en
 silence : la régénérer alors, tant que le SDK est encore là.
 
+**⚠️ ET LE SCRIPT DE CAPTURE NE TOURNE DÉJÀ PLUS** (mesuré le 2026-09-17, avant même que le
+SDK soit retiré) : il charge `src/tools.ts` sous Node nu, or `src/tools.ts:7` fait
+`import catalogue from "../catalogue.json"` SANS l'attribut `with { type: "json" }`.
+Wrangler/esbuild l'accepte, Node l'exige — d'où `ERR_IMPORT_ATTRIBUTE_MISSING`. La consigne
+« à relancer avant la bascule » est donc aujourd'hui INAPPLICABLE telle quelle. Le jour où
+l'on en aura besoin, il faudra soit ajouter l'attribut d'import, soit passer par le
+bundler. La fixture en place, elle, est à jour : vérifié le 2026-09-17, elle porte bien les
+dix noms `legislation_*`.
+
 ## Où trouver quoi
 
 - **Sondes FTS5** (tokenizer `unicode61`, `remove_diacritics` ACTIF, AUCUN stemming
