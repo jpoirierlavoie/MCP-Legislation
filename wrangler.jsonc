@@ -61,7 +61,7 @@
     "HYBRID_SEARCH": "1",
     "FEDERAL_CORPUS": "1",
     "MCP_ENABLED": "true",
-    "SOCLE": "false"
+    "SOCLE": "true"
   },
 
   // Limitation de débit DANS le Worker, et non au WAF de la zone — même choix que le
