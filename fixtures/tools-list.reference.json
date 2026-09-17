@@ -84,7 +84,7 @@
       "properties": {
         "law": {
           "type": "string",
-          "description": "Identifiant de la loi, ex. 'cpc'."
+          "description": "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws."
         },
         "rel_type": {
           "description": "Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe'.",
@@ -133,7 +133,7 @@
   {
     "name": "legislation_find_relevant",
     "title": "Repérage de sources — heuristique",
-    "description": "Aide heuristique au repérage de lois et de parties de lois candidates. Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via get_structure / get_division / get_article. Classement déterministe sur la matière (taxonomie), les intitulés de divisions, les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', 'congédiement', 'bail commercial'. Enchaîner ensuite avec get_structure / get_division.",
+    "description": "Aide heuristique au repérage de lois et de parties de lois candidates. Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via legislation_get_structure / legislation_get_division / legislation_get_article. Classement déterministe sur la matière (taxonomie), les intitulés de divisions, les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', 'congédiement', 'bail commercial'. Enchaîner ensuite avec legislation_get_structure / legislation_get_division.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -182,7 +182,7 @@
       "properties": {
         "law": {
           "type": "string",
-          "description": "Identifiant de la loi, ex. 'ccq'."
+          "description": "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant."
         },
         "article": {
           "type": "string",
@@ -223,7 +223,7 @@
       "properties": {
         "law": {
           "type": "string",
-          "description": "Identifiant de la loi, ex. 'ccq'."
+          "description": "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant."
         },
         "from": {
           "description": "Borne basse d'une plage, ex. '1457'.",
@@ -286,7 +286,7 @@
       "properties": {
         "law": {
           "type": "string",
-          "description": "Identifiant de la loi, ex. 'ccq'."
+          "description": "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant."
         },
         "lang": {
           "default": "fr",
@@ -332,7 +332,7 @@
       "properties": {
         "law": {
           "type": "string",
-          "description": "Identifiant de la loi, ex. 'ccq'."
+          "description": "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant."
         },
         "path": {
           "description": "Chemin de la division (ex. 'ga:l_cinquieme-gb:l_premier').",
@@ -398,7 +398,7 @@
           "description": "Termes à rechercher, ex. 'responsabilité préjudice'."
         },
         "law": {
-          "description": "Restreindre à une loi (défaut : toutes).",
+          "description": "Restreindre à une loi par son identifiant court de corpus (ex. 'ccq') ; défaut : tout le corpus.",
           "type": "string"
         },
         "lang": {
