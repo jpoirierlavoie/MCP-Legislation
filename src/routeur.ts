@@ -31,6 +31,7 @@ import {
   parseMessage,
   resultatDecouverte,
   resultResponse,
+  VERSION_SANS_ENTETE,
   validateArgs,
   validerEntetes,
   versionAbsenteAdmise,
@@ -48,12 +49,22 @@ const TTL_LISTE = 3_600_000;
 /**
  * Ce dépôt sert-il les clients antérieurs à `2025-06-18` ?
  *
- * NON. La spécification n'ouvre que deux branches pour une requête sans en-tête de
- * version : la traiter comme `2025-03-26`, ou la refuser. On refuse — et surtout, on ne la
- * promeut JAMAIS en `2025-06-18`, ce serait inventer une troisième branche que personne
- * n'implémente en face. `initialize` reste exempté, voir `versionAbsenteAdmise`.
+ * OUI, et c'est COUPLÉ au fait que `2025-03-26` reste servie. La spécification n'ouvre que
+ * deux branches pour une requête sans en-tête de version : la traiter comme `2025-03-26`
+ * — permis seulement si l'on sert ces clients-là — ou la refuser, ce que S3 prescrit PARCE
+ * QU'ELLE RETIRE `2025-03-26`.
+ *
+ * ⚠ NE PAS BASCULER CE DRAPEAU SANS RETIRER `2025-03-26` DE `VERSIONS`, ni l'inverse. Les
+ *   deux vont ensemble. Les avoir découplés a fait rendre 400 à la veille mensuelle, qui
+ *   n'envoie pas l'en-tête — deux fois dans la même journée, et la seconde fois pour ce
+ *   motif-ci. Le retrait de `2025-03-26` attend de toute façon la mesure de `clientInfo`
+ *   (phase 4) : c'est à ce moment-là que les deux basculeront, ensemble.
+ *
+ * Ce qu'on ne fait JAMAIS, dans les deux cas : promouvoir silencieusement l'absence
+ * d'en-tête en `2025-06-18`. Ce serait inventer une troisième branche que personne
+ * n'implémente en face.
  */
-const SERT_AVANT_2025_06_18 = false;
+const SERT_AVANT_2025_06_18 = true;
 
 /**
  * Champs que Zod CONVERTISSAIT et que le validateur du socle REFUSERAIT.
@@ -181,7 +192,7 @@ export async function servirMcp(
       );
     }
     // Seul `initialize` arrive ici : il négocie par son corps, comme une poignée héritée.
-    version = (message.params?.protocolVersion as string) ?? VERSIONS[0];
+    version = (message.params?.protocolVersion as string) ?? VERSION_SANS_ENTETE;
   } else {
     const n = negocier(entete, VERSIONS);
     if ("erreur" in n) return repondre({ jsonrpc: "2.0", id, error: n.erreur }, 400);
@@ -239,9 +250,12 @@ export async function servirMcp(
       case "initialize": {
         // Imitation de poignée : on répond comme avant, et on ne retient RIEN. Aucun état,
         // aucune session, aucun `Mcp-Session-Id` frappé ni renvoyé.
+        // La plus haute HÉRITÉE, et non `VERSIONS[0]` : celle-ci est `2026-07-28`, qui a
+        // SUPPRIMÉ la poignée. Répondre son nom à un client qui vient d'appeler
+        // `initialize` lui annoncerait une ère où sa propre requête n'existe pas.
         const negociee = VERSIONS.includes(version as (typeof VERSIONS)[number])
           ? version
-          : VERSIONS[0];
+          : (VERSIONS.find((v) => !estModerne(v)) ?? VERSIONS[VERSIONS.length - 1]);
         return repondre(
           resultResponse(id, {
             protocolVersion: negociee,

@@ -87,10 +87,24 @@ describe("négociation de version", () => {
     expect(c.error.data.supported).toContain(HERITEE);
   });
 
-  it("une requête SANS en-tête de version est refusée — jamais promue en silence", async () => {
+  it("une requête SANS en-tête est traitée comme 2025-03-26, tant que celle-ci est servie", async () => {
+    // REMPLACE un test qui exigeait un refus. La spécification n'ouvre que deux branches, et
+    // le choix entre elles est COUPLÉ au maintien de `2025-03-26` : la refuser n'est permis
+    // que si on l'a retirée. Nous ne l'avons pas retirée — son retrait attend la mesure de
+    // `clientInfo` (phase 4). Avoir appliqué la conclusion de S3 sans sa prémisse a fait
+    // rendre 400 à la veille mensuelle, qui n'envoie pas l'en-tête.
     const r = await appel(rpc("tools/list"));
-    expect(r.status).toBe(400);
-    expect(((await r.json()) as { error: { code: number } }).error.code).toBe(-32020);
+    expect(r.status).toBe(200);
+    // Traitée comme une révision HÉRITÉE : rien de moderne ne s'y glisse.
+    const c = (await r.json()) as { result: Record<string, unknown> };
+    expect(c.result.resultType).toBeUndefined();
+  });
+
+  it("une requête sans en-tête n'est JAMAIS promue en 2025-06-18", async () => {
+    // Ce serait inventer une troisième branche que personne n'implémente en face.
+    const r = await appel(rpc("tools/list"));
+    const c = (await r.json()) as { result: Record<string, unknown> };
+    expect(c.result.ttlMs).toBeUndefined();
   });
 
   it("`initialize` SANS en-tête passe — la poignée héritée n'en porte pas", async () => {
