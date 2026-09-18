@@ -1033,10 +1033,12 @@ async function smokeTests() {
       );
     }
 
-    // --- compatibilité « client à état » ------------------------------------------
-    // Vise le second consommateur : un backend qui ouvre LUI-MÊME sa session et parle donc
-    // le cycle de vie complet, FERMETURE COMPRISE — ce qu'aucun de nos clients ne faisait.
-    // UNE SEULE session supplémentaire pour tout le bloc (invariant 10), refermée à la fin.
+    // --- compatibilité d'un client qui CROIT parler à un serveur à état ---------------
+    // Vise le second consommateur : un backend qui parle le cycle de vie complet —
+    // initialize, notifications/initialized, GET, DELETE — parce qu'il a été écrit contre
+    // un transport à session. Depuis `SOCLE=true`, il n'y a plus de session du tout ; ce
+    // qui compte est donc qu'aucune de ces quatre étapes ne soit REFUSÉE. Le bloc a gardé
+    // son nom trop longtemps après avoir changé de sens.
     // On éprouve le TRANSPORT et la PORTE, pas le corpus : le contenu est le rôle de la fumée.
     {
       const porteur = jetonVeille ?? jeton;
@@ -1053,10 +1055,16 @@ async function smokeTests() {
       const ini = await post(INIT);
       const sid = ini.headers.get("mcp-session-id");
       const txtIni = await ini.text();
+      // REMPLACE « initialize -> 200 + en-tête mcp-session-id ». Ce contrôle décrivait le
+      // transport d'avant `SOCLE=true` et était rouge depuis la bascule, sans que personne
+      // le relève. La révision 2026-07-28 RETIRE les sessions et le routeur du socle est
+      // sans état : l'absence de l'en-tête n'est plus un défaut, c'est la garantie. Un
+      // retour à un transport à état serait, lui, une régression — et c'est ce que ce
+      // contrôle attrape désormais.
       add(
-        `état (${quel}) : initialize -> 200 + en-tête mcp-session-id`,
-        ini.status === 200 && !!sid,
-        `status=${ini.status} session=${sid ? "reçue" : "ABSENTE"}`,
+        `état (${quel}) : initialize -> 200, et AUCUNE session ouverte`,
+        ini.status === 200 && !sid,
+        `status=${ini.status} session=${sid ? `ÉMISE (${sid}) — le transport a repris un état` : "aucune, comme attendu"}`,
       );
 
       const msgIni =
