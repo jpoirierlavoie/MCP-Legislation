@@ -320,9 +320,21 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
   obligatoire, jamais en prose seule** — un client peut jeter la prose et garder l'objet
   typé, et l'étiquette tomberait sans qu'aucun test n'échoue. Déjà le cas pour `fallback`
   (R7) ; s'impose à la phase 3 v2 (headnotes, drapeau `validated`) avant toute mise en
-  service. `outputSchema` reste ABSENT à dessein (coût récurrent de tools/list + un schéma
-  qui dérive des gabarits est un contrat menti) ; ne le revisiter que pour un consommateur
-  nommé qui VALIDE.
+  service.
+  **Amendement du 2026-09-17 — `outputSchema` cesse d'être absent, sous condition.** La
+  règle disait : « `outputSchema` reste ABSENT à dessein (coût récurrent de tools/list + un
+  schéma qui dérive des gabarits est un contrat menti) ; ne le revisiter que pour un
+  consommateur nommé qui VALIDE. » Sa propre condition de réouverture est remplie :
+  `test/sortie.test.ts` valide chaque charge servie contre le schéma publié, SUR LE FIL.
+  Les deux motifs d'origine tiennent toujours, et sont payés plutôt que niés — le coût de
+  `tools/list` est assumé outil par outil (`src/schemas-sortie.ts` dit où en est la
+  bascule, et un outil non enveloppé ne publie RIEN), et le schéma ne dérive plus d'un
+  gabarit : il est écrit à la main, autour de l'enveloppe du socle. Le mode de panne que la
+  règle craignait — le client garde l'objet typé, jette la prose, et la mise en garde part
+  avec elle — n'est pas réfuté : il est renversé. La réserve voyage désormais DANS l'objet
+  typé, et `gardes` ne peut pas être vide (type non vide à l'écriture, `enveloppe()` à
+  l'exécution, `minItems: 1` sur le fil). Sans ces trois couches, la règle d'origine
+  tiendrait encore.
 - **R10 — UNE VÉRITÉ, CINQ SURFACES (dérive de documentation).** Mise en œuvre de
   l'**obligation préalable** en tête de ce fichier : outils, descriptions, schéma,
   `README.md`, page publique. Un outil ou une aide au repérage vit dans `src/tools.ts` (ce

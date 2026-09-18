@@ -370,19 +370,35 @@ async function smokeTests() {
   const matieres = JSON.parse(readFileSync(new URL("../taxonomy.json", import.meta.url), "utf8"))
     .subjects.length;
   const subs = await callTool("legislation_list_subjects", {});
+  // ENVELOPPÉ depuis la marche 4 : les clefs d'avant vivent sous `donnees`. Lecture
+  // EXPLICITE et non tolérante — un repli `?? structuredContent` accepterait les deux
+  // formes et masquerait précisément la bascule qu'on est en train de mesurer.
+  const subsD = subs.structuredContent?.donnees;
   add(
     `list_subjects : ${matieres} matières (taxonomy.json chargée en base)`,
-    subs.structuredContent?.count === matieres,
-    `count=${subs.structuredContent?.count}, taxonomy.json=${matieres}` +
-      (subs.structuredContent?.count === matieres
+    subsD?.count === matieres,
+    `count=${subsD?.count}, taxonomy.json=${matieres}` +
+      (subsD?.count === matieres
         ? ""
         : " — `discovery/load.py --target cloud` a-t-il été rejoué ?"),
+  );
+  // G5 contre le serveur VIVANT. La suite locale valide déjà la charge contre le schéma
+  // publié, mais sur une base d'essai de deux lignes : c'est ici qu'on voit l'enveloppe
+  // tenir sur le vrai corpus, et c'est ici qu'on verrait la réserve disparaître.
+  const gardes = subs.structuredContent?.gardes ?? [];
+  add(
+    "list_subjects : l'enveloppe porte sa réserve et son autorité",
+    gardes.some((g) => g.code === "REPERAGE_HEURISTIQUE" && (g.texte ?? "").length > 0) &&
+      subs.structuredContent?.provenance?.autorite === "Éditeur officiel du Québec" &&
+      subs.structuredContent?.["@type"] === "ListeMatieres",
+    `gardes=${gardes.map((g) => g.code).join(",") || "(vide)"}, ` +
+      `autorite=${subs.structuredContent?.provenance?.autorite ?? "(absente)"}`,
   );
 
   // Toutes les matières doivent être traduites : c'est la surface d'appariement du signal
   // S1, sans quoi le routeur reste muet en anglais.
   const subsEn = await callTool("legislation_list_subjects", { lang: "en" });
-  const sansEn = (subsEn.structuredContent?.subjects ?? [])
+  const sansEn = (subsEn.structuredContent?.donnees?.subjects ?? [])
     .filter((s) => !s.label_en || !s.description_en)
     .map((s) => s.id);
   add(

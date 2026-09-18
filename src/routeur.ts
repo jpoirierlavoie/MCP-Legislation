@@ -38,6 +38,7 @@ import {
 } from "@poirierlavoie/socle-juridique";
 
 import { PUBLIES } from "./schemas";
+import { SORTIES } from "./schemas-sortie";
 import { CAPACITES, INSTRUCTIONS, SERVER_INFO, VERSIONS } from "./serveur";
 import { construireOutils, type Registre } from "./tools";
 
@@ -112,6 +113,10 @@ function descripteurs(): Array<Record<string, unknown>> {
     title: d.title,
     description: d.description,
     inputSchema: d.inputSchema,
+    // `outputSchema` n'est publié QUE pour les outils déjà enveloppés. Son absence est une
+    // information juste — « cet outil rend encore une charge plate » — là où une enveloppe
+    // annoncée mais non servie serait un contrat que le serveur viole lui-même.
+    ...(SORTIES[name] ? { outputSchema: SORTIES[name] } : {}),
     annotations: d.annotations,
     ...(d.execution ? { execution: d.execution } : {}),
   }));

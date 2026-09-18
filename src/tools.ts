@@ -1,10 +1,12 @@
 // Enregistrement des outils MCP « Lois du Québec » (legislation_*). Tous en lecture seule.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { enveloppe } from "@poirierlavoie/socle-juridique";
 import { z } from "zod";
 // SOURCE UNIQUE des titres (R10) : le titre servi par tools/list et celui affiché sur la
 // page publique sont la MÊME valeur, pas deux copies. catalogue.json porte en outre la
 // prose longue de la page. Parité outils <-> catalogue épinglée par tests/catalogue.test.mjs.
 import catalogue from "../catalogue.json";
+import { GARDES } from "./gardes";
 import {
   type ArticleJoined,
   type ArticleRow,
@@ -41,6 +43,7 @@ import {
   translateDivisionPath,
 } from "./lib";
 import { rank, tokenize, WEIGHTS } from "./relevance";
+import { CONTEXTE, provenanceCorpus } from "./sortie";
 
 const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom].title_fr;
 
@@ -399,21 +402,37 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
             .join("\n"),
       )
       .join("\n");
-    return ok(`${subs.length} ${en ? "subject areas" : "matières"} :${body}`, {
-      count: subs.length,
-      subjects: subs.map((s) => ({
-        id: s.id,
-        label_fr: s.label_fr,
-        label_en: s.label_en,
-        kind: s.kind,
-        label: libelle(s),
-        description: descr(s),
-        description_fr: s.description_fr,
-        description_en: s.description_en,
-        laws_count: s.laws_count,
-        divisions_count: s.divisions_count,
-      })),
-    });
+    // La prose reste la prose : `content` est INTOUCHÉ. Seule la charge structurée
+    // s'enveloppe — les clefs d'avant vivent désormais sous `donnees`, et la réserve
+    // voyage À L'INTÉRIEUR des données plutôt qu'à côté.
+    return ok(
+      `${subs.length} ${en ? "subject areas" : "matières"} :${body}`,
+      enveloppe({
+        contexte: CONTEXTE,
+        type: "ListeMatieres",
+        donnees: {
+          count: subs.length,
+          subjects: subs.map((s) => ({
+            id: s.id,
+            label_fr: s.label_fr,
+            label_en: s.label_en,
+            kind: s.kind,
+            label: libelle(s),
+            description: descr(s),
+            description_fr: s.description_fr,
+            description_en: s.description_en,
+            laws_count: s.laws_count,
+            divisions_count: s.divisions_count,
+          })),
+        },
+        provenance: provenanceCorpus(),
+        registre: GARDES,
+        // La taxonomie est une CURATION : elle propose où lire, elle ne dit pas le droit.
+        // C'est exactement ce que `REPERAGE_HEURISTIQUE` énonce, et l'outil la porte donc
+        // toujours — jamais `AUCUNE_RESERVE`.
+        obligatoires: ["REPERAGE_HEURISTIQUE"],
+      }) as unknown as Record<string, unknown>,
+    );
   };
   outils.legislation_list_subjects = H_LIST_SUBJECTS as Gestionnaire;
   server?.registerTool(
