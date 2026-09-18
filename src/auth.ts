@@ -33,15 +33,35 @@
 // FERMÉ PAR DÉFAUT (2026-08-27, aligné sur le jumeau). Aucun secret configuré ⇒ TOUT est
 // refusé. La tentation serait de lire « rien à comparer, donc on laisse passer » : c'est le
 // défaut ouvert par omission, et c'est le contrôle « POST sans jeton -> 404 » des évals qui
-// l'interdit. CE QUE ÇA COÛTE, ET QU'IL FAUT SAVOIR AVANT D'EN AVOIR BESOIN :
-//   - la soupape R8 n'est plus UNE commande. Rouvrir l'endpoint — le seul geste qui ait
-//     débloqué le connecteur claude.ai irrémédiablement coincé du 2026-07-25 — c'est
-//     désormais `npx wrangler secret list` PUIS supprimer TOUS les `MCP_TOKEN*`. En oublier
-//     un seul laisse l'endpoint FERMÉ pendant qu'on croit l'avoir rouvert, et le connecteur
-//     continue de creuser son trou OAuth pendant qu'on cherche ailleurs ;
+// l'interdit.
+//
+// ⛔ CORRECTION DU 2026-09-18 — CE CARTOUCHE DISAIT L'INVERSE DE LA VÉRITÉ, ET SUR LE POINT
+//    LE PLUS DANGEREUX. Il prescrivait, pour ROUVRIR l'endpoint, « `npx wrangler secret
+//    list` PUIS supprimer TOUS les `MCP_TOKEN*` ». C'EST EXACTEMENT LE CONTRAIRE DE CE QUE
+//    LE CODE FAIT.
+//
+//    Supprimer tous les secrets rend `attendus` VIDE. La double boucle ci-dessous ne
+//    s'exécute alors pas une seule fois, `autorise` reste `false`, et `gateMcp` rend `null`
+//    — donc 404 sur tout. Même issue par le chemin du socle, qui est celui de la production
+//    depuis `SOCLE=true` : `secretsAdmis` rend une liste vide et `ouvrir` rend `null`.
+//
+//    Suivre l'ancienne consigne en situation d'urgence FERME la porte définitivement,
+//    pendant qu'on croit l'avoir ouverte — et l'on cherche la panne ailleurs. C'est le pire
+//    genre d'erreur documentaire : elle ne se révèle qu'au moment où l'on en dépend.
+//
+//    LA SOUPAPE R8 N'EXISTE PLUS. Le défaut fermé l'a supprimée le 2026-08-27, et personne
+//    n'avait réécrit le cartouche. Les deux remèdes RÉELS, mesurés :
+//      - `npx wrangler rollback` vers une version antérieure au défaut fermé. C'est le seul
+//        geste qui rouvre, et il était rangé plus bas comme un appoint ;
+//      - ou, plus simplement quand le but est de REPRENDRE la main plutôt que d'ouvrir :
+//        poser un secret neuf (`npx wrangler secret put MCP_TOKEN`) et s'en servir.
+//
+//    ⚠ Le rollback a une péremption : une migration de classe Durable Object entre la
+//      version en ligne et la cible l'interdit. À vérifier AVANT d'en avoir besoin.
+//
+// Autre conséquence du défaut fermé, celle-là toujours exacte :
 //   - `npx wrangler dev` seul ne sert plus /mcp : il faut désormais
-//     `npx wrangler dev --var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…` ;
-//   - remède de niveau code, plus rapide que tout le reste : `npx wrangler rollback`.
+//     `npx wrangler dev --var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…`.
 //
 // UN REFUS RÉPOND 404, JAMAIS 401 : un 401 (a fortiori avec `WWW-Authenticate`) annonce
 // un serveur MCP et déclenche la découverte OAuth côté client. Ici on veut que l'endpoint
