@@ -65,6 +65,155 @@ const LISTE_MATIERES: JsonSchema = schemaEnveloppe({
   additionalProperties: false,
 });
 
+/** Un nœud de plan, tel que `list_laws` le sert : deux niveaux, jamais davantage. */
+const NOEUD_PLAN: JsonSchema = {
+  type: "object",
+  properties: {
+    kind: { type: "string" },
+    number: TEXTE_OU_NUL,
+    heading: TEXTE_OU_NUL,
+    path: { type: "string", description: "Chemin canonique, à passer à get_division." },
+    children: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          kind: { type: "string" },
+          number: TEXTE_OU_NUL,
+          heading: TEXTE_OU_NUL,
+          path: { type: "string" },
+        },
+        required: ["kind", "path"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["kind", "path", "children"],
+  additionalProperties: false,
+};
+
+const LOI: JsonSchema = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    name_fr: { type: "string" },
+    name_en: { type: "string" },
+    /**
+     * Deux clefs, une seule valeur, le temps d'une migration — voir le commentaire de
+     * `LawRow.rlrq_cite`. Le contrat les publie TOUTES DEUX parce que les deux sont
+     * servies ; le retrait de `rlrq_cite` est un commit séparé, annoncé.
+     */
+    rlrq_cite: { type: "string" },
+    official_cite: { type: "string" },
+    langs: { type: "array", items: { type: "string" } },
+    consol_date_fr: TEXTE_OU_NUL,
+    consol_date_en: TEXTE_OU_NUL,
+    article_count: { type: "integer", minimum: 0 },
+    fonction: TEXTE_OU_NUL,
+    forum: { ...TEXTE_OU_NUL, description: "Multi-valeurs jointes par « ; ». Nul si sans forum." },
+    scope: {
+      ...TEXTE_OU_NUL,
+      description:
+        "Portée éditoriale. NUL plutôt qu'un repli sur le titre : un repli servirait un " +
+        "champ vide ayant l'air plein.",
+    },
+    parent_law_id: { ...TEXTE_OU_NUL, description: "Loi habilitante d'un règlement." },
+    subjects: { type: "array", items: { type: "string" } },
+    mapped_divisions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          division_path: { type: "string" },
+          heading: TEXTE_OU_NUL,
+          subject: { type: "string" },
+        },
+        required: ["division_path", "subject"],
+        additionalProperties: false,
+      },
+    },
+    structure: {
+      type: ["array", "null"],
+      items: NOEUD_PLAN,
+      description: "Plan profondeur 2 des grands codes. Nul si la loi n'a pas de Livres.",
+    },
+  },
+  required: [
+    "id",
+    "name_fr",
+    "name_en",
+    "rlrq_cite",
+    "official_cite",
+    "langs",
+    "article_count",
+    "subjects",
+    "mapped_divisions",
+  ],
+  additionalProperties: false,
+};
+
+const CARTE_DU_CORPUS: JsonSchema = schemaEnveloppe({
+  type: "object",
+  properties: {
+    filters: {
+      type: "object",
+      properties: { fonction: TEXTE_OU_NUL, forum: TEXTE_OU_NUL, subject: TEXTE_OU_NUL },
+      required: ["fonction", "forum", "subject"],
+      additionalProperties: false,
+    },
+    count: { type: "integer", minimum: 0 },
+    laws: { type: "array", items: LOI },
+  },
+  required: ["filters", "count", "laws"],
+  additionalProperties: false,
+});
+
+const ARETE: JsonSchema = {
+  type: "object",
+  properties: {
+    direction: { type: "string", enum: ["out", "in"] },
+    other_id: { type: "string", description: "Id au corpus, ou chapitre brut si hors corpus." },
+    other_name: { ...TEXTE_OU_NUL, description: "Nul si l'autre extrémité n'est pas au corpus." },
+    rel_type: { type: "string" },
+    source: { type: "string", enum: ["auto", "cure"], description: "Relevé machine ou à la main." },
+    weight: { type: "integer" },
+    in_corpus: { type: "boolean" },
+    note: TEXTE_OU_NUL,
+    note_lang: {
+      ...TEXTE_OU_NUL,
+      description:
+        "Langue de la note, DANS la charge : un client qui jette la prose garde " +
+        "l'information que la note n'est pas traduite.",
+    },
+  },
+  required: [
+    "direction",
+    "other_id",
+    "other_name",
+    "rel_type",
+    "source",
+    "weight",
+    "in_corpus",
+    "note_lang",
+  ],
+  additionalProperties: false,
+};
+
+const GRAPHE_DES_LOIS: JsonSchema = schemaEnveloppe({
+  type: "object",
+  properties: {
+    law: { type: "string" },
+    lang: { type: "string", enum: ["fr", "en"] },
+    rel_type: TEXTE_OU_NUL,
+    direction: { type: "string", enum: ["out", "in", "both"] },
+    total: { type: "integer", minimum: 0, description: "Arêtes trouvées, avant pagination." },
+    count: { type: "integer", minimum: 0, description: "Arêtes réellement rendues." },
+    relations: { type: "array", items: ARETE },
+  },
+  required: ["law", "lang", "rel_type", "direction", "total", "count", "relations"],
+  additionalProperties: false,
+});
+
 /**
  * Les outils dont la sortie est enveloppée, et eux seuls.
  *
@@ -74,5 +223,7 @@ const LISTE_MATIERES: JsonSchema = schemaEnveloppe({
  *   viole lui-même. La bascule se fait outil par outil ; ce tableau dit où elle en est.
  */
 export const SORTIES: Record<string, JsonSchema> = {
+  legislation_list_laws: CARTE_DU_CORPUS,
   legislation_list_subjects: LISTE_MATIERES,
+  legislation_related_laws: GRAPHE_DES_LOIS,
 };

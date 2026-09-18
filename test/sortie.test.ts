@@ -20,8 +20,8 @@
 import { env, SELF } from "cloudflare:test";
 import { validateArgs } from "@poirierlavoie/socle-juridique/protocole/valide";
 import { beforeAll, describe, expect, it } from "vitest";
-
 import { SORTIES } from "../src/schemas-sortie";
+import { amorcerGabarit } from "./gabarit-corpus";
 
 const URL_MCP = "https://legislation.test/mcp";
 const JETON = "jeton-de-test";
@@ -30,11 +30,17 @@ const e = env as unknown as Record<string, unknown>;
 e.MCP_TOKEN = JETON;
 e.MCP_ENABLED = "true";
 e.SOCLE = "true";
+// Hors ligne : ni Workers AI ni Vectorize ne sont émulés localement (sondage 0.0).
+e.HYBRID_SEARCH = "0";
 
 const db = () => (env as unknown as { DB: D1Database }).DB;
 
 interface Resultat {
-  result: { structuredContent?: Record<string, unknown>; content: Array<{ text: string }> };
+  result: {
+    structuredContent?: Record<string, unknown>;
+    content: Array<{ text: string }>;
+    isError?: boolean;
+  };
 }
 
 async function appeler(nom: string, args: Record<string, unknown> = {}): Promise<Resultat> {
@@ -53,42 +59,18 @@ async function appeler(nom: string, args: Record<string, unknown> = {}): Promise
     }),
   });
   expect(r.status).toBe(200);
-  return (await r.json()) as Resultat;
+  const c = (await r.json()) as Resultat;
+  // Un gabarit qui tombe sur une branche d'ERREUR ne mesure rien : `err()` ne porte aucune
+  // charge structurée, et le schéma la refuserait dans un message qui accuse le schéma.
+  // Mieux vaut échouer ici, en nommant l'appel.
+  expect(
+    c.result.isError ?? false,
+    `${nom} ${JSON.stringify(args)} : ${c.result.content[0]?.text}`,
+  ).toBe(false);
+  return c;
 }
 
-beforeAll(async () => {
-  await db().batch([
-    db()
-      .prepare(
-        "INSERT OR IGNORE INTO subjects (id, label_fr, label_en, label_norm, kind, description_fr, description_en)" +
-          " VALUES (?, ?, ?, ?, ?, ?, ?)",
-      )
-      .bind(
-        "essai-plein",
-        "Matière d'essai",
-        "Test subject",
-        "matiere essai",
-        "prive-ccq",
-        "Description d'essai.",
-        "Test description.",
-      ),
-    // La ligne qui compte : traduction ABSENTE et description ABSENTE, donc `null` en sortie.
-    db()
-      .prepare(
-        "INSERT OR IGNORE INTO subjects (id, label_fr, label_en, label_norm, kind, description_fr, description_en)" +
-          " VALUES (?, ?, ?, ?, ?, ?, ?)",
-      )
-      .bind(
-        "essai-nu",
-        "Matière sans traduction",
-        null,
-        "matiere sans traduction",
-        "specialise",
-        null,
-        null,
-      ),
-  ]);
-});
+beforeAll(() => amorcerGabarit(db()));
 
 /**
  * Un jeu d'arguments par outil enveloppé — plusieurs quand une branche change la charge.
@@ -99,7 +81,17 @@ beforeAll(async () => {
  *   oubli — et c'est exactement l'oubli que la marche 4 doit rendre impossible.
  */
 const GABARITS: Record<string, Array<Record<string, unknown>>> = {
+  // Deux langues : `label` et `description` changent de source selon `lang`, et c'est là
+  // qu'un `null` de traduction remonte.
   legislation_list_subjects: [{}, { lang: "en" }],
+  // Sans filtre, puis avec — `filters` doit rester présent et non nul dans les deux cas.
+  legislation_list_laws: [{}, { fonction: "reglement" }, { structure: false }],
+  // Les deux sens, et le cas HORS CORPUS (`other_name` nul) que seul `essai-code` porte.
+  legislation_related_laws: [
+    { law: "essai-code" },
+    { law: "essai-code", direction: "in" },
+    { law: "essai-code", direction: "out" },
+  ],
 };
 
 describe("G5 — toute charge servie valide contre son `outputSchema`", () => {

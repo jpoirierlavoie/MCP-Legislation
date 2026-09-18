@@ -67,7 +67,11 @@ const moderne = (method: string, params?: Record<string, unknown>) => {
  *   énuméré ici. Un outil qui gagne un `outputSchema` sans entrer dans cette liste rend le
  *   test rouge, et un outil qui le PERD aussi.
  */
-const ENVELOPPES = ["legislation_list_subjects"];
+const ENVELOPPES = [
+  "legislation_list_laws",
+  "legislation_list_subjects",
+  "legislation_related_laws",
+];
 
 type Descripteur = Record<string, unknown> & { name: string };
 

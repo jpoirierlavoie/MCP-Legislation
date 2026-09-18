@@ -1,12 +1,10 @@
 // Enregistrement des outils MCP « Lois du Québec » (legislation_*). Tous en lecture seule.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { enveloppe } from "@poirierlavoie/socle-juridique";
 import { z } from "zod";
 // SOURCE UNIQUE des titres (R10) : le titre servi par tools/list et celui affiché sur la
 // page publique sont la MÊME valeur, pas deux copies. catalogue.json porte en outre la
 // prose longue de la page. Parité outils <-> catalogue épinglée par tests/catalogue.test.mjs.
 import catalogue from "../catalogue.json";
-import { GARDES } from "./gardes";
 import {
   type ArticleJoined,
   type ArticleRow,
@@ -43,7 +41,7 @@ import {
   translateDivisionPath,
 } from "./lib";
 import { rank, tokenize, WEIGHTS } from "./relevance";
-import { CONTEXTE, provenanceCorpus } from "./sortie";
+import { envelopper } from "./sortie";
 
 const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom].title_fr;
 
@@ -318,36 +316,41 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     const body = laws
       .map((l) => renderLaw(l, outlines.get(l.id), (lang ?? "fr") as Lang))
       .join("\n");
-    return ok(`${header}\n${body}`, {
-      filters: { fonction: fonction ?? null, forum: forum ?? null, subject: subject ?? null },
-      count: laws.length,
-      laws: laws.map((l) => ({
-        id: l.id,
-        name_fr: l.name_fr,
-        name_en: l.name_en,
-        // Clé HISTORIQUE conservée le temps de la migration : la retirer ici serait
-        // une rupture de contrat pour tout consommateur du champ typé. Le passage à
-        // `official_cite` seul est un commit séparé, annoncé.
-        rlrq_cite: citeOf(l),
-        official_cite: citeOf(l),
-        langs: l.langs,
-        consol_date_fr: l.consol_date_fr,
-        consol_date_en: l.consol_date_en,
-        article_count: l.article_count,
-        fonction: l.fonction,
-        forum: l.forum,
-        // PAS de repli sur name_fr : la portée éditoriale n'a jamais été rédigée (79 lois
-        // sur 79 à NULL), et substituer le titre servait au client un champ VIDE AYANT
-        // L'AIR PLEIN — sans rien qui dise que c'en était un repli. La sortie texte, elle,
-        // omettait honnêtement la ligne (voir renderLaw) : les deux surfaces du même outil
-        // se contredisaient. Corollaire structuré de R4, décision 001.
-        scope: l.scope_fr,
-        parent_law_id: l.parent_law_id,
-        subjects: l.subjects,
-        mapped_divisions: l.mapped_divisions,
-        structure: outlines.get(l.id) ?? null,
-      })),
-    });
+    return ok(
+      `${header}\n${body}`,
+      // La carte du corpus porte fonction, forum et matières : toutes des attributs de
+      // CURATION, qui orientent la lecture sans la remplacer.
+      envelopper("CarteDuCorpus", ["REPERAGE_HEURISTIQUE"], {
+        filters: { fonction: fonction ?? null, forum: forum ?? null, subject: subject ?? null },
+        count: laws.length,
+        laws: laws.map((l) => ({
+          id: l.id,
+          name_fr: l.name_fr,
+          name_en: l.name_en,
+          // Clé HISTORIQUE conservée le temps de la migration : la retirer ici serait
+          // une rupture de contrat pour tout consommateur du champ typé. Le passage à
+          // `official_cite` seul est un commit séparé, annoncé.
+          rlrq_cite: citeOf(l),
+          official_cite: citeOf(l),
+          langs: l.langs,
+          consol_date_fr: l.consol_date_fr,
+          consol_date_en: l.consol_date_en,
+          article_count: l.article_count,
+          fonction: l.fonction,
+          forum: l.forum,
+          // PAS de repli sur name_fr : la portée éditoriale n'a jamais été rédigée (79 lois
+          // sur 79 à NULL), et substituer le titre servait au client un champ VIDE AYANT
+          // L'AIR PLEIN — sans rien qui dise que c'en était un repli. La sortie texte, elle,
+          // omettait honnêtement la ligne (voir renderLaw) : les deux surfaces du même outil
+          // se contredisaient. Corollaire structuré de R4, décision 001.
+          scope: l.scope_fr,
+          parent_law_id: l.parent_law_id,
+          subjects: l.subjects,
+          mapped_divisions: l.mapped_divisions,
+          structure: outlines.get(l.id) ?? null,
+        })),
+      }),
+    );
   };
   outils.legislation_list_laws = H_LIST_LAWS as Gestionnaire;
   server?.registerTool(
@@ -407,31 +410,23 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     // voyage À L'INTÉRIEUR des données plutôt qu'à côté.
     return ok(
       `${subs.length} ${en ? "subject areas" : "matières"} :${body}`,
-      enveloppe({
-        contexte: CONTEXTE,
-        type: "ListeMatieres",
-        donnees: {
-          count: subs.length,
-          subjects: subs.map((s) => ({
-            id: s.id,
-            label_fr: s.label_fr,
-            label_en: s.label_en,
-            kind: s.kind,
-            label: libelle(s),
-            description: descr(s),
-            description_fr: s.description_fr,
-            description_en: s.description_en,
-            laws_count: s.laws_count,
-            divisions_count: s.divisions_count,
-          })),
-        },
-        provenance: provenanceCorpus(),
-        registre: GARDES,
-        // La taxonomie est une CURATION : elle propose où lire, elle ne dit pas le droit.
-        // C'est exactement ce que `REPERAGE_HEURISTIQUE` énonce, et l'outil la porte donc
-        // toujours — jamais `AUCUNE_RESERVE`.
-        obligatoires: ["REPERAGE_HEURISTIQUE"],
-      }) as unknown as Record<string, unknown>,
+      // La taxonomie est une CURATION : elle propose où lire, elle ne dit pas le droit.
+      // C'est exactement ce que `REPERAGE_HEURISTIQUE` énonce.
+      envelopper("ListeMatieres", ["REPERAGE_HEURISTIQUE"], {
+        count: subs.length,
+        subjects: subs.map((s) => ({
+          id: s.id,
+          label_fr: s.label_fr,
+          label_en: s.label_en,
+          kind: s.kind,
+          label: libelle(s),
+          description: descr(s),
+          description_fr: s.description_fr,
+          description_en: s.description_en,
+          laws_count: s.laws_count,
+          divisions_count: s.divisions_count,
+        })),
+      }),
     );
   };
   outils.legislation_list_subjects = H_LIST_SUBJECTS as Gestionnaire;
@@ -519,27 +514,32 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
       `${all.length} ${L.relations} '${law}'` +
       `${edges.length < all.length ? L.affichees(edges.length) : ""}` +
       `${hors ? L.dontHors(hors) : ""} :`;
-    return ok(`${head}\n${lines.join("\n")}`, {
-      law,
-      lang,
-      rel_type: rel_type ?? null,
-      direction,
-      total: all.length,
-      count: edges.length,
-      relations: edges.map((e) => ({
-        direction: e.direction,
-        other_id: e.other_id,
-        other_name: e.other_name,
-        rel_type: e.rel_type,
-        source: e.source,
-        weight: e.weight,
-        in_corpus: !!e.in_corpus,
-        note: e.note,
-        // La langue de la note est DANS la charge utile (corollaire structuré de R4) :
-        // un client qui jette la prose garde l'information que la note n'est pas traduite.
-        note_lang: e.note ? "fr" : null,
-      })),
-    });
+    return ok(
+      `${head}\n${lines.join("\n")}`,
+      // Le graphe est bâti pour moitié automatiquement (`source: "auto"`) : une arête dit
+      // qu'un texte en cite un autre, jamais que l'un régit l'autre.
+      envelopper("GrapheDesLois", ["REPERAGE_HEURISTIQUE"], {
+        law,
+        lang,
+        rel_type: rel_type ?? null,
+        direction,
+        total: all.length,
+        count: edges.length,
+        relations: edges.map((e) => ({
+          direction: e.direction,
+          other_id: e.other_id,
+          other_name: e.other_name,
+          rel_type: e.rel_type,
+          source: e.source,
+          weight: e.weight,
+          in_corpus: !!e.in_corpus,
+          note: e.note,
+          // La langue de la note est DANS la charge utile (corollaire structuré de R4) :
+          // un client qui jette la prose garde l'information que la note n'est pas traduite.
+          note_lang: e.note ? "fr" : null,
+        })),
+      }),
+    );
   };
   outils.legislation_related_laws = H_RELATED_LAWS as Gestionnaire;
   server?.registerTool(

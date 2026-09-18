@@ -319,6 +319,35 @@ async function runEval(e) {
 
 // --- fumée des autres outils de découverte ------------------------------------
 
+/**
+ * La charge structurée d'un outil ENVELOPPÉ (marche 4).
+ *
+ * ⚠ LECTURE STRICTE, SANS REPLI. `r.structuredContent?.donnees` et rien d'autre : un
+ *   `?? r.structuredContent` accepterait la forme plate d'avant et la forme enveloppée sans
+ *   distinguer, c'est-à-dire masquerait précisément la bascule qu'on est en train de
+ *   mesurer. Un outil non encore enveloppé se lit directement, comme avant.
+ */
+const donnees = (r) => r.structuredContent?.donnees;
+
+/**
+ * Ce que TOUTE enveloppe doit porter, quel que soit l'outil : son type, sa provenance, et au
+ * moins une réserve. C'est G5 contre le serveur vivant — la suite locale la vérifie déjà,
+ * mais sur un corpus d'essai de quatre articles.
+ */
+function enveloppeSaine(nom, type, r, add) {
+  const sc = r.structuredContent ?? {};
+  const gardes = sc.gardes ?? [];
+  add(
+    `${nom} : l'enveloppe porte son type, son autorité et sa réserve`,
+    sc["@type"] === type &&
+      sc.provenance?.autorite === "Éditeur officiel du Québec" &&
+      gardes.length > 0 &&
+      gardes.every((g) => g.code && g.severite && (g.texte ?? "").length > 0),
+    `@type=${sc["@type"]}, autorite=${sc.provenance?.autorite ?? "(absente)"}, ` +
+      `gardes=${gardes.map((g) => g.code).join(",") || "(vide)"}`,
+  );
+}
+
 async function smokeTests() {
   const checks = [];
   const add = (nom, ok, detail = "") => checks.push({ nom, ok, detail });
@@ -338,10 +367,10 @@ async function smokeTests() {
   const laws = await callTool("legislation_list_laws", {});
   add(
     `list_laws : ${servis} lois servies`,
-    laws.structuredContent?.count === servis,
-    `count=${laws.structuredContent?.count}, déclaré=${servis}`,
+    donnees(laws)?.count === servis,
+    `count=${donnees(laws)?.count}, déclaré=${servis}`,
   );
-  const ccq = laws.structuredContent?.laws?.find((l) => l.id === "ccq");
+  const ccq = donnees(laws)?.laws?.find((l) => l.id === "ccq");
   add(
     "list_laws : ccq porte ses Livres (matières)",
     (ccq?.mapped_divisions?.length ?? 0) >= 10,
@@ -351,15 +380,15 @@ async function smokeTests() {
   const filtered = await callTool("legislation_list_laws", { fonction: "tarif" });
   add(
     "list_laws : filtre fonction='tarif'",
-    filtered.structuredContent?.count === 4,
-    `count=${filtered.structuredContent?.count}`,
+    donnees(filtered)?.count === 4,
+    `count=${donnees(filtered)?.count}`,
   );
 
   const bySubject = await callTool("legislation_list_laws", { subject: "louage-residentiel" });
   add(
     "list_laws : filtre subject='louage-residentiel'",
-    (bySubject.structuredContent?.count ?? 0) >= 3,
-    `count=${bySubject.structuredContent?.count}`,
+    (donnees(bySubject)?.count ?? 0) >= 3,
+    `count=${donnees(bySubject)?.count}`,
   );
 
   // DÉRIVÉ de taxonomy.json, plus écrit en dur — même motif que le décompte de lois
@@ -373,7 +402,7 @@ async function smokeTests() {
   // ENVELOPPÉ depuis la marche 4 : les clefs d'avant vivent sous `donnees`. Lecture
   // EXPLICITE et non tolérante — un repli `?? structuredContent` accepterait les deux
   // formes et masquerait précisément la bascule qu'on est en train de mesurer.
-  const subsD = subs.structuredContent?.donnees;
+  const subsD = donnees(subs);
   add(
     `list_subjects : ${matieres} matières (taxonomy.json chargée en base)`,
     subsD?.count === matieres,
@@ -382,23 +411,13 @@ async function smokeTests() {
         ? ""
         : " — `discovery/load.py --target cloud` a-t-il été rejoué ?"),
   );
-  // G5 contre le serveur VIVANT. La suite locale valide déjà la charge contre le schéma
-  // publié, mais sur une base d'essai de deux lignes : c'est ici qu'on voit l'enveloppe
-  // tenir sur le vrai corpus, et c'est ici qu'on verrait la réserve disparaître.
-  const gardes = subs.structuredContent?.gardes ?? [];
-  add(
-    "list_subjects : l'enveloppe porte sa réserve et son autorité",
-    gardes.some((g) => g.code === "REPERAGE_HEURISTIQUE" && (g.texte ?? "").length > 0) &&
-      subs.structuredContent?.provenance?.autorite === "Éditeur officiel du Québec" &&
-      subs.structuredContent?.["@type"] === "ListeMatieres",
-    `gardes=${gardes.map((g) => g.code).join(",") || "(vide)"}, ` +
-      `autorite=${subs.structuredContent?.provenance?.autorite ?? "(absente)"}`,
-  );
+  enveloppeSaine("list_subjects", "ListeMatieres", subs, add);
+  enveloppeSaine("list_laws", "CarteDuCorpus", laws, add);
 
   // Toutes les matières doivent être traduites : c'est la surface d'appariement du signal
   // S1, sans quoi le routeur reste muet en anglais.
   const subsEn = await callTool("legislation_list_subjects", { lang: "en" });
-  const sansEn = (subsEn.structuredContent?.donnees?.subjects ?? [])
+  const sansEn = (donnees(subsEn)?.subjects ?? [])
     .filter((s) => !s.label_en || !s.description_en)
     .map((s) => s.id);
   add(
@@ -442,9 +461,11 @@ async function smokeTests() {
   const rel = await callTool("legislation_related_laws", { law: "cpc", rel_type: "reglement-de" });
   add(
     "related_laws : cpc a 6 règlements",
-    rel.structuredContent?.total === 6,
-    `total=${rel.structuredContent?.total}`,
+    donnees(rel)?.total === 6,
+    `total=${donnees(rel)?.total}`,
   );
+
+  enveloppeSaine("related_laws", "GrapheDesLois", rel, add);
 
   const bad = await callTool("legislation_related_laws", { law: "inexistante" });
   add(
@@ -455,7 +476,7 @@ async function smokeTests() {
   // L'outil DÉCLARAIT `lang` sans jamais le lire : un client demandant l'anglais recevait
   // noms de lois ET notes curées en français, sans étiquette — « faux, servi, silencieux ».
   const relEn = await callTool("legislation_related_laws", { law: "c-27.1", lang: "en" });
-  const relsEn = relEn.structuredContent?.relations ?? [];
+  const relsEn = donnees(relEn)?.relations ?? [];
   const c19 = relsEn.find((r) => r.other_id === "c-19");
   add(
     "related_laws (lang=en) : nom de loi en ANGLAIS",
@@ -477,7 +498,7 @@ async function smokeTests() {
   const relFr = await callTool("legislation_related_laws", { law: "c-27.1" });
   add(
     "related_laws (défaut fr) : nom de loi en français, aucune marque [fr]",
-    (relFr.structuredContent?.relations ?? []).find((r) => r.other_id === "c-19")?.other_name ===
+    (donnees(relFr)?.relations ?? []).find((r) => r.other_id === "c-19")?.other_name ===
       "Loi sur les cités et villes" && !/\[fr\]/.test(relFr.content?.[0]?.text ?? ""),
   );
 
@@ -485,7 +506,7 @@ async function smokeTests() {
   // alors que label_en est peuplé sur les 43 matières. Contrôler les ENTRÉES, pas l'en-tête :
   // c'est la leçon déjà tirée pour list_subjects et jamais reportée ici.
   const lawsEn = await callTool("legislation_list_laws", { lang: "en", structure: false });
-  const cmEn = lawsEn.structuredContent?.laws?.find((l) => l.id === "c-27.1");
+  const cmEn = donnees(lawsEn)?.laws?.find((l) => l.id === "c-27.1");
   add(
     "list_laws (lang=en) : libellés de matières en ANGLAIS",
     (cmEn?.subjects ?? []).includes("Municipal Law"),
@@ -494,7 +515,7 @@ async function smokeTests() {
   const lawsFr = await callTool("legislation_list_laws", { lang: "fr", structure: false });
   add(
     "list_laws (lang=fr) : libellés de matières en français",
-    (lawsFr.structuredContent?.laws?.find((l) => l.id === "c-27.1")?.subjects ?? []).includes(
+    (donnees(lawsFr)?.laws?.find((l) => l.id === "c-27.1")?.subjects ?? []).includes(
       "Droit municipal",
     ),
   );
@@ -1124,8 +1145,8 @@ async function smokeTests() {
     const rows = (html.match(/data-law-id="/g) ?? []).length;
     add(
       "page : autant de lois affichées que list_laws en déclare",
-      rows === laws.structuredContent?.count,
-      `page=${rows} list_laws=${laws.structuredContent?.count}`,
+      rows === donnees(laws)?.count,
+      `page=${rows} list_laws=${donnees(laws)?.count}`,
     );
 
     // Le HTML public ne doit transporter AUCUN secret. Testé par MOTIF, jamais par
