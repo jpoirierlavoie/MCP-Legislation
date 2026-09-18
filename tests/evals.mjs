@@ -261,25 +261,12 @@ const matches = (cand, exp) =>
 
 const fmt = (c) => `${c.law}${c.division_path ? `›${c.division_path}` : ""}(${c.score})`;
 
-/**
- * La charge structurée d'un outil ENVELOPPÉ (marche 4).
- *
- * ⚠ LECTURE STRICTE, SANS REPLI. `r.structuredContent?.donnees` et rien d'autre : un
- *   `?? r.structuredContent` accepterait la forme plate d'avant et la forme enveloppée sans
- *   distinguer, c'est-à-dire masquerait précisément la bascule qu'on est en train de
- *   mesurer.
- *
- * Les DIX outils sont enveloppés depuis le 2026-09-17 : plus aucune lecture plate ne doit
- * subsister dans ce fichier.
- */
-const donnees = (r) => r.structuredContent?.donnees;
-
 async function runEval(e) {
   const res = await callTool(
     "legislation_find_relevant",
     e.lang ? { query: e.query, lang: e.lang } : { query: e.query },
   );
-  const cands = donnees(res)?.candidates ?? [];
+  const cands = res.structuredContent?.candidates ?? [];
   const failures = [];
 
   if (e.none) {
@@ -332,25 +319,6 @@ async function runEval(e) {
 
 // --- fumée des autres outils de découverte ------------------------------------
 
-/**
- * Ce que TOUTE enveloppe doit porter, quel que soit l'outil : son type, sa provenance, et au
- * moins une réserve. C'est G5 contre le serveur vivant — la suite locale la vérifie déjà,
- * mais sur un corpus d'essai de quatre articles.
- */
-function enveloppeSaine(nom, type, r, add) {
-  const sc = r.structuredContent ?? {};
-  const gardes = sc.gardes ?? [];
-  add(
-    `${nom} : l'enveloppe porte son type, son autorité et sa réserve`,
-    sc["@type"] === type &&
-      sc.provenance?.autorite === "Éditeur officiel du Québec" &&
-      gardes.length > 0 &&
-      gardes.every((g) => g.code && g.severite && (g.texte ?? "").length > 0),
-    `@type=${sc["@type"]}, autorite=${sc.provenance?.autorite ?? "(absente)"}, ` +
-      `gardes=${gardes.map((g) => g.code).join(",") || "(vide)"}`,
-  );
-}
-
 async function smokeTests() {
   const checks = [];
   const add = (nom, ok, detail = "") => checks.push({ nom, ok, detail });
@@ -370,10 +338,10 @@ async function smokeTests() {
   const laws = await callTool("legislation_list_laws", {});
   add(
     `list_laws : ${servis} lois servies`,
-    donnees(laws)?.count === servis,
-    `count=${donnees(laws)?.count}, déclaré=${servis}`,
+    laws.structuredContent?.count === servis,
+    `count=${laws.structuredContent?.count}, déclaré=${servis}`,
   );
-  const ccq = donnees(laws)?.laws?.find((l) => l.id === "ccq");
+  const ccq = laws.structuredContent?.laws?.find((l) => l.id === "ccq");
   add(
     "list_laws : ccq porte ses Livres (matières)",
     (ccq?.mapped_divisions?.length ?? 0) >= 10,
@@ -383,15 +351,15 @@ async function smokeTests() {
   const filtered = await callTool("legislation_list_laws", { fonction: "tarif" });
   add(
     "list_laws : filtre fonction='tarif'",
-    donnees(filtered)?.count === 4,
-    `count=${donnees(filtered)?.count}`,
+    filtered.structuredContent?.count === 4,
+    `count=${filtered.structuredContent?.count}`,
   );
 
   const bySubject = await callTool("legislation_list_laws", { subject: "louage-residentiel" });
   add(
     "list_laws : filtre subject='louage-residentiel'",
-    (donnees(bySubject)?.count ?? 0) >= 3,
-    `count=${donnees(bySubject)?.count}`,
+    (bySubject.structuredContent?.count ?? 0) >= 3,
+    `count=${bySubject.structuredContent?.count}`,
   );
 
   // DÉRIVÉ de taxonomy.json, plus écrit en dur — même motif que le décompte de lois
@@ -402,25 +370,19 @@ async function smokeTests() {
   const matieres = JSON.parse(readFileSync(new URL("../taxonomy.json", import.meta.url), "utf8"))
     .subjects.length;
   const subs = await callTool("legislation_list_subjects", {});
-  // ENVELOPPÉ depuis la marche 4 : les clefs d'avant vivent sous `donnees`. Lecture
-  // EXPLICITE et non tolérante — un repli `?? structuredContent` accepterait les deux
-  // formes et masquerait précisément la bascule qu'on est en train de mesurer.
-  const subsD = donnees(subs);
   add(
     `list_subjects : ${matieres} matières (taxonomy.json chargée en base)`,
-    subsD?.count === matieres,
-    `count=${subsD?.count}, taxonomy.json=${matieres}` +
-      (subsD?.count === matieres
+    subs.structuredContent?.count === matieres,
+    `count=${subs.structuredContent?.count}, taxonomy.json=${matieres}` +
+      (subs.structuredContent?.count === matieres
         ? ""
         : " — `discovery/load.py --target cloud` a-t-il été rejoué ?"),
   );
-  enveloppeSaine("list_subjects", "ListeMatieres", subs, add);
-  enveloppeSaine("list_laws", "CarteDuCorpus", laws, add);
 
   // Toutes les matières doivent être traduites : c'est la surface d'appariement du signal
   // S1, sans quoi le routeur reste muet en anglais.
   const subsEn = await callTool("legislation_list_subjects", { lang: "en" });
-  const sansEn = (donnees(subsEn)?.subjects ?? [])
+  const sansEn = (subsEn.structuredContent?.subjects ?? [])
     .filter((s) => !s.label_en || !s.description_en)
     .map((s) => s.id);
   add(
@@ -464,11 +426,9 @@ async function smokeTests() {
   const rel = await callTool("legislation_related_laws", { law: "cpc", rel_type: "reglement-de" });
   add(
     "related_laws : cpc a 6 règlements",
-    donnees(rel)?.total === 6,
-    `total=${donnees(rel)?.total}`,
+    rel.structuredContent?.total === 6,
+    `total=${rel.structuredContent?.total}`,
   );
-
-  enveloppeSaine("related_laws", "GrapheDesLois", rel, add);
 
   const bad = await callTool("legislation_related_laws", { law: "inexistante" });
   add(
@@ -479,7 +439,7 @@ async function smokeTests() {
   // L'outil DÉCLARAIT `lang` sans jamais le lire : un client demandant l'anglais recevait
   // noms de lois ET notes curées en français, sans étiquette — « faux, servi, silencieux ».
   const relEn = await callTool("legislation_related_laws", { law: "c-27.1", lang: "en" });
-  const relsEn = donnees(relEn)?.relations ?? [];
+  const relsEn = relEn.structuredContent?.relations ?? [];
   const c19 = relsEn.find((r) => r.other_id === "c-19");
   add(
     "related_laws (lang=en) : nom de loi en ANGLAIS",
@@ -501,7 +461,7 @@ async function smokeTests() {
   const relFr = await callTool("legislation_related_laws", { law: "c-27.1" });
   add(
     "related_laws (défaut fr) : nom de loi en français, aucune marque [fr]",
-    (donnees(relFr)?.relations ?? []).find((r) => r.other_id === "c-19")?.other_name ===
+    (relFr.structuredContent?.relations ?? []).find((r) => r.other_id === "c-19")?.other_name ===
       "Loi sur les cités et villes" && !/\[fr\]/.test(relFr.content?.[0]?.text ?? ""),
   );
 
@@ -509,7 +469,7 @@ async function smokeTests() {
   // alors que label_en est peuplé sur les 43 matières. Contrôler les ENTRÉES, pas l'en-tête :
   // c'est la leçon déjà tirée pour list_subjects et jamais reportée ici.
   const lawsEn = await callTool("legislation_list_laws", { lang: "en", structure: false });
-  const cmEn = donnees(lawsEn)?.laws?.find((l) => l.id === "c-27.1");
+  const cmEn = lawsEn.structuredContent?.laws?.find((l) => l.id === "c-27.1");
   add(
     "list_laws (lang=en) : libellés de matières en ANGLAIS",
     (cmEn?.subjects ?? []).includes("Municipal Law"),
@@ -518,7 +478,7 @@ async function smokeTests() {
   const lawsFr = await callTool("legislation_list_laws", { lang: "fr", structure: false });
   add(
     "list_laws (lang=fr) : libellés de matières en français",
-    (donnees(lawsFr)?.laws?.find((l) => l.id === "c-27.1")?.subjects ?? []).includes(
+    (lawsFr.structuredContent?.laws?.find((l) => l.id === "c-27.1")?.subjects ?? []).includes(
       "Droit municipal",
     ),
   );
@@ -529,7 +489,7 @@ async function smokeTests() {
   // le pipeline (Python) et le serveur (TS) l'avait vidé silencieusement sur 36 lois sur 38
   // — mesuré à l'époque où le corpus comptait 38 textes.
   // On l'exerce donc sur TOUTES les lois, pas seulement sur ccq.
-  const toutes = donnees(laws)?.laws ?? [];
+  const toutes = laws.structuredContent?.laws ?? [];
   const cassees = [];
   for (const l of toutes) {
     const r = await callTool("legislation_get_articles", { law: l.id, from: "1", to: "3" });
@@ -548,7 +508,7 @@ async function smokeTests() {
   // le compilateur ne lit pas le SQL. D'où ces contrôles sur la FORME de la sortie.
   {
     const r = await callTool("legislation_get_articles", { law: "ccq", from: "1", to: "5" });
-    const a = donnees(r)?.articles?.[0];
+    const a = r.structuredContent?.articles?.[0];
     add(
       "get_articles : chaque article porte number, text, division_path, repealed",
       !!a &&
@@ -577,7 +537,7 @@ async function smokeTests() {
   ]) {
     for (const lang of ["fr", "en"]) {
       const r = await callTool("legislation_get_articles", { law, from: a, to: b, lang });
-      const nums = (donnees(r)?.articles ?? []).map((x) => x.number);
+      const nums = (r.structuredContent?.articles ?? []).map((x) => x.number);
       add(
         `get_articles : plage ${law} ${a}..${b} (${lang}) exacte, sans les voisins à clé partagée`,
         nums.length === 2 && nums[0] === a && nums[1] === b,
@@ -585,8 +545,8 @@ async function smokeTests() {
       );
       add(
         `get_articles : plage ${law} ${a}..${b} (${lang}) étiquetée 'document'`,
-        donnees(r)?.range_resolution === "document",
-        `range_resolution=${donnees(r)?.range_resolution}`,
+        r.structuredContent?.range_resolution === "document",
+        `range_resolution=${r.structuredContent?.range_resolution}`,
       );
     }
   }
@@ -598,14 +558,15 @@ async function smokeTests() {
     const n = await callTool("legislation_get_articles", { law: "ccq", numbers: ["1457", "1590"] });
     add(
       "get_articles : range_resolution présent et null en mode numbers[]",
-      "range_resolution" in (donnees(n) ?? {}) && donnees(n).range_resolution === null,
-      `range_resolution=${JSON.stringify(donnees(n)?.range_resolution)}`,
+      "range_resolution" in (n.structuredContent ?? {}) &&
+        n.structuredContent.range_resolution === null,
+      `range_resolution=${JSON.stringify(n.structuredContent?.range_resolution)}`,
     );
     const o = await callTool("legislation_get_articles", { law: "ccq", from: "1", to: "9999" });
     add(
       "get_articles : borne ouverte étiquetée 'cle' (repli sur la clé de tri)",
-      donnees(o)?.range_resolution === "cle",
-      `range_resolution=${donnees(o)?.range_resolution}`,
+      o.structuredContent?.range_resolution === "cle",
+      `range_resolution=${o.structuredContent?.range_resolution}`,
     );
     // Un pseudo-article comme borne retombe aussi sur la clé : son `id` ne suit pas
     // l'ordre du document (l'émission du parseur le place hors de sa position réelle).
@@ -616,8 +577,8 @@ async function smokeTests() {
     });
     add(
       "get_articles : pseudo-article en borne étiqueté 'cle'",
-      donnees(p)?.range_resolution === "cle",
-      `range_resolution=${donnees(p)?.range_resolution}`,
+      p.structuredContent?.range_resolution === "cle",
+      `range_resolution=${p.structuredContent?.range_resolution}`,
     );
   }
 
@@ -633,8 +594,8 @@ async function smokeTests() {
     const one = await callTool("legislation_get_article", { law: "a-2.1", article: "26" });
     add(
       "get_article : un article abrogé est marqué abrogé, en données ET en prose",
-      donnees(one)?.repealed === true && /abrog/i.test(one.content?.[0]?.text ?? ""),
-      `a-2.1 art. 26 : repealed=${donnees(one)?.repealed} ` +
+      one.structuredContent?.repealed === true && /abrog/i.test(one.content?.[0]?.text ?? ""),
+      `a-2.1 art. 26 : repealed=${one.structuredContent?.repealed} ` +
         `prose=${/abrog/i.test(one.content?.[0]?.text ?? "")}`,
     );
   }
@@ -643,7 +604,7 @@ async function smokeTests() {
   // Le contrôle voisin ne teste que l'absence d'erreur — il passerait.
   {
     const st = await callTool("legislation_get_structure", { law: "ccq" });
-    const tree = donnees(st)?.tree;
+    const tree = st.structuredContent?.tree;
     const profondeur = (ns, d = 1) =>
       ns.reduce((m, n) => Math.max(m, n.children?.length ? profondeur(n.children, d + 1) : d), 0);
     const ok2 = Array.isArray(tree) && tree.length > 0 && profondeur(tree) > 1;
@@ -679,14 +640,16 @@ async function smokeTests() {
   });
   add(
     "resolve_reference : chapitre RLRQ correctement reconnu",
-    donnees(t16)?.resolved?.law === "t-16" && donnees(t16)?.resolved?.number === "12",
-    `obtenu ${donnees(t16)?.resolved?.law}/${donnees(t16)?.resolved?.number}`,
+    t16.structuredContent?.resolved?.law === "t-16" &&
+      t16.structuredContent?.resolved?.number === "12",
+    `obtenu ${t16.structuredContent?.resolved?.law}/${t16.structuredContent?.resolved?.number}`,
   );
   const ccqRef = await callTool("legislation_resolve_reference", { citation: "art. 1457 C.c.Q." });
   add(
     "resolve_reference : abréviation C.c.Q. toujours reconnue",
-    donnees(ccqRef)?.resolved?.law === "ccq" && donnees(ccqRef)?.resolved?.number === "1457",
-    `obtenu ${donnees(ccqRef)?.resolved?.law}/${donnees(ccqRef)?.resolved?.number}`,
+    ccqRef.structuredContent?.resolved?.law === "ccq" &&
+      ccqRef.structuredContent?.resolved?.number === "1457",
+    `obtenu ${ccqRef.structuredContent?.resolved?.law}/${ccqRef.structuredContent?.resolved?.number}`,
   );
 
   // Une source juridique sans date de consolidation n'est pas citable : les 78 doivent l'avoir.
@@ -700,7 +663,7 @@ async function smokeTests() {
   // Les identifiants Irosoft sont propres à la langue : une piste rendue en anglais doit
   // porter un chemin ANGLAIS, sinon get_division(lang='en') la refuse.
   const enLaws = await callTool("legislation_list_laws", { lang: "en" });
-  const ccqEn = donnees(enLaws)?.laws?.find((l) => l.id === "ccq");
+  const ccqEn = enLaws.structuredContent?.laws?.find((l) => l.id === "ccq");
   const premier = ccqEn?.mapped_divisions?.[0];
   const ouvrable = premier
     ? await callTool("legislation_get_division", {
@@ -725,7 +688,7 @@ async function smokeTests() {
   add(
     "resolve_reference : chapitre hors corpus refusé, pas rabattu sur un voisin",
     horsCorpus.isError === true,
-    horsCorpus.isError ? "" : `résolu à tort en ${donnees(horsCorpus)?.resolved?.law}`,
+    horsCorpus.isError ? "" : `résolu à tort en ${horsCorpus.structuredContent?.resolved?.law}`,
   );
 
   // DEUX chapitres du corpus dont l'un préfixe l'autre : le plus long doit gagner.
@@ -742,8 +705,8 @@ async function smokeTests() {
     const r = await callTool("legislation_resolve_reference", { citation: cite });
     add(
       `resolve_reference : « ${cite.replace("RLRQ, c. ", "")} » -> ${attendu}`,
-      donnees(r)?.resolved?.law === attendu,
-      `obtenu ${donnees(r)?.resolved?.law ?? "(refus)"}`,
+      r.structuredContent?.resolved?.law === attendu,
+      `obtenu ${r.structuredContent?.resolved?.law ?? "(refus)"}`,
     );
   }
 
@@ -754,15 +717,16 @@ async function smokeTests() {
   });
   add(
     "resolve_reference : marqueur « a. » et chapitre non confondu avec l'article",
-    donnees(marqueurA)?.resolved?.law === "t-16" && donnees(marqueurA)?.resolved?.number === "12",
-    `obtenu ${donnees(marqueurA)?.resolved?.law}/${donnees(marqueurA)?.resolved?.number}`,
+    marqueurA.structuredContent?.resolved?.law === "t-16" &&
+      marqueurA.structuredContent?.resolved?.number === "12",
+    `obtenu ${marqueurA.structuredContent?.resolved?.law}/${marqueurA.structuredContent?.resolved?.number}`,
   );
 
   const frEn = await callTool("legislation_find_relevant", {
     query: "residential lease",
     lang: "en",
   });
-  const s1 = (donnees(frEn)?.candidates ?? []).find((c) => c.division_path);
+  const s1 = (frEn.structuredContent?.candidates ?? []).find((c) => c.division_path);
   add(
     "find_relevant (lang=en) : pas de chemin français dans une réponse anglaise",
     !s1 || !/l_(premier|deuxieme|troisieme|quatrieme|cinquieme|sixieme)/.test(s1.division_path),
@@ -777,7 +741,9 @@ async function smokeTests() {
     "v2 1.1 : élargissement corpus sur zéro résultat (étiqueté)",
     widen.isError !== true &&
       /Aucun résultat dans b-9/.test(widen.content?.[0]?.text ?? "") &&
-      (donnees(widen)?.results ?? []).some((r) => r.law_id === "cpc" && r.number === "490"),
+      (widen.structuredContent?.results ?? []).some(
+        (r) => r.law_id === "cpc" && r.number === "490",
+      ),
     (widen.content?.[0]?.text ?? "").slice(0, 60),
   );
 
@@ -785,9 +751,9 @@ async function smokeTests() {
   const scoped = await callTool("legislation_search_text", { query: "extranéité", law: "ccq" });
   add(
     "v2 1.1 : aperçu « ailleurs au corpus » sur recherche restreinte avec résultats",
-    donnees(scoped)?.fallback === null &&
-      (donnees(scoped)?.results ?? []).every((r) => r.law_id === "ccq") &&
-      (donnees(scoped)?.elsewhere?.results ?? []).some(
+    scoped.structuredContent?.fallback === null &&
+      (scoped.structuredContent?.results ?? []).every((r) => r.law_id === "ccq") &&
+      (scoped.structuredContent?.elsewhere?.results ?? []).some(
         (r) => r.law_id === "cpc" && r.number === "490",
       ),
   );
@@ -799,7 +765,7 @@ async function smokeTests() {
     query: "signification hors du Québec délai",
     law: "cpc",
   });
-  const fondTop5 = (donnees(fond)?.results ?? []).slice(0, 5);
+  const fondTop5 = (fond.structuredContent?.results ?? []).slice(0, 5);
   add(
     "v2 1.2/2.4 : cas fondateur — cpc 490 top 5, chemin étiqueté (LOO ou sémantique)",
     (/terme ignoré : « hors »/.test(fond.content?.[0]?.text ?? "") ||
@@ -817,18 +783,18 @@ async function smokeTests() {
     query: "vice caché garantie qualité",
     limit: 5,
   });
-  const flexTop3 = (donnees(flexion)?.results ?? []).slice(0, 3);
+  const flexTop3 = (flexion.structuredContent?.results ?? []).slice(0, 3);
   add(
     "repérage : un leave-one-out d'un seul résultat ne masque plus le OU (ccq 1726 top 3)",
-    donnees(flexion)?.fallback === "or_relax" &&
+    flexion.structuredContent?.fallback === "or_relax" &&
       flexTop3.some((r) => r.law_id === "ccq" && r.number === "1726"),
-    `${donnees(flexion)?.fallback} — ${flexTop3.map((r) => `${r.law_id}|${r.number}`).join(", ")}`,
+    `${flexion.structuredContent?.fallback} — ${flexTop3.map((r) => `${r.law_id}|${r.number}`).join(", ")}`,
   );
 
   // Les TROIS décomptes, et leurs trois sens. `total: 1` avec cinq résultats rendus était
   // lisible comme une incohérence : c'était un appariement lexical plus quatre voisins
   // sémantiques, sans rien pour le dire. Corollaire structuré de R4 (décision 001).
-  const sc = donnees(flexion) ?? {};
+  const sc = flexion.structuredContent ?? {};
   add(
     "repérage : `returned` et `sources` rendent `total` interprétable",
     sc.returned === (sc.results ?? []).length &&
@@ -852,7 +818,7 @@ async function smokeTests() {
     (prescText.match(/^— .+ \(\d+/gm) ?? []).length >= 2,
     `${(prescText.match(/^— .+ \(\d+/gm) ?? []).length} groupe(s)`,
   );
-  const unSnippet = (donnees(presc)?.results ?? [])[0]?.snippet ?? "";
+  const unSnippet = (presc.structuredContent?.results ?? [])[0]?.snippet ?? "";
   add(
     "v2 1.3 : extraits élargis (≥ 25 tokens)",
     unSnippet.split(/\s+/).length >= 25,
@@ -891,8 +857,8 @@ async function smokeTests() {
   });
   add(
     "v2 2.3 : cas 19 — requête EN trouve cpc 490 (pont sémantique)",
-    (donnees(sem)?.results ?? []).some((r) => r.law_id === "cpc" && r.number === "490"),
-    (donnees(sem)?.results ?? [])
+    (sem.structuredContent?.results ?? []).some((r) => r.law_id === "cpc" && r.number === "490"),
+    (sem.structuredContent?.results ?? [])
       .slice(0, 5)
       .map((r) => `${r.law_id}|${r.number}`)
       .join(", "),
@@ -900,15 +866,15 @@ async function smokeTests() {
   add(
     "v2 2.3 : chemin sémantique étiqueté (R7 : fail open, dit)",
     /repérage sémantique/.test(sem.content?.[0]?.text ?? "") ||
-      donnees(sem)?.fallback === "semantic",
+      sem.structuredContent?.fallback === "semantic",
   );
 
   // Une requête lexicalement servie reste lexicale (pas de bruit sémantique en tête).
   const lex = await callTool("legislation_search_text", { query: "extranéité" });
   add(
     "v2 2.3 : requête lexicale — le 1er résultat reste la correspondance exacte",
-    (donnees(lex)?.results ?? [])[0]?.number !== undefined &&
-      ["3111", "490", "622"].includes((donnees(lex)?.results ?? [])[0]?.number),
+    (lex.structuredContent?.results ?? [])[0]?.number !== undefined &&
+      ["3111", "490", "622"].includes((lex.structuredContent?.results ?? [])[0]?.number),
   );
 
   // Contrôle d'accès (src/auth.ts). Depuis le défaut FERMÉ, il n'existe plus d'état où
@@ -1150,8 +1116,8 @@ async function smokeTests() {
     const rows = (html.match(/data-law-id="/g) ?? []).length;
     add(
       "page : autant de lois affichées que list_laws en déclare",
-      rows === donnees(laws)?.count,
-      `page=${rows} list_laws=${donnees(laws)?.count}`,
+      rows === laws.structuredContent?.count,
+      `page=${rows} list_laws=${laws.structuredContent?.count}`,
     );
 
     // Le HTML public ne doit transporter AUCUN secret. Testé par MOTIF, jamais par

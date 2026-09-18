@@ -209,9 +209,7 @@ describe("l'échelle de recherche, barreau par barreau", () => {
 describe("les trois décomptes servis, et leurs trois sens", () => {
   it("`total` compte le lexique, `returned` la page, `sources` les départage", async () => {
     const res = await registre().legislation_search_text({ query: Q_MAIGRE, limit: 5 } as never);
-    // ENVELOPPÉ depuis la marche 4 : les trois décomptes vivent sous `donnees`. La garde
-    // ne change pas de sens — elle change d'adresse.
-    const sc = (res.structuredContent as { donnees: unknown }).donnees as {
+    const sc = res.structuredContent as {
       total: number;
       returned: number;
       sources: { lexical: number; semantique: number };
@@ -235,14 +233,7 @@ describe("les trois décomptes servis, et leurs trois sens", () => {
     } as never);
     // Corollaire structuré de R4 (décision 001) : un client peut jeter la prose et garder
     // l'objet. Si l'étiquette ne vivait qu'en prose, elle tomberait sans qu'un test rougisse.
-    expect((res.structuredContent as { donnees: { fallback: string } }).donnees.fallback).toBe(
-      "loo:introuvable",
-    );
-    // Et la réserve OPPOSABLE qui l'accompagne désormais : l'étiquette ne se contente plus
-    // d'être un champ, elle est une mise en garde nommée.
-    expect(
-      (res.structuredContent as { gardes: Array<{ code: string }> }).gardes.map((g) => g.code),
-    ).toContain("REPLI_LEXICAL");
+    expect((res.structuredContent as { fallback: string }).fallback).toBe("loo:introuvable");
     expect(res.content?.[0]?.text).toContain("introuvable");
   });
 });

@@ -53,47 +53,6 @@ const moderne = (method: string, params?: Record<string, unknown>) => {
   );
 };
 
-/**
- * Les outils dont la sortie est ENVELOPPÉE, et qui publient donc un `outputSchema`.
- *
- * ⚠ POURQUOI CETTE LISTE PLUTÔT QU'UNE NOUVELLE RÉFÉRENCE. La référence capturée n'en
- *   contient AUCUN : le SDK n'en a jamais émis, la décision du dépôt étant « `outputSchema`
- *   reste ABSENT à dessein ». La marche 4 renverse cette décision OUTIL PAR OUTIL. Recapturer
- *   la référence à chaque tranche reviendrait à ne plus rien garder — on comparerait la
- *   sortie d'hier à celle d'hier.
- *
- *   Le partage retenu : la référence continue de tout épingler — noms, ORDRE, titres,
- *   descriptions, `inputSchema`, `annotations`, `execution` — et le seul écart permis est
- *   énuméré ici. Un outil qui gagne un `outputSchema` sans entrer dans cette liste rend le
- *   test rouge, et un outil qui le PERD aussi.
- */
-/**
- * Les DIX, dans l'ordre de publication — c'est-à-dire l'ordre d'insertion de `PUBLIES`,
- * pédagogique et non alphabétique. Depuis le 2026-09-17, la liste est complète : ce test
- * garde désormais que rien ne RECULE, autant qu'il gardait l'avancée.
- */
-const ENVELOPPES = [
-  "legislation_list_laws",
-  "legislation_list_subjects",
-  "legislation_related_laws",
-  "legislation_find_relevant",
-  "legislation_get_article",
-  "legislation_get_articles",
-  "legislation_get_structure",
-  "legislation_get_division",
-  "legislation_search_text",
-  "legislation_resolve_reference",
-];
-
-type Descripteur = Record<string, unknown> & { name: string };
-
-/** Les descripteurs privés de `outputSchema` : ce qui doit rester identique à la référence. */
-const sansSortie = (tools: Descripteur[]) => tools.map(({ outputSchema: _, ...reste }) => reste);
-
-/** Qui en porte un, dans l'ordre de publication. */
-const avecSortie = (tools: Descripteur[]) =>
-  tools.filter((t) => t.outputSchema !== undefined).map((t) => t.name);
-
 const e = env as unknown as Record<string, unknown>;
 e.MCP_TOKEN = JETON;
 e.MCP_ENABLED = "true";
@@ -102,9 +61,7 @@ e.SOCLE = "true";
 describe("le contrat publié est le même sous les deux ères", () => {
   it("sous une révision héritée, tools/list est EXACTEMENT la référence du SDK", async () => {
     const c = (await (await heritee("tools/list")).json()) as { result: Record<string, unknown> };
-    const outils = c.result.tools as Descripteur[];
-    expect(sansSortie(outils)).toEqual(reference);
-    expect(avecSortie(outils)).toEqual(ENVELOPPES);
+    expect(c.result.tools).toEqual(reference);
     // Rien de moderne ne doit s'y glisser : ces champs n'existent pas avant 2026-07-28.
     expect(c.result.resultType).toBeUndefined();
     expect(c.result.ttlMs).toBeUndefined();
@@ -112,10 +69,7 @@ describe("le contrat publié est le même sous les deux ères", () => {
 
   it("sous 2026-07-28, les MÊMES outils, plus resultType et les indices de cache", async () => {
     const c = (await (await moderne("tools/list")).json()) as { result: Record<string, unknown> };
-    const outils = c.result.tools as Descripteur[];
-    expect(sansSortie(outils)).toEqual(reference); // G4 : même ensemble, même ordre
-    // G28 : l'enveloppe ne dépend pas de la révision — le même outil la publie des deux côtés.
-    expect(avecSortie(outils)).toEqual(ENVELOPPES);
+    expect(c.result.tools).toEqual(reference); // G4 : même ensemble, même ordre
     expect(c.result.resultType).toBe("complete");
     expect(c.result.ttlMs).toBe(3_600_000);
     expect(c.result.cacheScope).toBe("public");

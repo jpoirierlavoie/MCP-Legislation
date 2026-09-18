@@ -290,12 +290,7 @@ async function main() {
   const mcp = createMcpClient(MCP_URL);
   await mcp.connect();
   const res = await mcp.callTool("legislation_list_laws", {});
-  // ENVELOPPÉ depuis la marche 4 : les clefs d'avant vivent sous `donnees`. Lecture
-  // EXPLICITE, sans repli sur la forme plate — la veille mensuelle doit ÉCHOUER si le
-  // contrat change, pas s'y adapter en silence. Son message d'échec (« endpoint
-  // injoignable ? ») est trompeur pour ce cas : c'est connu, et c'est le prix d'un
-  // diagnostic écrit avant la bascule.
-  const laws = res?.structuredContent?.donnees?.laws;
+  const laws = res?.structuredContent?.laws;
   if (!Array.isArray(laws) || laws.length === 0) {
     throw new Error(
       `legislation_list_laws n'a renvoyé aucune loi (endpoint ${MCP_URL} injoignable ?)`,
