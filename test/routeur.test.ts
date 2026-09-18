@@ -67,10 +67,22 @@ const moderne = (method: string, params?: Record<string, unknown>) => {
  *   énuméré ici. Un outil qui gagne un `outputSchema` sans entrer dans cette liste rend le
  *   test rouge, et un outil qui le PERD aussi.
  */
+/**
+ * Les DIX, dans l'ordre de publication — c'est-à-dire l'ordre d'insertion de `PUBLIES`,
+ * pédagogique et non alphabétique. Depuis le 2026-09-17, la liste est complète : ce test
+ * garde désormais que rien ne RECULE, autant qu'il gardait l'avancée.
+ */
 const ENVELOPPES = [
   "legislation_list_laws",
   "legislation_list_subjects",
   "legislation_related_laws",
+  "legislation_find_relevant",
+  "legislation_get_article",
+  "legislation_get_articles",
+  "legislation_get_structure",
+  "legislation_get_division",
+  "legislation_search_text",
+  "legislation_resolve_reference",
 ];
 
 type Descripteur = Record<string, unknown> & { name: string };

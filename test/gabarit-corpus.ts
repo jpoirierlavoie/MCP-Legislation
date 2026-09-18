@@ -23,12 +23,22 @@
  *   doit pouvoir être prise pour une donnée.
  */
 
-/** [id, name_fr, name_en, fonction, forum, scope_fr, parent_law_id] */
-const LOIS: Array<[string, string, string, string, string | null, string | null, string | null]> = [
+/**
+ * [id, name_fr, name_en, citation, fonction, forum, scope_fr, parent_law_id]
+ *
+ * ⚠ LA CITATION A LA FORME RLRQ, et ce n'est pas cosmétique : `parseCitation` reconnaît une
+ *   loi en retirant le préfixe « RLRQ, c. » de `official_cite`, puis en cherchant le
+ *   chapitre restant dans le texte. Une citation d'une autre forme n'apparie jamais, et
+ *   `resolve_reference` devient intestable. Le chapitre « ESSAI-n » n'existe pas au recueil.
+ */
+const LOIS: Array<
+  [string, string, string, string, string, string | null, string | null, string | null]
+> = [
   [
     "essai-code",
     "Code d'essai",
     "Test Code",
+    "RLRQ, c. ESSAI-1",
     "loi",
     "Cour d'essai",
     "Régit les rapports d'essai.",
@@ -36,7 +46,16 @@ const LOIS: Array<[string, string, string, string, string | null, string | null,
   ],
   // Règlement : loi habilitante NON NULLE, et tout le reste à NULL — le cas où la charge
   // servie est pleine de nuls légitimes.
-  ["essai-regl", "Règlement d'essai", "Test Regulation", "reglement", null, null, "essai-code"],
+  [
+    "essai-regl",
+    "Règlement d'essai",
+    "Test Regulation",
+    "RLRQ, c. ESSAI-1, r. 1",
+    "reglement",
+    null,
+    null,
+    "essai-code",
+  ],
 ];
 
 /** [id, law_id, kind, number, heading, path, parent_id, sort_order] */
@@ -116,8 +135,22 @@ const RELATIONS: Array<[string, string, string, string, number, number, string |
   ["essai-code", "E-99", "renvoie-a", "auto", 3, 0, null],
 ];
 
+/**
+ * Minuscules, sans accents — la forme des colonnes `*_norm`.
+ *
+ * ⚠ SANS ELLE, `find_relevant` N'APPARIE RIEN. Il ne lit ni `label_fr` ni `heading` mais
+ *   `label_norm`, `name_norm` et `heading_norm` : semer des accents dans ces colonnes
+ *   donnerait un corpus d'essai où le repérage échoue pour une raison qui n'existe pas en
+ *   production, et ferait accuser l'outil.
+ */
+const norm = (t: string) =>
+  t
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
 export async function amorcerGabarit(db: D1Database): Promise<void> {
-  for (const [id, fr, en, fonction, forum, scope, parent] of LOIS) {
+  for (const [id, fr, en, citation, fonction, forum, scope, parent] of LOIS) {
     await db
       .prepare(
         "INSERT OR IGNORE INTO laws (id, name_fr, name_en, official_cite, consol_date_fr," +
@@ -128,14 +161,14 @@ export async function amorcerGabarit(db: D1Database): Promise<void> {
         id,
         fr,
         en,
-        `ESSAI, c. ${id}`,
+        citation,
         "2026-01-01",
         "2026-01-01",
         fonction,
         forum,
         scope,
         parent,
-        fr.toLowerCase(),
+        norm(fr),
       )
       .run();
   }
@@ -144,10 +177,21 @@ export async function amorcerGabarit(db: D1Database): Promise<void> {
     for (const lang of ["fr", "en"]) {
       await db
         .prepare(
-          "INSERT OR IGNORE INTO divisions (id, law_id, lang, kind, number, heading, path," +
-            " parent_id, sort_order) VALUES (?,?,?,?,?,?,?,?,?)",
+          "INSERT OR IGNORE INTO divisions (id, law_id, lang, kind, number, heading," +
+            " heading_norm, path, parent_id, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)",
         )
-        .bind(lang === "fr" ? id : id + 100, law, lang, kind, number, heading, path, parent, ordre)
+        .bind(
+          lang === "fr" ? id : id + 100,
+          law,
+          lang,
+          kind,
+          number,
+          heading,
+          heading ? norm(heading) : null,
+          path,
+          parent,
+          ordre,
+        )
         .run();
     }
   }

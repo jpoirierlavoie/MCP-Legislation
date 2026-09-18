@@ -92,6 +92,42 @@ const GABARITS: Record<string, Array<Record<string, unknown>>> = {
     { law: "essai-code", direction: "in" },
     { law: "essai-code", direction: "out" },
   ],
+  // Un article DANS une division, et un ABROGÉ — `repealed` doit voyager, pas disparaître.
+  legislation_get_article: [
+    { law: "essai-code", article: "1" },
+    { law: "essai-code", article: "3" },
+    // Coercition : les modèles envoient les numéros d'article en NOMBRES.
+    { law: "essai-code", article: 2 },
+  ],
+  // Les deux modes, parce que `pagination` et `range_resolution` en dépendent :
+  // la plage rend un objet, la liste rend `null`.
+  legislation_get_articles: [
+    { law: "essai-code", from: "1", to: "3" },
+    { law: "essai-code", numbers: ["1", "2"] },
+  ],
+  legislation_get_structure: [
+    { law: "essai-code" },
+    { law: "essai-code", depth: 4 },
+    { law: "essai-code", root_path: "ga:l_premier" },
+  ],
+  // `include_text: false` retire `text` et `history` des articles : le schéma ne les
+  // exige donc pas, et ce gabarit est ce qui le prouve.
+  legislation_get_division: [
+    { law: "essai-code", path: "ga:l_premier-gb:t_i-gc:c_i" },
+    { law: "essai-code", path: "ga:l_premier-gb:t_i-gc:c_i", include_text: false },
+    { law: "essai-code", division_id: 1 },
+  ],
+  // Reconnue PAR CHAPITRE — la seule voie qui marche sans abréviation usuelle au corpus.
+  legislation_resolve_reference: [{ citation: "art. 1, RLRQ, c. ESSAI-1" }],
+  // « essai » apparie label_norm (S1) ET name_norm (S3) ; « capacité » n'apparie que le
+  // texte des articles, que `find_relevant` ne lit pas.
+  legislation_find_relevant: [{ query: "essai" }, { query: "essai", lang: "en" }],
+  // Deux appels qui comptent : l'un trouve directement, l'autre DOIT replier — c'est la
+  // seule façon de voir `REPLI_LEXICAL` s'ajouter, et donc de mesurer `supplementaires`.
+  legislation_search_text: [
+    { query: "capacité" },
+    { query: "capacité essai inexistante", law: "essai-code" },
+  ],
 };
 
 describe("G5 — toute charge servie valide contre son `outputSchema`", () => {

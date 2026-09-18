@@ -327,9 +327,10 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
   consommateur nommé qui VALIDE. » Sa propre condition de réouverture est remplie :
   `test/sortie.test.ts` valide chaque charge servie contre le schéma publié, SUR LE FIL.
   Les deux motifs d'origine tiennent toujours, et sont payés plutôt que niés — le coût de
-  `tools/list` est assumé outil par outil (`src/schemas-sortie.ts` dit où en est la
-  bascule, et un outil non enveloppé ne publie RIEN), et le schéma ne dérive plus d'un
-  gabarit : il est écrit à la main, autour de l'enveloppe du socle. Le mode de panne que la
+  `tools/list` est assumé et mesuré, et le schéma ne dérive plus d'un gabarit : il est
+  écrit à la main dans `src/schemas-sortie.ts`, autour de l'enveloppe du socle. Les DIX
+  outils sont enveloppés (2026-09-17) ; le mécanisme reste conditionnel, de sorte qu'un
+  outil NEUF ne publie rien tant que son gestionnaire n'enveloppe pas réellement. Le mode de panne que la
   règle craignait — le client garde l'objet typé, jette la prose, et la mise en garde part
   avec elle — n'est pas réfuté : il est renversé. La réserve voyage désormais DANS l'objet
   typé, et `gardes` ne peut pas être vide (type non vide à l'écriture, `enveloppe()` à

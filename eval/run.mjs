@@ -20,6 +20,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMcpClient } from "./mcp-client.mjs";
 
+/**
+ * La charge structurée d'un outil ENVELOPPÉ (marche 4). Lecture STRICTE, sans repli sur la
+ * forme plate : un `?? r.structuredContent` accepterait les deux et masquerait la bascule.
+ */
+const donnees = (r) => r.structuredContent?.donnees;
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MCP_URL = process.env.MCP_URL ?? "https://legislation.poirierlavoie.ca/mcp";
 const RESOLVED_PATH = join(HERE, "cases.resolved.json");
@@ -62,7 +68,8 @@ async function resolvePaths({ refresh = false } = {}) {
     if (cache[k] && !refresh) continue;
     const res = await callTool("legislation_get_article", { law: a.law, article: a.article });
     if (res.isError) throw new Error(`vérité terrain irrésoluble : ${k} — ${res.content?.[0]?.text}`);
-    const path = res.structuredContent.division_path;
+    // ENVELOPPÉ depuis la marche 4 : `get_article` sert ses clefs sous `donnees`.
+    const path = donnees(res).division_path;
     if (cache[k] === undefined) added++;
     else if (cache[k] !== path) changed.push({ k, avant: cache[k], apres: path });
     cache[k] = path;
@@ -99,7 +106,7 @@ async function runCase(c, paths) {
   const sArgs = { query: c.query, limit: 10 };
   if (c.law_scope) sArgs.law = c.law_scope;
   const s = await callTool("legislation_search_text", sArgs);
-  const results = s.isError ? [] : (s.structuredContent?.results ?? []);
+  const results = s.isError ? [] : (donnees(s)?.results ?? []);
   const top = results.map((r) => `${r.law_id}|${r.number}`);
 
   const mustKeys = c.must_include.map(keyOf);
@@ -116,7 +123,7 @@ async function runCase(c, paths) {
 
   // --- legislation_find_relevant (toujours corpus entier — c'est un routeur) ---
   const f = await callTool("legislation_find_relevant", { query: c.query });
-  const cands = f.isError ? [] : (f.structuredContent?.candidates ?? []);
+  const cands = f.isError ? [] : (donnees(f)?.candidates ?? []);
   const frCovered = mustKeys.filter((k) => {
     const artPath = paths[k];
     const [law] = k.split("|");

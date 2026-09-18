@@ -608,7 +608,11 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     return ok(
       `${cands.length} piste(s) pour « ${query} » (termes : ${tokens.join(", ")}) :\n` +
         `${lines.join("\n")}\n\n${GARDE_FOU}`,
-      {
+      // L'outil de REPÉRAGE par excellence : il propose des pistes pondérées, il ne dit
+      // pas le droit. `GARDE_FOU` est d'ailleurs le texte d'où `REPERAGE_HEURISTIQUE` est
+      // promu — la réserve et le champ `avertissement` disent donc la même chose, l'une de
+      // façon opposable, l'autre par contrat hérité.
+      envelopper("PistesDeRecherche", ["REPERAGE_HEURISTIQUE"], {
         query,
         lang,
         tokens,
@@ -622,7 +626,7 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
           score: c.score,
           pourquoi: c.pourquoi,
         })),
-      },
+      }),
     );
   };
   outils.legislation_find_relevant = H_FIND_RELEVANT as Gestionnaire;
@@ -675,20 +679,31 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
       );
     }
     const consol = consolOf(lawRow, lang as Lang);
-    return ok(renderArticle(row, lawRow, consol, lang as Lang), {
-      law,
-      number: row.number,
-      lang,
-      citation: citationOf(lawRow, row.number, lang as Lang),
-      division_path: row.division_path,
-      division: row.d_kind
-        ? { kind: row.d_kind, number: row.d_number, heading: row.d_heading }
-        : null,
-      consolidation: consol,
-      history: row.history,
-      repealed: !!row.repealed,
-      text: row.text,
-    });
+    return ok(
+      renderArticle(row, lawRow, consol, lang as Lang),
+      // Le texte est rendu verbatim, et ce n'en est PAS la version officielle : c'est
+      // exactement ce que `TEXTE_A_VERIFIER` énonce. La date de consolidation entre dans la
+      // provenance, où elle est l'EXPRESSION au sens FRBR.
+      envelopper(
+        "Article",
+        ["TEXTE_A_VERIFIER"],
+        {
+          law,
+          number: row.number,
+          lang,
+          citation: citationOf(lawRow, row.number, lang as Lang),
+          division_path: row.division_path,
+          division: row.d_kind
+            ? { kind: row.d_kind, number: row.d_number, heading: row.d_heading }
+            : null,
+          consolidation: consol,
+          history: row.history,
+          repealed: !!row.repealed,
+          text: row.text,
+        },
+        { corpusVersion: consol ?? undefined },
+      ),
+    );
   };
   outils.legislation_get_article = H_GET_ARTICLE as Gestionnaire;
   server?.registerTool(
@@ -742,7 +757,10 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
   }: z.infer<z.ZodObject<typeof S_GET_ARTICLES>>) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
-    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const lawRow = await getLaw(db, law, env);
+    // La consolidation entre dans la provenance : la requête était déjà faite, on retient
+    // la ligne au lieu de la jeter pour la refaire plus bas.
+    if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const useRange = from != null && to != null;
     if (!useRange && !numbers?.length) {
       return err("Fournir soit (from ET to), soit numbers[].");
@@ -781,28 +799,36 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     const body = rows
       .map((a) => `— art. ${a.number}${a.repealed ? " (abrogé)" : ""} —\n${a.text}`)
       .join("\n\n");
-    return ok(body, {
-      law,
-      lang,
-      count: rows.length,
-      total,
-      pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
-      // Comment la plage a été bornée. Champ TOUJOURS présent (null hors mode plage) :
-      // « absent » et « borné par le texte » ne doivent pas être confondus.
-      //   'document' — étendue exacte, de la première borne à la seconde, dans l'ordre
-      //                du texte officiel ;
-      //   'cle'      — au moins une borne est ouverte ou désigne un pseudo-article : la
-      //                plage est bornée par la clé de tri, qui n'est pas un ordre total
-      //                et peut donc sur-inclure.
-      range_resolution: resolution,
-      articles: rows.map((a) => ({
-        number: a.number,
-        text: a.text,
-        history: a.history,
-        division_path: a.division_path,
-        repealed: !!a.repealed,
-      })),
-    });
+    return ok(
+      body,
+      envelopper(
+        "Articles",
+        ["TEXTE_A_VERIFIER"],
+        {
+          law,
+          lang,
+          count: rows.length,
+          total,
+          pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
+          // Comment la plage a été bornée. Champ TOUJOURS présent (null hors mode plage) :
+          // « absent » et « borné par le texte » ne doivent pas être confondus.
+          //   'document' — étendue exacte, de la première borne à la seconde, dans l'ordre
+          //                du texte officiel ;
+          //   'cle'      — au moins une borne est ouverte ou désigne un pseudo-article : la
+          //                plage est bornée par la clé de tri, qui n'est pas un ordre total
+          //                et peut donc sur-inclure.
+          range_resolution: resolution,
+          articles: rows.map((a) => ({
+            number: a.number,
+            text: a.text,
+            history: a.history,
+            division_path: a.division_path,
+            repealed: !!a.repealed,
+          })),
+        },
+        { corpusVersion: consolOf(lawRow, lang as Lang) ?? undefined },
+      ),
+    );
   };
   outils.legislation_get_articles = H_GET_ARTICLES as Gestionnaire;
   server?.registerTool(
@@ -840,7 +866,10 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
   }: z.infer<z.ZodObject<typeof S_GET_STRUCTURE>>) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
-    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const lawRow = await getLaw(db, law, env);
+    // La consolidation entre dans la provenance : la requête était déjà faite, on retient
+    // la ligne au lieu de la jeter pour la refaire plus bas.
+    if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const d = depth ?? 2;
     let tree = await getStructure(db, law, lang as Lang, root_path, d);
     if (tree.length === 0 && root_path) {
@@ -859,7 +888,22 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
             (n.children.length ? `\n${render(n.children, level + 1)}` : ""),
         )
         .join("\n");
-    return ok(render(tree, 0), { law, lang, root_path: root_path ?? null, depth: d, tree });
+    // Un PLAN, non du texte : il oriente la lecture sans la remplacer.
+    return ok(
+      render(tree, 0),
+      envelopper(
+        "PlanDeLoi",
+        ["REPERAGE_HEURISTIQUE"],
+        {
+          law,
+          lang,
+          root_path: root_path ?? null,
+          depth: d,
+          tree,
+        },
+        { corpusVersion: consolOf(lawRow, lang as Lang) ?? undefined },
+      ),
+    );
   };
   outils.legislation_get_structure = H_GET_STRUCTURE as Gestionnaire;
   server?.registerTool(
@@ -918,7 +962,10 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const include_text = includeTextArg ?? true;
-    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const lawRow = await getLaw(db, law, env);
+    // La consolidation entre dans la provenance : la requête était déjà faite, on retient
+    // la ligne au lieu de la jeter pour la refaire plus bas.
+    if (!lawRow) return err(`Loi '${law}' inconnue.`);
     if (path == null && division_id == null) return err("Fournir path ou division_id.");
     let div = await getDivision(db, law, lang as Lang, { path, id: division_id });
     if (!div && path) {
@@ -957,34 +1004,42 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
           .map((a) => (include_text ? `\n— art. ${a.number} —\n${a.text}` : `art. ${a.number}`))
           .join(include_text ? "\n" : ", ")
       : "\n\n(aucun article)";
-    return ok(`${header}${subs}${arts}`, {
-      law,
-      lang,
-      division: {
-        division_id: div.id,
-        path: div.path,
-        kind: div.kind,
-        number: div.number,
-        heading: div.heading,
-        history: div.history,
-        repealed: !!div.repealed,
-      },
-      children: kids.map((k) => ({
-        division_id: k.id,
-        path: k.path,
-        kind: k.kind,
-        number: k.number,
-        heading: k.heading,
-        repealed: !!k.repealed,
-      })),
-      articles: rows.map((a) => ({
-        number: a.number,
-        division_path: a.division_path,
-        repealed: !!a.repealed,
-        ...(include_text ? { text: a.text, history: a.history } : {}),
-      })),
-      pagination: { limit: page.limit, offset: page.offset, total },
-    });
+    return ok(
+      `${header}${subs}${arts}`,
+      envelopper(
+        "Division",
+        ["TEXTE_A_VERIFIER"],
+        {
+          law,
+          lang,
+          division: {
+            division_id: div.id,
+            path: div.path,
+            kind: div.kind,
+            number: div.number,
+            heading: div.heading,
+            history: div.history,
+            repealed: !!div.repealed,
+          },
+          children: kids.map((k) => ({
+            division_id: k.id,
+            path: k.path,
+            kind: k.kind,
+            number: k.number,
+            heading: k.heading,
+            repealed: !!k.repealed,
+          })),
+          articles: rows.map((a) => ({
+            number: a.number,
+            division_path: a.division_path,
+            repealed: !!a.repealed,
+            ...(include_text ? { text: a.text, history: a.history } : {}),
+          })),
+          pagination: { limit: page.limit, offset: page.offset, total },
+        },
+        { corpusVersion: consolOf(lawRow, lang as Lang) ?? undefined },
+      ),
+    );
   };
   outils.legislation_get_division = H_GET_DIVISION as Gestionnaire;
   server?.registerTool(
@@ -1192,23 +1247,39 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     // vecteurs » : un article trouvé par les DEUX voies garde son SearchHit lexical et n'est
     // jamais marqué `semantic`, bien que la fusion RRF ait déplacé son rang.
     const nSem = res.hits.filter((h) => h.semantic).length;
-    return ok(`${header}\n${body}${structures}${elsewhere}`, {
-      query,
-      lang,
-      law: law ?? null,
-      /** Appariements LEXICAUX au corpus, non paginés. Vaut 0 sur un repli sémantique seul. */
-      total: res.total,
-      /** Taille de la page réellement rendue, toutes sources confondues. */
-      returned: res.hits.length,
-      sources: { lexical: res.hits.length - nSem, semantique: nSem },
-      fallback: fallbackLog,
-      elsewhere: res.elsewhere
-        ? { total: res.elsewhere.total, results: res.elsewhere.hits.map(enrich) }
-        : null,
-      divisions_semantiques: res.divisions ?? [],
-      pagination: { limit: page.limit, offset: page.offset },
-      results: res.hits.map(enrich),
-    });
+    return ok(
+      `${header}\n${body}${structures}${elsewhere}`,
+      envelopper(
+        "ResultatsDeRecherche",
+        // La recherche rend du TEXTE d'article : c'est `TEXTE_A_VERIFIER` qui s'applique,
+        // pas le repérage.
+        ["TEXTE_A_VERIFIER"],
+        {
+          query,
+          lang,
+          law: law ?? null,
+          /** Appariements LEXICAUX au corpus, non paginés. Vaut 0 sur un repli sémantique seul. */
+          total: res.total,
+          /** Taille de la page réellement rendue, toutes sources confondues. */
+          returned: res.hits.length,
+          sources: { lexical: res.hits.length - nSem, semantique: nSem },
+          fallback: fallbackLog,
+          elsewhere: res.elsewhere
+            ? { total: res.elsewhere.total, results: res.elsewhere.hits.map(enrich) }
+            : null,
+          divisions_semantiques: res.divisions ?? [],
+          pagination: { limit: page.limit, offset: page.offset },
+          results: res.hits.map(enrich),
+        },
+        {
+          // R7 — « échouer ouvert, mais le DIRE ». L'étiquette existait déjà dans
+          // `fallback` et dans la prose ; elle devient une réserve OPPOSABLE, portée par
+          // la sortie elle-même. C'est exactement ce pour quoi `supplementaires` existe :
+          // une garde que l'APPEL déclenche, non l'outil.
+          supplementaires: fallbackLog ? (["REPLI_LEXICAL"] as const) : undefined,
+        },
+      ),
+    );
   };
   outils.legislation_search_text = H_SEARCH_TEXT as Gestionnaire;
   server?.registerTool(
@@ -1284,15 +1355,23 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     // existe ; le garde est là pour le type, pas pour un cas réel.
     if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const consol = consolOf(lawRow, lang as Lang);
-    return ok(renderArticle(row, lawRow, consol, lang as Lang), {
-      resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
-      citation: citationOf(lawRow, row.number, lang as Lang),
-      division_path: row.division_path,
-      consolidation: consol,
-      history: row.history,
-      repealed: !!row.repealed,
-      text: row.text,
-    });
+    return ok(
+      renderArticle(row, lawRow, consol, lang as Lang),
+      envelopper(
+        "ReferenceResolue",
+        ["TEXTE_A_VERIFIER"],
+        {
+          resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
+          citation: citationOf(lawRow, row.number, lang as Lang),
+          division_path: row.division_path,
+          consolidation: consol,
+          history: row.history,
+          repealed: !!row.repealed,
+          text: row.text,
+        },
+        { corpusVersion: consol ?? undefined },
+      ),
+    );
   };
   outils.legislation_resolve_reference = H_RESOLVE_REFERENCE as Gestionnaire;
   server?.registerTool(
