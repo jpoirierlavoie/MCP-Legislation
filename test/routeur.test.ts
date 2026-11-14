@@ -8,6 +8,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import reference from "../fixtures/tools-list.reference.json";
+import { PUBLIC_DESCRIPTION, SERVER_INFO, VERSIONS } from "../src/serveur";
 
 const URL_MCP = "https://legislation.test/mcp";
 const JETON = "jeton-de-test";
@@ -258,6 +259,7 @@ describe("la chaîne intergicielle", () => {
     try {
       expect((await heritee("tools/list")).status).toBe(404);
       expect((await SELF.fetch("https://legislation.test/health")).status).toBe(404);
+      expect((await SELF.fetch("https://legislation.test/mcp/server-card")).status).toBe(404);
       // La base de test n'a pas de schéma (aucune migration n'est appliquée), si bien que le
       // rendu échoue sur « no such table: laws ». Cet échec est justement la preuve cherchée :
       // le coupe-circuit aurait rendu 404 AVANT toute lecture D1. On accepte les deux issues,
@@ -362,6 +364,164 @@ describe("les deux chemins acceptent les MÊMES secrets", () => {
     } finally {
       e.MCP_TOKEN = garde;
       e.MCP_TOKEN_ATHENA = undefined;
+    }
+  });
+});
+
+describe("CORS Gemini web, pré-vol 2026-07-28 et ALLOWED_ORIGINS", () => {
+  it("admet les origines web Gemini et les en-têtes MCP 2026-07-28 en pré-vol", async () => {
+    for (const origin of ["https://gemini.google.com", "https://aistudio.google.com"]) {
+      const pre = await SELF.fetch(URL_MCP, {
+        method: "OPTIONS",
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers":
+            "authorization, mcp-protocol-version, mcp-method, mcp-name, mcp-session-id",
+        },
+      });
+      expect(pre.status, origin).toBe(204);
+      expect(pre.headers.get("Access-Control-Allow-Origin"), origin).toBe(origin);
+      expect(pre.headers.get("Vary"), origin).toBe("Origin");
+      const allows = (pre.headers.get("Access-Control-Allow-Headers") ?? "").toLowerCase();
+      for (const h of [
+        "authorization",
+        "mcp-protocol-version",
+        "mcp-method",
+        "mcp-name",
+        "mcp-session-id",
+        "last-event-id",
+      ]) {
+        expect(allows, `${origin} ${h}`).toContain(h);
+      }
+
+      const post = await SELF.fetch(URL_MCP, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${JETON}`,
+          "MCP-Protocol-Version": HERITEE,
+          Origin: origin,
+        },
+        body: JSON.stringify(rpc("ping")),
+      });
+      expect(post.status, origin).toBe(200);
+      expect(post.headers.get("Access-Control-Allow-Origin"), origin).toBe(origin);
+    }
+  });
+
+  it("ALLOWED_ORIGINS s'ajoute aux origines par défaut sans les remplacer", async () => {
+    const garde = e.ALLOWED_ORIGINS;
+    e.ALLOWED_ORIGINS = "https://client.exemple";
+    try {
+      for (const origin of [
+        "https://claude.ai",
+        "https://gemini.google.com",
+        "https://client.exemple",
+      ]) {
+        const pre = await SELF.fetch(URL_MCP, {
+          method: "OPTIONS",
+          headers: { Origin: origin },
+        });
+        expect(pre.status, origin).toBe(204);
+        expect(pre.headers.get("Access-Control-Allow-Origin"), origin).toBe(origin);
+      }
+    } finally {
+      e.ALLOWED_ORIGINS = garde;
+    }
+  });
+});
+
+describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
+  it("GET /mcp/server-card rend 200 en application/mcp-server-card+json, dérivé sans secret", async () => {
+    const res = await SELF.fetch("https://legislation.test/mcp/server-card", {
+      headers: { Origin: "https://exemple.invalide" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("application/mcp-server-card+json; charset=utf-8");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    const cc = res.headers.get("Cache-Control") ?? "";
+    expect(cc).toContain("max-age=600");
+    expect(cc).not.toContain("s-maxage");
+
+    const brut = await res.text();
+    expect(brut).not.toContain(JETON);
+    expect(brut).not.toMatch(/[0-9a-f]{32,}/i);
+
+    const card = JSON.parse(brut) as {
+      $schema: string;
+      name: string;
+      title: string;
+      version: string;
+      description: string;
+      websiteUrl: string;
+      repository: { url: string; source: string };
+      remotes: Array<{
+        type: string;
+        url: string;
+        supportedProtocolVersions: string[];
+        headers: Array<{ name: string; isRequired: boolean; isSecret: boolean }>;
+      }>;
+    };
+    expect(card.$schema).toBe(
+      "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
+    );
+    expect(card.name).toBe("ca.poirierlavoie.legislation/mcp-legislation");
+    expect(card.title).toBe(SERVER_INFO.name);
+    expect(card.version).toBe(SERVER_INFO.version);
+    expect(card.description).toBe(PUBLIC_DESCRIPTION);
+    expect(card.websiteUrl).toBe("https://legislation.poirierlavoie.ca/");
+    expect(card.repository).toEqual({
+      url: "https://github.com/jpoirierlavoie/MCP-Legislation",
+      source: "github",
+    });
+    expect(card.remotes).toHaveLength(1);
+    expect(card.remotes[0]).toMatchObject({
+      type: "streamable-http",
+      url: "https://legislation.poirierlavoie.ca/mcp",
+      supportedProtocolVersions: [...VERSIONS],
+    });
+    expect(card.remotes[0]!.headers[0]).toMatchObject({
+      name: "Authorization",
+      isRequired: true,
+      isSecret: true,
+    });
+  });
+
+  it("HEAD et OPTIONS répondent sans corps, POST et DELETE rendent 405", async () => {
+    const head = await SELF.fetch("https://legislation.test/mcp/server-card", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("Content-Type")).toBe(
+      "application/mcp-server-card+json; charset=utf-8",
+    );
+    expect(await head.text()).toBe("");
+
+    const opt = await SELF.fetch("https://legislation.test/mcp/server-card", {
+      method: "OPTIONS",
+    });
+    expect(opt.status).toBe(204);
+    expect(opt.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(opt.headers.get("Access-Control-Allow-Methods")).toContain("GET");
+
+    for (const m of ["POST", "DELETE"]) {
+      const r = await SELF.fetch("https://legislation.test/mcp/server-card", { method: m });
+      expect(r.status, m).toBe(405);
+      expect(r.headers.get("Allow")).toBe("GET, HEAD, OPTIONS");
+      expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    }
+  });
+
+  it("les chemins de découverte hors exactitude et MCP_ENABLED=false rendent 404", async () => {
+    for (const chemin of ["/server-card", "/.well-known/mcp.json", "/mcp/server-card/"]) {
+      expect((await SELF.fetch(`https://legislation.test${chemin}`)).status, chemin).toBe(404);
+    }
+
+    e.MCP_ENABLED = "false";
+    try {
+      expect((await SELF.fetch("https://legislation.test/mcp/server-card")).status).toBe(404);
+    } finally {
+      e.MCP_ENABLED = "true";
     }
   });
 });

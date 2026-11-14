@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { carteServeur, PACKAGE_NAME, PUBLIC_DESCRIPTION, SERVER_INFO } from "../src/serveur.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const lire = (p) => readFileSync(join(ROOT, p), "utf-8");
@@ -358,6 +359,10 @@ test("doc : toute URL /mcp citée est une forme réellement servie par src/auth.
   const { mount, queryKey } = porteDAcces();
 
   const defaut = (u) => {
+    // Exception publique nommée (SEP-2127) : chemin exact sans barre finale ni requête.
+    if (u.pathname === `${mount}/server-card` && !u.search) {
+      return null;
+    }
     const chemin = u.pathname.replace(/\/+$/, "") || "/"; // slash final toléré (src/auth.ts)
     if (chemin !== mount && !chemin.startsWith(`${mount}/`)) {
       return `chemin « ${chemin} » : src/index.ts ne route que « ${mount} » et « ${mount}/… »`;
@@ -437,5 +442,93 @@ test("doc : les noms de secrets cités existent dans src/auth.ts", () => {
     fautifs,
     [],
     `nom(s) de secret hors contrat dans README.md : ${fautifs.join(", ")} — src/auth.ts n'accepte que ${attendus}. ${RAPPEL}`,
+  );
+});
+
+test("manifestes Antigravity / Gemini, version et description concordent partout", () => {
+  const pkg = json("package.json");
+  const plugin = json("plugin.json");
+  const mcpConfigRaw = lire("mcp_config.json");
+  const mcpConfig = JSON.parse(mcpConfigRaw);
+  const geminiExtRaw = lire("gemini-extension.json");
+  const geminiExt = JSON.parse(geminiExtRaw);
+  const logoSvg = lire("assets/logo.svg");
+  const geminiMd = lire("GEMINI.md");
+  const card = carteServeur();
+
+  // Parité des versions.
+  assert.ok(pkg.version.length > 0);
+  assert.equal(SERVER_INFO.version, pkg.version);
+  assert.equal(plugin.version, pkg.version);
+  assert.equal(geminiExt.version, pkg.version);
+  assert.equal(card.version, pkg.version);
+
+  // Parité d'identité, de titre et de description canonique (sans décompte vivant, R10).
+  assert.equal(pkg.name, PACKAGE_NAME);
+  assert.equal(plugin.name, PACKAGE_NAME);
+  assert.equal(geminiExt.name, PACKAGE_NAME);
+  assert.equal(card.name, `ca.poirierlavoie.legislation/${PACKAGE_NAME}`);
+
+  assert.equal(plugin.displayName, SERVER_INFO.name);
+  assert.equal(card.title, SERVER_INFO.name);
+
+  assert.equal(pkg.description, PUBLIC_DESCRIPTION);
+  assert.equal(plugin.description, PUBLIC_DESCRIPTION);
+  assert.equal(geminiExt.description, PUBLIC_DESCRIPTION);
+  assert.equal(card.description, PUBLIC_DESCRIPTION);
+  assert.ok(
+    !/\b\d+\s*(lois|règlements|textes|matières|articles)\b/i.test(PUBLIC_DESCRIPTION),
+    "PUBLIC_DESCRIPTION ne doit contenir aucun décompte vivant (R10).",
+  );
+
+  // Manifestes clients : Streamable HTTP par en-tête, sans secret ni eager.
+  for (const brut of [mcpConfigRaw, geminiExtRaw]) {
+    assert.ok(!/[0-9a-f]{32,}/i.test(brut), "chaîne hexadécimale suspecte dans un manifeste");
+  }
+
+  const expectedAuth = ["Bearer $", "{MCP_LEGISLATION_SECRET}"].join("");
+  const agy = mcpConfig.mcpServers?.legislation;
+  assert.equal(agy?.url, "https://legislation.poirierlavoie.ca/mcp");
+  assert.equal(agy?.headers?.Authorization, expectedAuth);
+  assert.equal(agy?.eager, undefined);
+  assert.ok(
+    agy?.variables?.some((v) => v.name === "MCP_LEGISLATION_SECRET"),
+    "mcp_config.json doit déclarer la variable MCP_LEGISLATION_SECRET",
+  );
+
+  // Critiquement vide : évite d'injecter le GEMINI.md de développement dans les sessions utilisateur.
+  assert.deepEqual(geminiExt.contextFileName, []);
+  const gcli = geminiExt.mcpServers?.legislation;
+  assert.equal(gcli?.httpUrl, "https://legislation.poirierlavoie.ca/mcp");
+  assert.equal(gcli?.headers?.Authorization, expectedAuth);
+  assert.ok(
+    geminiExt.settings?.some((s) => s.envVar === "MCP_LEGISLATION_SECRET" && s.sensitive === true),
+    "gemini-extension.json doit déclarer MCP_LEGISLATION_SECRET en setting sensible",
+  );
+
+  // Icône SVG carrée et suggestions d'amorce Antigravity.
+  assert.equal(plugin.logo, "assets/logo.svg");
+  assert.ok(logoSvg.includes("<svg") && logoSvg.includes('viewBox="0 0 128 128"'));
+  assert.ok(
+    Array.isArray(plugin.suggestedPrompts) &&
+      plugin.suggestedPrompts.length === 3 &&
+      plugin.suggestedPrompts.every((p) => typeof p === "string" && p.trim().length > 0),
+    "plugin.json doit fournir 3 suggestedPrompts non vides",
+  );
+
+  // GEMINI.md sous la limite de troncature Antigravity (24 000 octets UTF-8).
+  const octets = new TextEncoder().encode(geminiMd).byteLength;
+  assert.ok(octets > 1_000 && octets < 24_000, `GEMINI.md fait ${octets} octets`);
+  assert.ok(geminiMd.includes("CLAUDE.md"), "GEMINI.md doit renvoyer vers CLAUDE.md");
+  assert.ok(!/[0-9a-f]{32,}/i.test(geminiMd), "chaîne hexadécimale suspecte dans GEMINI.md");
+
+  // Garde miroir de tests/evals.mjs : aucun motif de jeton dans le texte non-commenté de src/site.ts.
+  const siteSansCommentaires = siteTs
+    .split("\n")
+    .filter((l) => !/^\s*\/\//.test(l))
+    .join("\n");
+  assert.ok(
+    !/Bearer\s|[?&]key=|[0-9a-f]{32,}/i.test(siteSansCommentaires),
+    "motif d'authentification ou de jeton détecté dans src/site.ts",
   );
 });

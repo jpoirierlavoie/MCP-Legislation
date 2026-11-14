@@ -1,0 +1,22 @@
+{
+  "name": "mcp-legislation",
+  "version": "0.2.0",
+  "description": "Texte officiel en lecture seule de lois et règlements du Québec et du Canada (en français et en anglais), hiérarchie complète des divisions et recherche hybride lexicale et sémantique.",
+  "contextFileName": [],
+  "settings": [
+    {
+      "name": "Jeton d'accès MCP Législation",
+      "description": "Jeton d'accès de l'instance MCP Législation (transmis dans l'en-tête Authorization: Bearer).",
+      "envVar": "MCP_LEGISLATION_SECRET",
+      "sensitive": true
+    }
+  ],
+  "mcpServers": {
+    "legislation": {
+      "httpUrl": "https://legislation.poirierlavoie.ca/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_LEGISLATION_SECRET}"
+      }
+    }
+  }
+}

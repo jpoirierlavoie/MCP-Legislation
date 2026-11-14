@@ -7,7 +7,6 @@ import {
   origineRefusee,
   originesAdmises,
   ouvrir,
-  preflight,
   refuser,
   tropDeRequetes,
 } from "@poirierlavoie/socle-juridique";
@@ -16,9 +15,11 @@ import { McpAgent } from "agents/mcp";
 import { gateMcp, PORTE } from "./auth";
 import { handleBackfill } from "./backfill";
 import { servirMcp } from "./routeur";
-import { INSTRUCTIONS, SERVER_INFO } from "./serveur";
+import { carteServeur, INSTRUCTIONS, SERVER_INFO } from "./serveur";
 import { renderSite } from "./site";
 import { construireOutils } from "./tools";
+
+export { carteServeur };
 
 /**
  * Serveur MCP « MCP Legislation » (paquet mcp-legislation).
@@ -89,10 +90,71 @@ async function servePage(request: Request, env: Env, ctx: ExecutionContext): Pro
     : res;
 }
 
+const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
+
+/** Origines web Gemini ajoutées à `ORIGINES_PAR_DEFAUT` (`claude.ai`, `claude.com`). */
+const ORIGINES_GEMINI = ["https://gemini.google.com", "https://aistudio.google.com"] as const;
+
+function originesNavigateurAdmises(env: Env): string[] {
+  const sup = (env as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS ?? "";
+  return originesAdmises([...ORIGINES_GEMINI, sup].join(","));
+}
+
+/**
+ * Réponse au pré-vol CORS sur `/mcp*` incluant les en-têtes MCP `2026-07-28`
+ * (`Mcp-Method`, `Mcp-Name`, `Mcp-Session-Id`) et `Last-Event-ID`.
+ */
+function preflightMcp(origin: string): Response {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Accept, Last-Event-ID",
+      "Access-Control-Max-Age": "86400",
+      Vary: "Origin",
+    },
+  });
+}
+
+function reponseCarteServeur(method: string): Response {
+  if (method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+        "Access-Control-Allow-Headers": "Accept, Content-Type",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
+  if (method !== "GET" && method !== "HEAD") {
+    return new Response(JSON.stringify({ error: "method_not_allowed" }), {
+      status: 405,
+      headers: {
+        ...JSON_HEADERS,
+        Allow: "GET, HEAD, OPTIONS",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  }
+  const headers: Record<string, string> = {
+    "Content-Type": "application/mcp-server-card+json; charset=utf-8",
+    "Cache-Control": "public, max-age=600",
+    "X-Content-Type-Options": "nosniff",
+    "Access-Control-Allow-Origin": "*",
+  };
+  return method === "HEAD"
+    ? new Response(null, { status: 200, headers })
+    : new Response(JSON.stringify(carteServeur()), { status: 200, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
-    const admises = originesAdmises((env as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS);
+    const admises = originesNavigateurAdmises(env);
     const origin = origineAutorisee(request, admises);
 
     // La page publique passe AVANT le coupe-circuit, et hors du bloc /mcp. C'est
@@ -120,6 +182,13 @@ export default {
         });
       }
 
+      // Fiche de découverte SEP-2127 (`/mcp/server-card`) : exception NOMMÉE et exacte
+      // avant le contrôle d'origine et la porte d'accès `/mcp*`. Métadonnées publiques sans
+      // secret, lisibles par tout catalogue ou client MCP, mais soumises au coupe-circuit.
+      if (url.pathname === "/mcp/server-card") {
+        return reponseCarteServeur(request.method);
+      }
+
       // 2. ORIGINE, avant toute authentification : c'est la défense contre le
       //    ré-attachement DNS qu'exige la spécification. Sans en-tête CORS sur le refus.
       if (origineRefusee(request, admises)) return origineInterdite();
@@ -127,7 +196,7 @@ export default {
       // 3. PRÉ-VOL, avant l'authentification et JAMAIS limité en débit. Un navigateur émet
       //    `OPTIONS` sans porteur ; l'exiger casserait le connecteur sans rien protéger, et
       //    un 429 sur un pré-vol ne remonte que comme un échec CORS opaque.
-      if (request.method === "OPTIONS" && origin) return preflight(origin);
+      if (request.method === "OPTIONS" && origin) return preflightMcp(origin);
 
       // 4. DÉBIT. Clé = l'adresse vue par Cloudflare. Le jeton ne doit JAMAIS servir de clé :
       //    il finirait dans un compteur, donc dans des journaux. Échoue OUVERT — il protège

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "legislation": {
+      "url": "https://legislation.poirierlavoie.ca/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_LEGISLATION_SECRET}"
+      },
+      "variables": [
+        {
+          "name": "MCP_LEGISLATION_SECRET",
+          "title": "Jeton d'accès MCP Législation",
+          "description": "Jeton d'accès de l'instance MCP Législation (transmis dans l'en-tête Authorization: Bearer)."
+        }
+      ]
+    }
+  }
+}

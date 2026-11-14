@@ -15,6 +15,7 @@
 *.jsonc text eol=lf
 *.sql  text eol=lf
 *.md   text eol=lf
+*.svg  text eol=lf
 *.yml  text eol=lf
 *.py   text eol=lf
 .gitignore text eol=lf

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "mcp-legislation",
+  "displayName": "Législation du Québec et du Canada",
+  "version": "0.2.0",
+  "description": "Texte officiel en lecture seule de lois et règlements du Québec et du Canada (en français et en anglais), hiérarchie complète des divisions et recherche hybride lexicale et sémantique.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Repère les lois et chapitres pertinents pour un recours en garantie légale contre un vice caché au Québec",
+    "Donne le texte officiel intégral et la date de consolidation de l'article 1457 du Code civil du Québec",
+    "Recherche dans le Code de procédure civile le délai de réponse d'un défendeur assigné hors du Québec"
+  ],
+  "author": {
+    "name": "Jason Poirier Lavoie"
+  },
+  "homepage": "https://legislation.poirierlavoie.ca/",
+  "repository": "https://github.com/jpoirierlavoie/MCP-Legislation"
+}

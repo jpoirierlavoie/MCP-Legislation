@@ -199,7 +199,7 @@ export async function renderSite(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lois du Québec et du Canada — serveur MCP</title>
-<meta name="description" content="Serveur MCP donnant un accès en lecture seule au texte officiel de la législation québécoise, en français et en anglais.">
+<meta name="description" content="Serveur MCP donnant un accès en lecture seule au texte officiel de la législation du Québec et du Canada, en français et en anglais.">
 <style>${CSS}</style>
 <script>${BOOT}</script>
 </head>
@@ -506,11 +506,13 @@ function acces(): string {
   ${h2("acces")}
   ${biP(
     [
-      `Ce serveur est une instance privée. L'endpoint MCP n'est ouvert qu'aux clients autorisés : chacun reçoit son propre jeton, révocable séparément, et une requête qui n'en porte pas de valide n'obtient rien — pas même la confirmation que l'endpoint existe. Pour en demander l'accès, écrire à ${CONTACT}.`,
+      `Ce serveur est une instance privée. L'endpoint MCP n'est ouvert qu'aux clients autorisés (par paramètre d'authentification ou en-tête d'autorisation) : chacun reçoit son propre jeton, révocable séparément, et une requête qui n'en porte pas de valide n'obtient rien — pas même la confirmation que l'endpoint existe. Pour en demander l'accès, écrire à ${CONTACT}.`,
+      "Une fiche publique de découverte MCP (SEP-2127) sans secret est exposée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut les manifestes pour Google Antigravity (plugin.json, mcp_config.json) et Gemini CLI (gemini-extension.json).",
       "Le code source est public et le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés.",
     ],
     [
-      `This server is a private instance. The MCP endpoint is open to authorized clients only: each one gets its own token, revocable on its own, and a request that does not carry a valid one gets nothing — not even confirmation that the endpoint exists. To request access, write to ${CONTACT}.`,
+      `This server is a private instance. The MCP endpoint is open to authorized clients only (by authentication parameter or authorization header): each one gets its own token, revocable on its own, and a request that does not carry a valid one gets nothing — not even confirmation that the endpoint exists. To request access, write to ${CONTACT}.`,
+      "A public MCP Server Card (SEP-2127) without secrets is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository ships manifests for Google Antigravity (plugin.json, mcp_config.json) and Gemini CLI (gemini-extension.json).",
       "The source code is public and the corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
     ],
   )}

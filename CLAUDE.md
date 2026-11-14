@@ -24,7 +24,7 @@ qu'une seule ligne fausse servie à un modèle dans un outil juridique.
 | 1 | **Outils MCP** | `src/tools.ts` | nom, ajout/retrait (R2), paramètres, comportement, message d'erreur servi |
 | 2 | **Descriptions** | `src/tools.ts` (`description`, `title`), `catalogue.json` | toute reformulation ; R3 borne le delta et exige de consigner le coût en tokens |
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
-| 4 | **README.md** | racine | tout ce qui change ce que le dépôt *annonce* faire |
+| 4 | **README.md** et manifestes | racine (`README.md`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `GEMINI.md`, `/mcp/server-card`) | tout ce qui change ce que le dépôt *annonce* faire ou sa connectivité client |
 | 5 | **Page publique** | `catalogue.json` + `src/site.ts` | tout ce qui change ce que le public *lit* |
 
 **Procédure, à exécuter et à RAPPORTER — pas à supposer :**
@@ -71,8 +71,9 @@ les dix outils à son modèle depuis `athena/chat/worker_tools.py` **engendré**
 consigne qui figurait ici jusqu'au 2026-09-16 prescrivait un remède injouable.
 Le couplage, lui, a SURVÉCU en changeant de support : il vit désormais dans les **Skills
 claude.ai** (`competences-juridiques-pallas-athena/`, deux compétences — recherche et
-rédaction) qui nomment les outils `legislation_*` **à la main** (25 appels relevés le
-2026-09-16, répartis sur 6 fichiers). Rien ne les engendre, donc rien ne peut les réparer :
+rédaction) et le greffon Antigravity `pratique-civile-quebecoise`, qui nomment les outils
+`legislation_*` **à la main** (25 appels relevés le 2026-09-16 dans les Skills, répartis
+sur 6 fichiers). Rien ne les engendre, donc rien ne peut les réparer :
 après tout ajout, retrait ou renommage d'outil, les corriger À LA MAIN puis les téléverser
 dans claude.ai. Sinon l'échec n'apparaît qu'en pleine recherche juridique, sous la forme
 d'un outil qui « n'existe pas ».
@@ -130,6 +131,7 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
 - `cf.token` (racine, gitignoré) : jeton API Cloudflare. **Ne JAMAIS l'afficher, le lire
   en contexte, ni le supprimer** (consigne de Jason). Chargement inline uniquement :
   `export CLOUDFLARE_API_TOKEN=$(tr -d ' \t\r\n' < cf.token)`.
+- Ne jamais lire, afficher ou copier non plus `~/.gemini/config/mcp_config.json` ni `~/.gemini/config/config.json`.
 - `backfill.token` (racine, gitignoré) : Bearer de la route `/admin/backfill-vectors`.
 - `mcp.token` (racine, gitignoré) : jeton du **connecteur claude.ai** (`src/auth.ts`).
   Miroir du secret Worker `MCP_TOKEN` (`wrangler secret put MCP_TOKEN`) et du secret
@@ -422,6 +424,18 @@ client : écrit ici précisément parce que c'est sous pression qu'on viendra le
 sur une session qu'il ne détient plus. Le client de Pallas Athéna purge sa session sur 404,
 donc un jeton révoqué s'y présente comme un battement de session — visible (refus en
 français à chaque tour), jamais silencieux, mais mal diagnostiqué. Trancher au curl.
+
+*(2026-11-13)* Ajout de la compatibilité et découvrabilité **Google Antigravity** (`plugin.json`,
+`mcp_config.json`, `assets/logo.svg`), **Gemini CLI** (`gemini-extension.json` avec
+`"contextFileName": []`), **Gemini web** (`https://gemini.google.com` et
+`https://aistudio.google.com` admises par défaut dans CORS avec `Mcp-Method`, `Mcp-Name`,
+`Mcp-Session-Id` et `Last-Event-ID` en pré-vol `2026-07-28`), fiche publique SEP-2127
+(`GET /mcp/server-card` dérivée de `src/serveur.ts` et soumise à `MCP_ENABLED`), et
+`GEMINI.md` (< 24 000 octets, synthèse d'espace de travail renvoyant à `CLAUDE.md`). Parité
+des versions, descriptions, manifestes et taille de `GEMINI.md` verrouillée par
+`tests/catalogue.test.mjs`, et routes/CORS/SEP-2127 vérifiés dans `test/routeur.test.ts`
+(note : les changements dans `src/index.ts`, `src/serveur.ts`, `src/site.ts` et `wrangler.jsonc`
+exigent un déploiement manuel pour prendre effet sur `legislation.poirierlavoie.ca`).
 
 **Répéter une migration DESTRUCTIVE avant de la jouer en production.** Une migration qui
 `DROP` quoi que ce soit — au premier chef `articles_fts`, table virtuelle à CONTENU EXTERNE —

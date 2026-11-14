@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Législation du Québec et du Canada">
+  <!-- Open statute codex with division hierarchy lines and legal section sign (§), 18px+ margin -->
+  <g fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Open codex cover / outer pages (site terracotta palette, legible on light & dark UI) -->
+    <path d="M22 30 C38 24 52 24 64 32 C76 24 90 24 106 30 L106 96 C90 90 76 90 64 98 C52 90 38 90 22 96 Z" stroke="#c25438" />
+    <!-- Lower page edge -->
+    <path d="M22 106 C38 100 52 100 64 108 C76 100 90 100 106 106" stroke="#e08b6a" />
+    <!-- Central spine -->
+    <line x1="64" y1="32" x2="64" y2="98" stroke="#c25438" />
+    <!-- Left page: structured division hierarchy lines -->
+    <line x1="33" y1="45" x2="53" y2="45" stroke="#e08b6a" />
+    <line x1="37" y1="56" x2="53" y2="56" stroke="#e08b6a" />
+    <line x1="37" y1="67" x2="53" y2="67" stroke="#e08b6a" />
+    <line x1="33" y1="78" x2="53" y2="78" stroke="#e08b6a" />
+    <!-- Right page: legal section sign (§) -->
+    <path d="M92 46 C89 41 80 41 78 47 C77 52 93 55 93 61 C93 66 87 68 83 67" stroke="#d97706" />
+    <path d="M87 53 C82 52 77 55 77 60 C77 66 93 69 92 75 C91 80 81 80 78 75" stroke="#d97706" />
+  </g>
+</svg>

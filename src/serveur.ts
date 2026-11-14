@@ -36,10 +36,62 @@ export const CAPACITES = { tools: { listChanged: false } } as const;
  * « employer le connecteur Législation du Québec » face à un serveur qui s'annonçait
  * « MCP Legislation », et le renvoi ne se faisait pas.
  */
+export const PACKAGE_NAME = "mcp-legislation";
+
 export const SERVER_INFO = {
   name: "Législation du Québec et du Canada",
   version: "0.2.0",
 } as const;
+
+/**
+ * Description publique canonique — partagée avec la fiche SEP-2127 (`/mcp/server-card`)
+ * et épinglée contre `package.json`, `plugin.json` et `gemini-extension.json` dans
+ * `tests/catalogue.test.mjs`. Aucun décompte vivant (R10).
+ */
+export const PUBLIC_DESCRIPTION =
+  "Texte officiel en lecture seule de lois et règlements du Québec et du Canada " +
+  "(en français et en anglais), hiérarchie complète des divisions et recherche hybride " +
+  "lexicale et sémantique.";
+
+/** URI canonique du schéma SEP-2127 (MCP Server Cards). */
+export const SERVER_CARD_SCHEMA =
+  "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
+
+/**
+ * Fiche de découverte HTTP MCP (SEP-2127) — PURE, sans accès à `env` ni à aucun secret.
+ *
+ * Toutes les valeurs d'identité et de protocole dérivent de `PACKAGE_NAME`, `SERVER_INFO`,
+ * `PUBLIC_DESCRIPTION` et `VERSIONS` (R10 : aucune copie littérale).
+ */
+export function carteServeur() {
+  return {
+    $schema: SERVER_CARD_SCHEMA,
+    name: `ca.poirierlavoie.legislation/${PACKAGE_NAME}`,
+    title: SERVER_INFO.name,
+    version: SERVER_INFO.version,
+    description: PUBLIC_DESCRIPTION,
+    websiteUrl: "https://legislation.poirierlavoie.ca/",
+    repository: {
+      url: "https://github.com/jpoirierlavoie/MCP-Legislation",
+      source: "github",
+    },
+    remotes: [
+      {
+        type: "streamable-http",
+        url: "https://legislation.poirierlavoie.ca/mcp",
+        supportedProtocolVersions: [...VERSIONS],
+        headers: [
+          {
+            name: "Authorization",
+            description: "Jeton d'accès de l'instance (« Bearer <jeton> »).",
+            isRequired: true,
+            isSecret: true,
+          },
+        ],
+      },
+    ],
+  };
+}
 
 /**
  * Orientation générale renvoyée à l'initialisation.

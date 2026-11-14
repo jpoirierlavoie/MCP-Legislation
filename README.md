@@ -37,7 +37,26 @@ et le slash final est toléré partout.
 | Client | Forme | À écrire |
 |---|---|---|
 | Connecteur claude.ai | paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
-| Backend applicatif, Claude Code, CI | en-tête | `https://legislation.poirierlavoie.ca/mcp` + `Authorization: Bearer <jeton>` |
+| Backend applicatif, Claude Code, Antigravity, Gemini CLI, CI | en-tête | `https://legislation.poirierlavoie.ca/mcp` + `Authorization: Bearer <jeton>` |
+
+- **Google Antigravity** (`plugin.json`, `mcp_config.json`, `assets/logo.svg` à la racine) :
+  installer via `agy plugin install https://github.com/jpoirierlavoie/MCP-Legislation.git`
+  (ou copier les fichiers du greffon dans `~/.gemini/config/plugins/mcp-legislation`),
+  renseigner la variable `MCP_LEGISLATION_SECRET` sur la page du greffon puis l'activer —
+  les outils se chargent à la demande (*lazy*) par défaut, sans contexte additionnel hors les
+  `INSTRUCTIONS` canoniques du serveur.
+- **Gemini CLI** (`gemini-extension.json`) : installer via
+  `gemini extensions install https://github.com/jpoirierlavoie/MCP-Legislation` et saisir
+  `MCP_LEGISLATION_SECRET` (stocké de façon sensible). Le manifeste déclare
+  `"contextFileName": []` afin que `GEMINI.md` (réservé au développement de ce dépôt) ne
+  soit pas injecté dans les sessions d'usage général.
+- **Gemini web** : les origines `https://gemini.google.com` et `https://aistudio.google.com`
+  sont admises par défaut dans CORS, aux côtés de `https://claude.ai` et
+  `https://claude.com`.
+- **Découverte HTTP (SEP-2127)** : la fiche publique de connectivité est exposée sans secret
+  sur `GET https://legislation.poirierlavoie.ca/mcp/server-card`
+  (`application/mcp-server-card+json`), soumise au coupe-circuit `MCP_ENABLED` (tandis que
+  `/mcp` continue de répondre `404` sans jeton valide).
 
 **Pour le connecteur claude.ai, employer `?key=`** : c'est la forme mesurée en production.
 **Pour un backend qui ouvre lui-même sa session, employer l'en-tête** — c'est la seule des
@@ -160,7 +179,9 @@ docs/           Notes d'architecture, rapports de phase, format EPUB ; archive d
 Démarrage : `npm install`, puis `npx wrangler dev --var MCP_TOKEN:local-a --var
 MCP_TOKEN_VEILLE:local-b` — **les `--var` sont requis** : l'endpoint est fermé par défaut,
 sans secret il refuse tout. Puis `MCP_TOKEN=local-a npm run evals` contre
-`http://127.0.0.1:8787/mcp`. **Avant toute modification, lire [CLAUDE.md](CLAUDE.md)** —
+`http://127.0.0.1:8787/mcp`. Les manifestes clients vivent à la racine (`plugin.json`,
+`mcp_config.json`, `gemini-extension.json`). **Avant toute modification, lire
+[CLAUDE.md](CLAUDE.md)** (et [GEMINI.md](GEMINI.md) sous Antigravity / Gemini CLI) —
 les invariants critiques du dépôt y sont consignés (ordre de la config, miroirs de clés
 de tri, limites D1/Vectorize, échelle de recherche).
 
