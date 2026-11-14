@@ -185,6 +185,15 @@ sans secret il refuse tout. Puis `MCP_TOKEN=local-a npm run evals` contre
 les invariants critiques du dépôt y sont consignés (ordre de la config, miroirs de clés
 de tri, limites D1/Vectorize, échelle de recherche).
 
+**Déploiement continu :** tout `push` sur `main` déclenche
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) dans l'environnement GitHub
+`production` (`CLOUDFLARE_API_TOKEN` requis côté GitHub), qui exécute la porte de tests,
+bootstrappe une D1 vierge puis lance **`npm run deploy`** (`scripts/deployer.mjs` :
+migrations D1 `--remote` d'abord, puis déploiement du Worker avec `--var COMMIT:<sha>`),
+suivi d'une vérification vivante de `/health`, `/mcp/server-card` et `/`. En repli local,
+employer **`npm run deploy`** (et jamais `wrangler deploy` seul) ; l'ingestion du corpus
+(`pipeline/`) et le backfill des vecteurs demeurent strictement manuels.
+
 **Toute modification doit évaluer son impact sur CINQ surfaces** — outils MCP,
 descriptions, schéma, ce README et la [page publique](https://legislation.poirierlavoie.ca/)
 (`catalogue.json`) — et inclure les mises à jour requises dans le même commit. C'est une

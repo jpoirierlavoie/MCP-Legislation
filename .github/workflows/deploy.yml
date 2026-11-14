@@ -1,0 +1,254 @@
+name: deploy
+
+# Déploiement continu vers Cloudflare Workers (`legislation.poirierlavoie.ca`).
+#
+# Gardes stricts :
+#   1. 4 contrôles préalables en LECTURE SEULE sur `api.cloudflare.com` (jeton présent sans
+#      retour chariot, reconnu par Cloudflare, compte unique, D1 `legislation` égale à
+#      `wrangler.jsonc`).
+#   2. Porte complète hors réseau (`wrangler types`, `tsc --noEmit`, `biome check .`,
+#      `npm test`, reconstruction d'une D1 vierge depuis `schema.sql` + migrations,
+#      `wrangler deploy --dry-run`).
+#   3. `npm run deploy` (`scripts/deployer.mjs`) : migrations D1 PUIS `wrangler deploy`
+#      avec `--var COMMIT:<sha>`. AUCUNE ingestion du corpus (`pipeline/`) ni aucun
+#      `wrangler rollback` automatique (le recyclage des Durable Objects et les migrations DO
+#      restent supervisés).
+#   4. Vérification vivante post-déploiement sur `/health` (fenêtre 60 s), `/mcp/server-card`
+#      et `/` (HTTP 200).
+#
+# Aucune expression `${{ }}` n'apparaît dans un `run:` : tout passe par `env:`.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deployer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # ── LES QUATRE CONTRÔLES PRÉALABLES (lecture seule) ────────────────────
+      - name: Contrôle 1/4 — le secret CLOUDFLARE_API_TOKEN parvient-il au job ?
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            case "$CLOUDFLARE_API_TOKEN" in
+              *[[:space:]]*)
+                echo "::error title=Le jeton contient une espace ou un saut de ligne::Recoller la valeur dans l'environnement « production » sans espace ni retour chariot."
+                exit 1
+                ;;
+            esac
+            echo "Le secret est présent et ne porte aucune espace."
+            exit 0
+          fi
+          echo "::error title=CLOUDFLARE_API_TOKEN est VIDE dans ce job::Définir le secret dans l'environnement GitHub « production » (gh secret set CLOUDFLARE_API_TOKEN --env production -R jpoirierlavoie/MCP-Legislation)."
+          exit 1
+
+      - name: Contrôle 2/4 — Cloudflare accepte-t-il ce jeton ?
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          command -v jq >/dev/null || { echo "::error::jq est absent de l'image du runner."; exit 1; }
+          code=$(curl -sS --max-time 20 \
+                   -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                   -o /tmp/verify.json -w '%{http_code}' \
+                   https://api.cloudflare.com/client/v4/user/tokens/verify || echo 000)
+          statut=$(jq -r '.result.status // "inconnu"' /tmp/verify.json 2>/dev/null || echo inconnu)
+          motifs=$(jq -r '[.errors[]? | "\(.code): \(.message)"] | join(" | ")' /tmp/verify.json 2>/dev/null || echo "")
+          case "$code" in
+            200)
+              echo "Jeton reconnu, statut « ${statut} »."
+              if [ "$statut" != "active" ]; then
+                echo "::error title=Jeton non actif (${statut})::Un jeton expiré ou suspendu se remplace."
+                exit 1
+              fi
+              ;;
+            401|403)
+              echo "::error title=Jeton REFUSÉ par Cloudflare (HTTP ${code})::${motifs:-aucun motif rendu}."
+              exit 1
+              ;;
+            000)
+              echo "::error title=api.cloudflare.com injoignable::Vérifier la politique réseau du runner."
+              exit 1
+              ;;
+            *)
+              echo "::notice title=Vérification non concluante (HTTP ${code})::${motifs:-sans motif}. Non bloquant pour un jeton de compte."
+              ;;
+          esac
+
+      - name: Contrôle 3/4 — le jeton désigne-t-il UN SEUL compte ?
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+            echo "CF_COMPTE=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
+            echo "Compte fourni par la configuration."
+            exit 0
+          fi
+          code=$(curl -sS --max-time 20 \
+                   -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                   -o /tmp/comptes.json -w '%{http_code}' \
+                   https://api.cloudflare.com/client/v4/accounts || echo 000)
+          motifs=$(jq -r '[.errors[]? | "\(.code): \(.message)"] | join(" | ")' /tmp/comptes.json 2>/dev/null || echo "")
+          if [ "$code" != "200" ]; then
+            echo "::error title=Le jeton ne peut pas énumérer les comptes (HTTP ${code})::${motifs:-sans motif}. Ajouter « Account Settings: Read » au jeton ou définir CLOUDFLARE_ACCOUNT_ID."
+            exit 1
+          fi
+          n=$(jq '[.result[]?] | length' /tmp/comptes.json)
+          echo "Comptes visibles par ce jeton : ${n}."
+          if [ "$n" -ne 1 ]; then
+            echo "::error title=Comptes visibles attendus = 1, obtenu = ${n}::Ajuster la portée du jeton ou définir CLOUDFLARE_ACCOUNT_ID."
+            exit 1
+          fi
+          compte=$(jq -r '.result[0].id' /tmp/comptes.json)
+          echo "::add-mask::$compte"
+          echo "CF_COMPTE=$compte" >> "$GITHUB_ENV"
+          echo "Un seul compte : wrangler le choisira sans ambiguïté."
+
+      - name: Contrôle 4/4 — la base D1 « legislation » correspond-elle à wrangler.jsonc ?
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CF_COMPTE:-}" ]; then
+            echo "::error title=Identifiant de compte manquant::Le contrôle 3 n'a pas exporté CF_COMPTE."
+            exit 1
+          fi
+          attendu=$(grep -oE '"database_id"[[:space:]]*:[[:space:]]*"[^"]+"' wrangler.jsonc | head -1 | grep -oE '[0-9a-fA-F-]{36}' || true)
+          if [ -z "$attendu" ]; then
+            echo "::error title=Identifiant de base D1 illisible dans wrangler.jsonc::Impossible de comparer sans identifiant attendu."
+            exit 1
+          fi
+          code=$(curl -sS --max-time 20 \
+                   -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                   -o /tmp/d1.json -w '%{http_code}' \
+                   "https://api.cloudflare.com/client/v4/accounts/${CF_COMPTE}/d1/database?name=legislation" || echo 000)
+          motifs=$(jq -r '[.errors[]? | "\(.code): \(.message)"] | join(" | ")' /tmp/d1.json 2>/dev/null || echo "")
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "::error title=Le jeton n'a pas accès à D1 sur ce compte (HTTP ${code})::${motifs:-sans motif}. Vérifier « Account > D1 > Edit »."
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::error title=Interrogation D1 impossible (HTTP ${code})::${motifs:-sans motif}"
+            exit 1
+          fi
+          trouve=$(jq -r '[.result[]? | select(.name=="legislation") | .uuid] | .[0] // ""' /tmp/d1.json)
+          if [ -z "$trouve" ] || [ "$trouve" != "$attendu" ]; then
+            echo "::error title=Discordance sur la base D1 « legislation »::Attendu=${attendu}, trouvé=${trouve:-absent}."
+            exit 1
+          fi
+          echo "Base D1 « legislation » vérifiée (${attendu})."
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Types du Worker
+        run: npx wrangler types
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Mise en forme et lint
+        run: npx biome check .
+
+      - name: Tests (Node + workerd)
+        run: npm test
+
+      - name: Bootstrap D1 vierge (schema.sql + migrations locales)
+        run: |
+          set -euo pipefail
+          T=$(mktemp -d)
+          npx wrangler d1 execute legislation --local --persist-to "$T" --file=./schema.sql -y
+          npx wrangler d1 migrations apply legislation --local --persist-to "$T"
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='official_cite'" \
+            | grep -q '"n": *1' || { echo "laws.official_cite absente après 0004"; exit 1; }
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('article_numbers')" \
+            | grep -q '"n": *4' || { echo "article_numbers absente ou incomplète"; exit 1; }
+          rm -rf "$T"
+
+      - name: Paquet de déploiement (à blanc)
+        run: npx wrangler deploy --dry-run
+
+      - name: Migrations D1 et déploiement (npm run deploy)
+        id: deploy
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_COMPTE }}
+
+      - name: Post-mortem — état des migrations D1 après échec
+        if: failure() && steps.deploy.conclusion == 'failure'
+        run: npx wrangler d1 migrations list legislation --remote || true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_COMPTE }}
+
+      - name: Vérification vivante (/health, /mcp/server-card et /)
+        if: success()
+        env:
+          ATTENDU_LONG: ${{ github.sha }}
+          SANTE: https://legislation.poirierlavoie.ca/health
+          CARTE: https://legislation.poirierlavoie.ca/mcp/server-card
+          ACCUEIL: https://legislation.poirierlavoie.ca/
+        run: |
+          set -euo pipefail
+          attendu="${ATTENDU_LONG:0:7}"
+          ok=0
+          # Jusqu'à 60 s pour couvrir la propagation en bordure et le recyclage DO.
+          for i in $(seq 1 12); do
+            code=$(curl -sS --max-time 20 -o /tmp/health.json -w '%{http_code}' "$SANTE" || echo 000)
+            if [ "$code" = "200" ]; then
+              enligne=$(jq -r '.commit // "absent"' /tmp/health.json)
+              if [ "$enligne" = "$attendu" ]; then
+                echo "Production alignée sur /health : commit ${enligne} (tentative ${i}/12)."
+                ok=1
+                break
+              fi
+              echo "Tentative ${i}/12 : /health HTTP 200 mais commit=${enligne} (attendu ${attendu})."
+            else
+              echo "Tentative ${i}/12 : /health HTTP ${code}."
+            fi
+            sleep 5
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error title=Vérification /health échouée::Le commit ${attendu} n'est pas apparu sur ${SANTE}."
+            exit 1
+          fi
+          code_carte=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$CARTE" || echo 000)
+          if [ "$code_carte" != "200" ]; then
+            echo "::error title=Fiche SEP-2127 indisponible (HTTP ${code_carte})::${CARTE} n'a pas rendu 200."
+            exit 1
+          fi
+          code_accueil=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$ACCUEIL" || echo 000)
+          if [ "$code_accueil" != "200" ]; then
+            echo "::error title=Page publique indisponible (HTTP ${code_accueil})::${ACCUEIL} n'a pas rendu 200."
+            exit 1
+          fi
+          echo "Vérification vivante complète : /health=${attendu}, /mcp/server-card=200, /=200."

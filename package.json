@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "wrangler dev --var MCP_TOKEN:local-a --var MCP_TOKEN_VEILLE:local-b",
     "start": "wrangler dev --var MCP_TOKEN:local-a --var MCP_TOKEN_VEILLE:local-b",
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/deployer.mjs",
     "cf-typegen": "wrangler types",
     "type-check": "tsc --noEmit",
     "db:schema:local": "wrangler d1 execute legislation --local --file=./schema.sql",
+    "db:migrate:local": "wrangler d1 migrations apply legislation --local",
+    "db:migrate:remote": "wrangler d1 migrations apply legislation --remote",
     "evals": "node tests/evals.mjs",
     "eval": "node eval/run.mjs",
     "lint": "biome check .",

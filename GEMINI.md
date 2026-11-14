@@ -97,4 +97,4 @@ npx.cmd wrangler deploy --dry-run
 
 Tests Python hors ligne : `PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -p "test_config.py" -v` (et modules unitaires sans téléchargement listés dans `.github/workflows/ci.yml`).
 
-**Déploiement manuel uniquement :** ne jamais exécuter `wrangler deploy` sans `--dry-run`, ni `wrangler d1 migrations apply --remote`, sans instruction explicite du praticien (et sans bookmark Time Travel avant migration).
+**Déploiement continu sur `main` et repli local :** un `push` sur `main` déclenche `.github/workflows/deploy.yml` (`environment: production`), qui exécute `npm run deploy` (`scripts/deployer.mjs` : migrations D1 puis `wrangler deploy --var COMMIT:<sha>`). Ne jamais exécuter `wrangler deploy` seul, ni `wrangler d1 migrations apply --remote` ou un déploiement local sans instruction explicite du praticien (et sans répétition + bookmark Time Travel avant toute migration destructive). L'ingestion du corpus (`pipeline/`) reste exclusivement manuelle.

@@ -123,7 +123,7 @@ npm test                                           # vitest, DEUX projets : 17 f
 #     et le lanceur de Node y répond « pass 0, fail 1 » sans rien dire du pourquoi.
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.ingest --law X --lang fr --apply-local
 npx wrangler d1 migrations apply legislation --local|--remote   # bookmark Time Travel AVANT --remote
-npx wrangler deploy                                # jeton requis (voir Secrets)
+npm run deploy                                     # migrations D1 d'abord PUIS wrangler deploy --var COMMIT:<sha> (scripts/deployer.mjs)
 ```
 
 ## Secrets et jetons
@@ -355,10 +355,16 @@ npx wrangler deploy                                # jeton requis (voir Secrets)
 
 ## Procédures sûres
 
-**Modifier le Worker** : coder → `tsc` → `wrangler dev` + contrôles locaux →
-`npm run evals` → deploy → re-vérifier en production (les Durable Objects mettent
-~30–60 s à recycler l'ancien code) → `npm run eval` si le comportement de recherche a
-changé — **porte : aucune régression sur les 21 cas**.
+**Modifier le Worker** : coder → `tsc` → `npm test` → `wrangler dev` + contrôles locaux →
+`npm run evals` → pousser sur `main` (déploiement continu via `.github/workflows/deploy.yml`
+dans l'environnement `production`, ou repli local via `npm run deploy` /
+`scripts/deployer.mjs` qui exécute les migrations D1 avant `wrangler deploy --var COMMIT:<sha>`) →
+re-vérifier en production (les Durable Objects mettent ~30–60 s à recycler l'ancien code, et
+`/health` annonce désormais le `commit` déployé ; `.github/workflows/verifier-deploiement.yml`
+vérifie chaque jour qu'aucun écart ne subsiste) → `npm run eval` si le comportement de recherche
+a changé — **porte : aucune régression sur les 21 cas**. Ne jamais appeler `npx wrangler deploy`
+seul, ni déclencher `pipeline/` automatiquement en CI ; toute migration destructive reste répétée
+sur une D1 distante jetable avec bookmark Time Travel avant fusion sur `main`.
 
 **Contrôle d'accès de `/mcp`** (`src/auth.ts`) : **DEUX jetons** (`MCP_TOKEN` pour le
 connecteur claude.ai, `MCP_TOKEN_VEILLE` pour la veille de consolidation en CI), aux droits
@@ -433,9 +439,11 @@ français à chaque tour), jamais silencieux, mais mal diagnostiqué. Trancher a
 (`GET /mcp/server-card` dérivée de `src/serveur.ts` et soumise à `MCP_ENABLED`), et
 `GEMINI.md` (< 24 000 octets, synthèse d'espace de travail renvoyant à `CLAUDE.md`). Parité
 des versions, descriptions, manifestes et taille de `GEMINI.md` verrouillée par
-`tests/catalogue.test.mjs`, et routes/CORS/SEP-2127 vérifiés dans `test/routeur.test.ts`
-(note : les changements dans `src/index.ts`, `src/serveur.ts`, `src/site.ts` et `wrangler.jsonc`
-exigent un déploiement manuel pour prendre effet sur `legislation.poirierlavoie.ca`).
+`tests/catalogue.test.mjs`, et routes/CORS/SEP-2127 vérifiés dans `test/routeur.test.ts`.
+*(2026-11-14)* Ajout du déploiement continu automatisé via `.github/workflows/deploy.yml`
+(`environment: production`, `scripts/deployer.mjs`, provenance du commit exposée par `GET /health`
+et `wrangler.jsonc` `COMMIT`) ainsi que la sentinelle quotidienne sans secret
+`.github/workflows/verifier-deploiement.yml` sur `legislation.poirierlavoie.ca`.
 
 **Répéter une migration DESTRUCTIVE avant de la jouer en production.** Une migration qui
 `DROP` quoi que ce soit — au premier chef `articles_fts`, table virtuelle à CONTENU EXTERNE —

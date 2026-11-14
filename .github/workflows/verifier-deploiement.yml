@@ -1,0 +1,67 @@
+name: verifier-deploiement
+
+# CONTRÔLE DE DÉRIVE — il REGARDE, il ne déploie rien et ne le peut pas.
+#
+# Filet de sécurité indépendant sans secret (`permissions: contents: read`, aucun jeton
+# Cloudflare) : compare chaque jour le `commit` annoncé sur `/health` au dernier commit
+# de `main` pour repérer un déploiement CD manqué ou un jeton expiré.
+on:
+  schedule:
+    - cron: "37 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verifier-deploiement
+  cancel-in-progress: true
+
+jobs:
+  comparer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: La version en ligne est-elle celle de main ?
+        env:
+          ATTENDU_LONG: ${{ github.sha }}
+          SANTE: https://legislation.poirierlavoie.ca/health
+        run: |
+          set -euo pipefail
+          attendu="${ATTENDU_LONG:0:7}"
+
+          code=$(curl -sS --max-time 20 -o /tmp/sante.json -w '%{http_code}' "$SANTE" || echo 000)
+
+          if [ "$code" = "000" ]; then
+            echo "::error title=Le point d'entrée de santé est injoignable::Aucune conclusion possible sur la version en ligne."
+            exit 1
+          fi
+          if [ "$code" = "404" ]; then
+            echo "::error title=Le connecteur est COUPÉ (MCP_ENABLED=false)::/health rend 404 par le coupe-circuit."
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::error title=/health a répondu ${code}::La mesure elle-même a échoué."
+            exit 1
+          fi
+
+          enligne=$(jq -r '.commit // "absent"' /tmp/sante.json)
+
+          if [ "$enligne" = "absent" ] || [ "$enligne" = "inconnu" ]; then
+            echo "::error title=La version en ligne n'annonce pas son commit::Relancer deploy.yml (ou npm run deploy) pour annoncer le commit sur /health."
+            exit 1
+          fi
+
+          if [ "$enligne" = "$attendu" ]; then
+            echo "::notice title=Production à jour::La version en ligne est le commit ${attendu}, dernier de main."
+            exit 0
+          fi
+
+          echo "::error title=La production est en retard sur main::En ligne : ${enligne}. Dernier commit de main : ${attendu}. Relancer deploy.yml ou exécuter npm run deploy."
+          echo "Comparer les deux : https://github.com/${GITHUB_REPOSITORY}/compare/${enligne}...${attendu}"
+          exit 1

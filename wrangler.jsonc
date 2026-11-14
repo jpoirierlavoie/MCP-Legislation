@@ -26,7 +26,8 @@
       "database_name": "legislation",
       // Base D1 réelle (compte « Jason Poirier Lavoie », région ENAM), créée via
       // `wrangler d1 create legislation`. Le dev local utilise quand même un SQLite local.
-      "database_id": "82779d59-480f-4847-9716-6f4d7c62af5b"
+      "database_id": "82779d59-480f-4847-9716-6f4d7c62af5b",
+      "migrations_dir": "migrations"
     }
   ],
 
@@ -62,6 +63,9 @@
     "FEDERAL_CORPUS": "1",
     "MCP_ENABLED": "true",
     "SOCLE": "true",
+    // Commit dont la version en ligne est issue, annoncé sur /health.
+    // Posé à la volée par `scripts/deployer.mjs` via `--var COMMIT:<sha>`.
+    "COMMIT": "inconnu",
     // Origines de navigateur admises EN PLUS de claude.ai, claude.com, gemini.google.com
     // et aistudio.google.com (séparées par des virgules). Vide en temps normal. Sert à
     // deux choses : ajouter un client web tiers, ou autoriser une origine de

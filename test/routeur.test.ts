@@ -272,10 +272,20 @@ describe("la chaîne intergicielle", () => {
     }
   });
 
-  it("/health répond quand le service est armé", async () => {
+  it("/health répond avec le commit annoncé quand le service est armé", async () => {
     const r = await SELF.fetch("https://legislation.test/health");
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ status: "ok" });
+    expect(await r.json()).toEqual({ status: "ok", commit: "inconnu" });
+
+    const precedent = e.COMMIT;
+    e.COMMIT = "abc1234";
+    try {
+      const r2 = await SELF.fetch("https://legislation.test/health");
+      expect(r2.status).toBe(200);
+      expect(await r2.json()).toEqual({ status: "ok", commit: "abc1234" });
+    } finally {
+      e.COMMIT = precedent;
+    }
   });
 
   it("une origine de navigateur inconnue est refusée AVANT l'authentification", async () => {

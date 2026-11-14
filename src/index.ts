@@ -177,7 +177,10 @@ export default {
       }
 
       if (url.pathname === "/health") {
-        return new Response(JSON.stringify({ status: "ok" }), {
+        const rawCommit = (env as { COMMIT?: string }).COMMIT;
+        const commit =
+          typeof rawCommit === "string" && rawCommit.length > 0 ? rawCommit : "inconnu";
+        return new Response(JSON.stringify({ status: "ok", commit }), {
           headers: { "Content-Type": "application/json; charset=utf-8" },
         });
       }
