@@ -1,13 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   debitAcceptable,
+  drapeau,
   methodeNonPermise,
   origineAutorisee,
   origineInterdite,
   origineRefusee,
   originesAdmises,
   ouvrir,
+  preflight,
   refuser,
+  repondreCarteServeur,
+  reponseSante,
   tropDeRequetes,
 } from "@poirierlavoie/socle-juridique";
 import { McpAgent } from "agents/mcp";
@@ -90,71 +94,10 @@ async function servePage(request: Request, env: Env, ctx: ExecutionContext): Pro
     : res;
 }
 
-const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
-
-/** Origines web Gemini ajoutées à `ORIGINES_PAR_DEFAUT` (`claude.ai`, `claude.com`). */
-const ORIGINES_GEMINI = ["https://gemini.google.com", "https://aistudio.google.com"] as const;
-
-function originesNavigateurAdmises(env: Env): string[] {
-  const sup = (env as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS ?? "";
-  return originesAdmises([...ORIGINES_GEMINI, sup].join(","));
-}
-
-/**
- * Réponse au pré-vol CORS sur `/mcp*` incluant les en-têtes MCP `2026-07-28`
- * (`Mcp-Method`, `Mcp-Name`, `Mcp-Session-Id`) et `Last-Event-ID`.
- */
-function preflightMcp(origin: string): Response {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers":
-        "Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Accept, Last-Event-ID",
-      "Access-Control-Max-Age": "86400",
-      Vary: "Origin",
-    },
-  });
-}
-
-function reponseCarteServeur(method: string): Response {
-  if (method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-        "Access-Control-Allow-Headers": "Accept, Content-Type",
-        "Access-Control-Max-Age": "86400",
-      },
-    });
-  }
-  if (method !== "GET" && method !== "HEAD") {
-    return new Response(JSON.stringify({ error: "method_not_allowed" }), {
-      status: 405,
-      headers: {
-        ...JSON_HEADERS,
-        Allow: "GET, HEAD, OPTIONS",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
-  }
-  const headers: Record<string, string> = {
-    "Content-Type": "application/mcp-server-card+json; charset=utf-8",
-    "Cache-Control": "public, max-age=600",
-    "X-Content-Type-Options": "nosniff",
-    "Access-Control-Allow-Origin": "*",
-  };
-  return method === "HEAD"
-    ? new Response(null, { status: 200, headers })
-    : new Response(JSON.stringify(carteServeur()), { status: 200, headers });
-}
-
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
-    const admises = originesNavigateurAdmises(env);
+    const admises = originesAdmises((env as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS);
     const origin = origineAutorisee(request, admises);
 
     // La page publique passe AVANT le coupe-circuit, et hors du bloc /mcp. C'est
@@ -170,26 +113,21 @@ export default {
 
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/") || url.pathname === "/health") {
       // 1. COUPE-CIRCUIT. La polarité est celle du dépôt : variable absente, vide ou mal
-      //    orthographiée ⇒ service ÉTEINT. Ne jamais l'écrire `=== "false"`, ce serait un
-      //    garde ouvert par défaut sur un service destiné au multilocataire.
-      if ((env as { MCP_ENABLED?: string }).MCP_ENABLED !== "true") {
+      //    orthographiée ⇒ service ÉTEINT. Fermé par défaut sur un service destiné au
+      //    multilocataire.
+      if (!drapeau((env as { MCP_ENABLED?: string }).MCP_ENABLED, false)) {
         return refuser("404", origin);
       }
 
       if (url.pathname === "/health") {
-        const rawCommit = (env as { COMMIT?: string }).COMMIT;
-        const commit =
-          typeof rawCommit === "string" && rawCommit.length > 0 ? rawCommit : "inconnu";
-        return new Response(JSON.stringify({ status: "ok", commit }), {
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-        });
+        return reponseSante({ commit: (env as { COMMIT?: string }).COMMIT });
       }
 
       // Fiche de découverte SEP-2127 (`/mcp/server-card`) : exception NOMMÉE et exacte
       // avant le contrôle d'origine et la porte d'accès `/mcp*`. Métadonnées publiques sans
       // secret, lisibles par tout catalogue ou client MCP, mais soumises au coupe-circuit.
       if (url.pathname === "/mcp/server-card") {
-        return reponseCarteServeur(request.method);
+        return repondreCarteServeur(request.method, carteServeur());
       }
 
       // 2. ORIGINE, avant toute authentification : c'est la défense contre le
@@ -199,7 +137,7 @@ export default {
       // 3. PRÉ-VOL, avant l'authentification et JAMAIS limité en débit. Un navigateur émet
       //    `OPTIONS` sans porteur ; l'exiger casserait le connecteur sans rien protéger, et
       //    un 429 sur un pré-vol ne remonte que comme un échec CORS opaque.
-      if (request.method === "OPTIONS" && origin) return preflightMcp(origin);
+      if (request.method === "OPTIONS" && origin) return preflight(origin);
 
       // 4. DÉBIT. Clé = l'adresse vue par Cloudflare. Le jeton ne doit JAMAIS servir de clé :
       //    il finirait dans un compteur, donc dans des journaux. Échoue OUVERT — il protège
@@ -207,7 +145,7 @@ export default {
       const ip = request.headers.get("CF-Connecting-IP") ?? "sans-ip";
       if (!(await debitAcceptable(env.RATE_LIMITER, ip))) return tropDeRequetes(60, origin);
 
-      const surSocle = (env as { SOCLE?: string }).SOCLE === "true";
+      const surSocle = drapeau((env as { SOCLE?: string }).SOCLE, false);
 
       // 5. IDENTITÉ. Échec : refus. Le chemin du socle emploie `ouvrir` (comparaison sur
       //    empreintes, élargissement des graphies) ; l'ancien garde `gateMcp`. Le drapeau

@@ -6,6 +6,10 @@
  * qui garantit qu'un seul texte est servi, quel que soit le chemin emprunté.
  */
 
+import { construireCarteServeur, SERVER_CARD_SCHEMA } from "@poirierlavoie/socle-juridique";
+
+export { SERVER_CARD_SCHEMA };
+
 /**
  * Versions du protocole servies, la plus élevée EN TÊTE.
  *
@@ -53,10 +57,6 @@ export const PUBLIC_DESCRIPTION =
   "(en français et en anglais), hiérarchie complète des divisions et recherche hybride " +
   "lexicale et sémantique.";
 
-/** URI canonique du schéma SEP-2127 (MCP Server Cards). */
-export const SERVER_CARD_SCHEMA =
-  "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json";
-
 /**
  * Fiche de découverte HTTP MCP (SEP-2127) — PURE, sans accès à `env` ni à aucun secret.
  *
@@ -64,33 +64,17 @@ export const SERVER_CARD_SCHEMA =
  * `PUBLIC_DESCRIPTION` et `VERSIONS` (R10 : aucune copie littérale).
  */
 export function carteServeur() {
-  return {
-    $schema: SERVER_CARD_SCHEMA,
+  return construireCarteServeur({
     name: `ca.poirierlavoie.legislation/${PACKAGE_NAME}`,
     title: SERVER_INFO.name,
     version: SERVER_INFO.version,
     description: PUBLIC_DESCRIPTION,
     websiteUrl: "https://legislation.poirierlavoie.ca/",
-    repository: {
-      url: "https://github.com/jpoirierlavoie/MCP-Legislation",
-      source: "github",
-    },
-    remotes: [
-      {
-        type: "streamable-http",
-        url: "https://legislation.poirierlavoie.ca/mcp",
-        supportedProtocolVersions: [...VERSIONS],
-        headers: [
-          {
-            name: "Authorization",
-            description: "Jeton d'accès de l'instance (« Bearer <jeton> »).",
-            isRequired: true,
-            isSecret: true,
-          },
-        ],
-      },
-    ],
-  };
+    repositoryUrl: "https://github.com/jpoirierlavoie/MCP-Legislation",
+    remoteUrl: "https://legislation.poirierlavoie.ca/mcp",
+    supportedProtocolVersions: VERSIONS,
+    authDescription: "Jeton d'accès de l'instance (« Bearer <jeton> »).",
+  });
 }
 
 /**
