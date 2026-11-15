@@ -5,6 +5,7 @@
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  "cache": { "enabled": true },
 
   // Domaine personnalisé (zone poirierlavoie.ca) : Cloudflare gère DNS + certificat.
   "routes": [{ "pattern": "legislation.poirierlavoie.ca", "custom_domain": true }],
