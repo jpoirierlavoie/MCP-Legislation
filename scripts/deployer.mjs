@@ -94,10 +94,9 @@ if (
 ) {
   echouer(
     "Le déploiement a échoué APRÈS des migrations réussies.",
-    "Vérifier l'état du Worker et des Durable Objects avant de relancer.",
+    "Vérifier l'état du Worker avant de relancer.",
   );
 }
 
 console.log(`\n✔ En ligne : commit ${commit}.`);
 console.log("  Vérifier : curl -s https://legislation.poirierlavoie.ca/health");
-console.log("  Note : prévoir ~30–60 s pour le recyclage des Durable Objects.");

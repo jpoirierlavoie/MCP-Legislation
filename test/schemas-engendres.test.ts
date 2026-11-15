@@ -1,10 +1,7 @@
 // Garde : `src/schemas.ts` ne doit jamais diverger de ce que `tools/list` publie.
 //
-// `src/schemas.ts` est ENGENDRÉ depuis `fixtures/tools-list.reference.json`, laquelle est
-// la charge utile réellement servie, capturée du SDK. Ce sont les schémas que la marche 2
-// servira une fois `McpAgent` retiré. Tant que les deux chemins coexistent, ils DOIVENT
-// dire la même chose — sinon le connecteur publierait un contrat sous Zod et un autre sous
-// le socle, selon un drapeau, sans que rien ne le signale.
+// `src/schemas.ts` est ENGENDRÉ depuis `fixtures/tools-list.reference.json`, laquelle fige
+// la charge utile publiée par `tools/list`.
 //
 // La comparaison porte sur les VALEURS, jamais sur le texte : le fichier engendré passe
 // ensuite par Biome, et une comparaison de chaînes rougirait sur la mise en forme.

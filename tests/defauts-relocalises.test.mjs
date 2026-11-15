@@ -1,9 +1,9 @@
 // Garde : tout défaut DÉCLARÉ dans un schéma doit être APPLIQUÉ dans son gestionnaire.
 //
-// POURQUOI CETTE GARDE EXISTE. Le validateur vers lequel on migre (sous-ensemble JSON
-// Schema du socle) n'applique JAMAIS `default` : c'est un champ publié dans `tools/list`,
-// jamais exécuté. Tant que Zod est là, le défaut arrive quand même et personne ne le voit.
-// Le jour où Zod part, l'argument vaut `undefined` — et chaque panne est SILENCIEUSE :
+// POURQUOI CETTE GARDE EXISTE. Le validateur JSON Schema du socle n'applique JAMAIS
+// `default` : c'est un champ publié dans `tools/list`, jamais exécuté. Si un défaut est
+// déclaré dans `PUBLIES` (`src/schemas.ts`) mais oublié dans son gestionnaire (`src/tools.ts`),
+// l'argument vaut `undefined` — et chaque panne est SILENCIEUSE :
 //
 //   · `lang` indéfini → `.bind(lawId, undefined, …)` → D1_TYPE_ERROR sur l'outil le plus
 //     appelé du connecteur, qui n'a pas de try/catch ;
@@ -12,30 +12,19 @@
 //   · `include_text` indéfini → falsy → le texte des articles cesse d'être servi ;
 //   · `structure` indéfini → survit par chance, le test étant `=== false`.
 //
-// Et le schéma publié continue d'annoncer le défaut pendant que l'argument arrive vide :
-// `tools/list` reste identique octet pour octet alors que le comportement s'est inversé.
-// AUCUNE autre garde de ce dépôt ne voit cela.
-//
-// Ce test lit le TEXTE SOURCE, et c'est délibéré : il porte sur la PROVENANCE d'une valeur
-// (« ce défaut est-il appliqué quelque part ? »), qu'aucun import ne peut observer.
+// Ce test croise les schémas publiés (`PUBLIES`) avec le texte source des gestionnaires
+// pour vérifier que chaque défaut annoncé est explicitement appliqué.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "vitest";
+import { PUBLIES } from "../src/schemas.ts";
 
 const SRC = readFileSync(new URL("../src/tools.ts", import.meta.url), "utf8");
 
-/**
- * Découpe la source en un bloc par outil.
- *
- * Le découpage se fait sur `const S_…`, qui ouvre chaque outil : forme hissée, puis
- * gestionnaire, puis dépôt au registre, puis enregistrement SDK. Découper sur
- * `registerTool(` — ce que faisait la première version — ne marche plus depuis que les
- * gestionnaires en sont sortis : le marqueur est désormais APRÈS le corps, et le bloc
- * obtenu ne contiendrait ni la forme ni le `??` qu'on vient y chercher.
- */
+/** Découpe la source en un bloc par gestionnaire (`const H_…` jusqu'à `outils.<nom> =`). */
 function blocs() {
-  const morceaux = SRC.split(/^ {2}const S_/m).slice(1);
+  const morceaux = SRC.split(/^ {2}const H_/m).slice(1);
   return morceaux.map((m) => {
     const nom = /^\s*outils\.([a-z_]+)\s*=/m.exec(m)?.[1] ?? "?";
     return { nom, texte: m };
@@ -52,16 +41,11 @@ test("chaque défaut déclaré est relocalisé dans son gestionnaire", () => {
   const manquants = [];
 
   for (const { nom, texte } of blocs()) {
-    // Un défaut par `.default(x)` écrit dans le bloc, plus un par référence à la constante
-    // LANG — qui porte `.default("fr")` hors du bloc, et que quatre champs sur dix
-    // n'écrivent qu'en une chaîne multi-ligne (`z\n  .enum(...)`), invisible à un grep naïf.
-    const directs = [...texte.matchAll(/\.default\(/g)].length;
-    const viaLang = /\blang:\s*LANG\b/.test(texte) ? 1 : 0;
-    const declares = directs + viaLang;
+    const props = PUBLIES[nom]?.inputSchema.properties ?? {};
+    const declares = Object.values(props).filter((v) => v.default !== undefined).length;
 
     // Une relocalisation se reconnaît à son paramètre renommé : `champ: champArg`, puis
-    // `champArg ?? valeur`. Le renommage est ce qui rend la garde sûre — sans lui, un
-    // `?? "fr"` posé n'importe où plus bas passerait pour une relocalisation.
+    // `champArg ?? valeur`.
     const appliques = [...texte.matchAll(/\b(\w+)Arg\s*\?\?/g)].length;
 
     if (declares !== appliques) {
@@ -72,15 +56,12 @@ test("chaque défaut déclaré est relocalisé dans son gestionnaire", () => {
   assert.deepEqual(
     manquants,
     [],
-    "Un défaut déclaré mais non appliqué disparaîtra EN SILENCE au retrait de Zod :\n  " +
+    "Un défaut déclaré dans src/schemas.ts mais non appliqué dans src/tools.ts :\n  " +
       manquants.join("\n  "),
   );
 });
 
 test("le compte total correspond aux treize défauts réellement publiés", () => {
-  // Treize, mesurés sur la charge utile que le SDK publie — cf.
-  // fixtures/tools-list.reference.json et scripts/capturer-tools-list.mjs. Ce n'est pas un
-  // nombre choisi : c'est le nombre constaté. S'il change, la fixture doit changer avec.
   const total = blocs().reduce(
     (n, { texte }) => n + [...texte.matchAll(/\b\w+Arg\s*\?\?/g)].length,
     0,
@@ -89,10 +70,6 @@ test("le compte total correspond aux treize défauts réellement publiés", () =
 });
 
 test("aucun gestionnaire ne lit encore un champ défauté sans l'avoir relocalisé", () => {
-  // Contrôle croisé : si un bloc renomme `lang: langArg` mais oublie la ligne
-  // `const lang = langArg ?? …`, le corps référencerait `lang` non déclaré — `tsc` le
-  // verrait. En revanche l'inverse passe : relocaliser puis ne pas s'en servir. On épingle
-  // donc que chaque renommage a bien son affectation.
   for (const { nom, texte } of blocs()) {
     for (const [, champ] of texte.matchAll(/(\w+):\s*(\w+)Arg\b/g)) {
       assert.ok(

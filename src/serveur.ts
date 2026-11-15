@@ -1,9 +1,5 @@
 /**
- * Identité du serveur et versions servies — partagées par les DEUX chemins.
- *
- * `INSTRUCTIONS` et `SERVER_INFO` vivaient dans `src/index.ts`, où seul `McpAgent` les
- * lisait. Le routeur du socle doit rendre exactement les mêmes : les déplacer ici est ce
- * qui garantit qu'un seul texte est servi, quel que soit le chemin emprunté.
+ * Identité du serveur, fiche publique SEP-2127 et versions servies.
  */
 
 import { construireCarteServeur, SERVER_CARD_SCHEMA } from "@poirierlavoie/socle-juridique";

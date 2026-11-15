@@ -1,21 +1,16 @@
 // Engendre `src/schemas.ts` depuis `fixtures/tools-list.reference.json`.
 //
-// POURQUOI ENGENDRER PLUTÔT QUE TRANSCRIRE. La marche 2 doit remplacer dix `inputSchema`
-// écrits en Zod par leur équivalent JSON Schema. Les transcrire à la main, c'est parier que
-// quarante-deux champs passent sans faute — et la faute y est silencieuse : un `required`
-// de trop rend un refus dur sur tous les appels nominaux, un `default` inventé ment au
-// modèle sans que rien n'échoue.
+// POURQUOI ENGENDRER PLUTÔT QUE TRANSCRIRE. Le routeur du socle publie dix `inputSchema`
+// au format JSON Schema. Les transcrire à la main ferait courir un risque de dérive
+// silencieuse : un `required` de trop rend un refus dur sur tous les appels nominaux,
+// un `default` inventé ment au modèle sans que rien n'échoue.
 //
-// Or la conversion est DÉJÀ FAITE, et par l'implémentation de référence : le SDK convertit
-// Zod en JSON Schema pour publier `tools/list`, et `scripts/capturer-tools-list.mjs` a figé
-// exactement ce qu'il publie. Il n'y a donc rien à transcrire — seulement à reprendre.
-//
-// Quatre questions ouvertes se règlent du même coup, sans arbitrage :
+// `fixtures/tools-list.reference.json` fige exactement le contrat publié historiquement :
 //   · `$schema` en draft-07  → conservé, puisqu'il est publié aujourd'hui ;
 //   · `execution`            → conservé pour la même raison ;
 //   · `additionalProperties` → verrouillé à `false` sur tous les schémas pour
 //     rejeter les arguments surnuméraires inconnus (décision Milestone M1) ;
-//   · ordre des clefs        → celui du SDK, reproduit tel quel.
+//   · ordre des clefs        → reproduit tel quel.
 //
 //   node scripts/engendrer-schemas.mjs          # écrit src/schemas.ts
 
@@ -30,16 +25,17 @@ const outils = JSON.parse(readFileSync(SOURCE, "utf8"));
 const ENTETE = `// ⚠ FICHIER ENGENDRÉ — ne pas modifier à la main.
 //
 // Engendré par \`scripts/engendrer-schemas.mjs\` depuis
-// \`fixtures/tools-list.reference.json\`, c'est-à-dire depuis la charge utile que
-// \`tools/list\` publie RÉELLEMENT. Ce ne sont donc pas des schémas retranscrits : ce sont
-// les schémas servis, repris tels quels — \`$schema\`, ordre des clefs et \`execution\`
-// compris.
+// \`fixtures/tools-list.reference.json\` et \`catalogue.json\` (source unique des titres).
+// Ce sont les schémas servis par \`tools/list\`, repris tels quels — \`$schema\`,
+// ordre des clefs et \`execution\` compris.
 //
-// Pour les régénérer : recapturer la référence (le SDK doit encore être là), puis
-// \`node scripts/engendrer-schemas.mjs\`. \`tests/schemas-engendres.test.mjs\` échoue si
-// ce fichier et la référence divergent.
+// Pour les régénérer : \`node scripts/engendrer-schemas.mjs\`.
+// \`test/schemas-engendres.test.ts\` échoue si ce fichier et la référence divergent.
 
 import type { JsonSchema } from "@poirierlavoie/socle-juridique/protocole/valide";
+import catalogue from "../catalogue.json";
+
+const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom].title_fr;
 
 /** Ce que \`tools/list\` publie pour un outil, hors gestionnaire. */
 export interface DescripteurPublie {
@@ -56,13 +52,17 @@ const corps = outils
   .map((o) => {
     const cle = o.name.replace(/^legislation_/, "").toUpperCase();
     const publie = {
-      title: o.title,
+      title: `__TITRE_${cle}__`,
       description: o.description,
       inputSchema: o.inputSchema,
       annotations: o.annotations,
       ...(o.execution ? { execution: o.execution } : {}),
     };
-    return `export const ${cle}: DescripteurPublie = ${JSON.stringify(publie, null, 2)};`;
+    const json = JSON.stringify(publie, null, 2).replace(
+      `"__TITRE_${cle}__"`,
+      `titre("${o.name}")`,
+    );
+    return `export const ${cle}: DescripteurPublie = ${json};`;
   })
   .join("\n\n");
 

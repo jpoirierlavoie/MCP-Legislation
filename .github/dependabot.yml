@@ -27,14 +27,6 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
-      - dependency-name: "@modelcontextprotocol/sdk"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-      - dependency-name: "agents"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
     groups:
       dev-minor-and-patch:
         update-types:

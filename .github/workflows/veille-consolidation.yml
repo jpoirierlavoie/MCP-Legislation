@@ -30,8 +30,13 @@ jobs:
   detect:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -92,6 +97,7 @@ jobs:
         if: steps.detect.outputs.drift == 'false' && steps.detect.outputs.unreachable == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCES_BLOQUEES: ${{ steps.detect.outputs.sources_bloquees }}
         run: |
           set -euo pipefail
           gh label create veille-consolidation \
@@ -102,7 +108,7 @@ jobs:
           # `sources_bloquees` vient du detecteur, qui SAIT quel publieur a bloque.
           # Le nommer en dur ici ferait mentir le titre des qu'un blocage viendrait
           # de Justice Canada — c'est exactement le defaut corrige le 2026-07-23.
-          bloquees="${{ steps.detect.outputs.sources_bloquees }}"
+          bloquees="${SOURCES_BLOQUEES:-}"
           title="Veille consolidation — vérification incomplète, ${bloquees:-source officielle} injoignable depuis le runner ($(date -u +%Y-%m-%d))"
           if [ -n "$existing" ]; then
             gh issue edit "$existing" --title "$title" --body-file consolidation-report.md

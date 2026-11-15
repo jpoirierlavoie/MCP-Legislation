@@ -1,4 +1,3 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   debitAcceptable,
   drapeau,
@@ -14,14 +13,12 @@ import {
   reponseSante,
   tropDeRequetes,
 } from "@poirierlavoie/socle-juridique";
-import { McpAgent } from "agents/mcp";
 
-import { gateMcp, PORTE } from "./auth";
+import { PORTE } from "./auth";
 import { handleBackfill } from "./backfill";
 import { servirMcp } from "./routeur";
-import { carteServeur, INSTRUCTIONS, SERVER_INFO } from "./serveur";
+import { carteServeur } from "./serveur";
 import { renderSite } from "./site";
-import { construireOutils } from "./tools";
 
 export { carteServeur };
 
@@ -29,19 +26,8 @@ export { carteServeur };
  * Serveur MCP « MCP Legislation » (paquet mcp-legislation).
  *
  * Expose les outils legislation_* (PLAN §3), en lecture seule sur D1. Transport HTTP
- * streamable sur POST /mcp.
+ * streamable sans état sur POST /mcp.
  */
-
-export class QclawMCP extends McpAgent {
-  // Identité et texte d'orientation viennent de `src/serveur.ts` : le routeur du socle
-  // doit rendre EXACTEMENT les mêmes, et un seul texte servi est la seule façon de s'en
-  // assurer.
-  server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
-
-  async init() {
-    construireOutils(this.env, this.server);
-  }
-}
 
 /**
  * Sert la page publique, avec cache d'arête.
@@ -145,15 +131,8 @@ export default {
       const ip = request.headers.get("CF-Connecting-IP") ?? "sans-ip";
       if (!(await debitAcceptable(env.RATE_LIMITER, ip))) return tropDeRequetes(60, origin);
 
-      const surSocle = drapeau((env as { SOCLE?: string }).SOCLE, false);
-
-      // 5. IDENTITÉ. Échec : refus. Le chemin du socle emploie `ouvrir` (comparaison sur
-      //    empreintes, élargissement des graphies) ; l'ancien garde `gateMcp`. Le drapeau
-      //    bascule la chaîne ENTIÈRE, authentification comprise, pour qu'on observe un
-      //    comportement et non un mélange.
-      const autorise = surSocle
-        ? await ouvrir(request, url, env as unknown as Record<string, unknown>, PORTE)
-        : gateMcp(request, url, env);
+      // 5. IDENTITÉ. Échec : refus (comparaison sur empreintes, élargissement des graphies).
+      const autorise = await ouvrir(request, url, env as unknown as Record<string, unknown>, PORTE);
       if (!autorise) return refuser("404", origin);
 
       // 6. MÉTHODE — APRÈS l'identité, et c'est délibéré. Un 405 servi à un anonyme lui
@@ -161,8 +140,7 @@ export default {
       //    connecteur claude.ai émet des `GET /mcp` sans porteur ; ils restent en refus.
       if (request.method !== "POST") return methodeNonPermise(origin);
 
-      if (surSocle) return servirMcp(autorise, env, origin);
-      return QclawMCP.serve("/mcp").fetch(autorise, env, ctx);
+      return servirMcp(autorise, env, origin);
     }
 
     if (url.pathname === "/admin/backfill-vectors") {

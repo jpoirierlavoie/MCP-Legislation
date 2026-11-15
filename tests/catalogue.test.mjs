@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { PUBLIES } from "../src/schemas.ts";
 import { carteServeur, PACKAGE_NAME, PUBLIC_DESCRIPTION, SERVER_INFO } from "../src/serveur.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +30,7 @@ const laws = json("laws.config.json").laws;
 const served = json("pipeline/expected/served.json");
 const taxonomy = json("taxonomy.json");
 const toolsTs = lire("src/tools.ts");
+const schemasTs = lire("src/schemas.ts");
 const relevanceTs = lire("src/relevance.ts");
 const readme = lire("README.md");
 const authTs = lire("src/auth.ts");
@@ -56,12 +58,8 @@ function porteDAcces() {
     .slice(1)
     .find(Boolean);
   // Les noms de secrets se lisent désormais dans LA constante qui pilote le runtime —
-  // `NOMS_SECRETS`, employée à la fois par `secretsOf` (chemin McpAgent) et par `PORTE`
-  // (chemin du socle). Auparavant on balayait les occurrences de `e.MCP_TOKEN…`, ce qui
-  // a cessé de fonctionner quand la lecture est passée par un index. Surtout, les deux
-  // chemins avaient alors DEUX listes, et celle du socle nommait un secret retiré tout en
-  // ignorant celui de la veille : la veille mensuelle recevait 404. Une seule liste, lue
-  // ici, ferme les deux défauts d'un coup.
+  // `NOMS_SECRETS`, employée par `PORTE`. Auparavant on balayait les occurrences de
+  // `e.MCP_TOKEN…`, ce qui a cessé de fonctionner quand la lecture est passée par un index.
   const bloc = (authTs.match(/const NOMS_SECRETS = \[([^\]]+)\]/) ?? [])[1] ?? "";
   const secrets = [...bloc.matchAll(/"([A-Z0-9_]+)"/g)].map((m) => m[1]);
   assert.ok(
@@ -78,17 +76,25 @@ const RAPPEL =
   "Toute modification d'outil ou d'aide au repérage se fait à TROIS endroits : " +
   "src/tools.ts, catalogue.json (donc la page publique) et README.md. Voir R10 dans CLAUDE.md.";
 
-/** Noms réellement enregistrés auprès du serveur MCP. */
-const enregistres = [...toolsTs.matchAll(/registerTool\(\s*"(legislation_[a-z_]+)"/g)].map(
-  (m) => m[1],
-);
+/** Noms réellement exposés par le routeur MCP (src/tools.ts + PUBLIES de src/schemas.ts). */
+const enregistres = [...toolsTs.matchAll(/outils\.(legislation_[a-z_]+)\s*=/g)].map((m) => m[1]);
 
-test("parité : outils enregistrés <-> catalogue (dans les DEUX sens)", () => {
-  // Garde-fou de regex morte : R2 interdit d'ajouter un outil sans approbation, donc
-  // l'ensemble ne rétrécit pas tout seul. Si la regex casse, elle rend [] et on tombe ici.
+test("parité : outils enregistrés <-> schémas publiés <-> catalogue", () => {
   assert.ok(
     enregistres.length >= 10,
     `seulement ${enregistres.length} outils extraits de src/tools.ts — la regex a-t-elle cassé ?`,
+  );
+
+  const publies = Object.keys(PUBLIES);
+  assert.deepEqual(
+    publies.filter((n) => !enregistres.includes(n)),
+    [],
+    `descripteurs dans PUBLIES sans gestionnaire dans src/tools.ts`,
+  );
+  assert.deepEqual(
+    enregistres.filter((n) => !publies.includes(n)),
+    [],
+    `gestionnaires dans src/tools.ts sans descripteur dans PUBLIES`,
   );
 
   const docs = Object.keys(catalogue.tools);
@@ -135,17 +141,17 @@ test("chaque outil du catalogue est complet et bilingue", () => {
 });
 
 test("les titres servis par MCP sont ceux du catalogue (source unique)", () => {
-  // src/tools.ts doit appeler titre("legislation_x") — jamais un littéral. Un littéral rétablirait
-  // la copie que le catalogue existe précisément pour supprimer.
-  const litteraux = [...toolsTs.matchAll(/title:\s*"([^"]+)"/g)].map((m) => m[1]);
+  // src/schemas.ts doit appeler titre("legislation_x") — jamais un littéral. Un littéral
+  // rétablirait la copie que le catalogue existe précisément pour supprimer.
+  const litteraux = [...schemasTs.matchAll(/title:\s*"([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(
     litteraux,
     [],
-    `titres écrits en dur dans src/tools.ts : ${litteraux.join(" | ")} — utiliser titre("legislation_…"). ${RAPPEL}`,
+    `titres écrits en dur dans src/schemas.ts : ${litteraux.join(" | ")} — utiliser titre("legislation_…"). ${RAPPEL}`,
   );
   for (const nom of enregistres) {
     assert.ok(
-      toolsTs.includes(`titre("${nom}")`),
+      schemasTs.includes(`titre("${nom}")`),
       `${nom} : le titre n'est pas tiré du catalogue. ${RAPPEL}`,
     );
   }

@@ -16,9 +16,9 @@ Aucun appel réseau : ces tests lisent `laws.config.json` sur disque.
 """
 from __future__ import annotations
 
-import pathlib
 import tempfile
 import unittest
+from pathlib import Path
 
 from pipeline import config
 from pipeline.discovery import relations as R
@@ -191,7 +191,7 @@ class TestPorteDuCorpusEpub(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self._ancien = config.SAMPLES_DIR
-        config.SAMPLES_DIR = pathlib.Path(self._tmp.name)
+        config.SAMPLES_DIR = Path(self._tmp.name)
 
     def tearDown(self):
         config.SAMPLES_DIR = self._ancien
@@ -252,8 +252,7 @@ class TestMoissonBorneeAuQuebec(unittest.TestCase):
         src = (config.ROOT / "pipeline" / "discovery" / "relations.py").read_text("utf-8") \
             if hasattr(config, "ROOT") else None
         if src is None:
-            from pathlib import Path
-            src = (Path(R.__file__)).read_text("utf-8")
+            src = Path(R.__file__).read_text("utf-8")
         i = src.index("# 2) renvoie-a")
         j = src.index("# 3) chargement")
         bloc = src[i:j]

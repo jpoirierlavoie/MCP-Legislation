@@ -2,4 +2,4 @@
 beautifulsoup4>=4.13
 # Accélérateur optionnel de parsing (BeautifulSoup l'utilise s'il est présent ;
 # sinon le backend stdlib html.parser est employé). Le pipeline n'en dépend pas.
-lxml>=5.0
+lxml>=6.1.0
