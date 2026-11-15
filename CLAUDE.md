@@ -10,27 +10,28 @@ défaut possible — refuser vaut toujours mieux que deviner.**
 
 ## ⛔ OBLIGATION PRÉALABLE À TOUTE MODIFICATION (aucune exception)
 
-**Avant de terminer QUELLE QUE SOIT une tâche touchant ce dépôt, évaluer explicitement son
-impact sur les CINQ surfaces ci-dessous, et inclure les mises à jour requises DANS LE MÊME
-COMMIT.** Ce n'est pas une bonne pratique, c'est une condition de fin de tâche : une tâche
-qui laisse une surface en retard n'est pas terminée, elle est en dette.
+**Avant de terminer QUELLE QUE SOIT une tâche touchant ce dépôt, exécuter une évaluation
+d'impact explicite sur les CINQ surfaces locales (dont `README.md` et la page publique HTML
+`GET /`) ainsi que sur les dépôts liés (`Inter-dépôts`), et inclure les mises à jour requises
+DANS LE MÊME COMMIT.** Ce n'est pas une bonne pratique, c'est une condition de fin de tâche :
+une tâche qui laisse une surface ou un dépôt lié en retard n'est pas terminée, elle est en dette.
 
 **Le coût en tokens n'est JAMAIS une raison de sauter cette évaluation** — consigne
-explicite de Jason. Lire les cinq fichiers, comparer, et rendre compte coûte moins cher
+explicite de Jason. Lire les surfaces concernées, comparer, et rendre compte coûte moins cher
 qu'une seule ligne fausse servie à un modèle dans un outil juridique.
 
 | # | Surface | Où | Ce qui la fait bouger |
 |---|---|---|---|
-| 1 | **Outils MCP** | `src/tools.ts` | nom, ajout/retrait (R2), paramètres, comportement, message d'erreur servi |
-| 2 | **Descriptions** | `src/tools.ts` (`description`, `title`), `catalogue.json` | toute reformulation ; R3 borne le delta et exige de consigner le coût en tokens |
+| 1 | **Outils MCP** | `src/tools.ts`, `src/schemas.ts`, `src/routeur.ts` | nom, ajout/retrait (R2), paramètres, comportement, message d'erreur servi |
+| 2 | **Descriptions** | `src/tools.ts` (`description`, `title`), `src/serveur.ts`, `catalogue.json` | toute reformulation ; R3 borne le delta et exige de consigner le coût en tokens |
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
-| 4 | **README.md** et manifestes | racine (`README.md`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `GEMINI.md`, `/mcp/server-card`) | tout ce qui change ce que le dépôt *annonce* faire ou sa connectivité client |
-| 5 | **Page publique** | `catalogue.json` + `src/site.ts` | tout ce qui change ce que le public *lit* |
+| 4 | **README.md** et manifestes | racine (`README.md`, `SECURITY.md`, `LICENSE` `CC-BY-NC-SA-4.0`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `GEMINI.md`, `/mcp/server-card`) | tout ce qui change ce que le dépôt *annonce* faire, sa licence, sa politique de sécurité/confidentialité ou sa connectivité client |
+| 5 | **Page publique** (HTML `GET /`) | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | tout ce qui change la page publique HTML rendue à `GET /` (textes bilingues FR/EN, décomptes D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil) |
+| 6 | **Inter-dépôts (Cross-repository)** | `pratique-civile-quebecoise` (manifestes, `skills/`, scripts), `MCP-Socle-Juridique` (`#v0.6.0`), `MCP-Jurisprudence` (jumeau HTML/CSS), `pratique-civile-outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
 
 **Procédure, à exécuter et à RAPPORTER — pas à supposer :**
 
-1. Pour chacune des cinq surfaces : dire si elle est touchée, et pourquoi (« non touchée »
-   est une réponse valable, mais elle doit être ÉNONCÉE, jamais passée sous silence).
+1. Pour chacune des cinq surfaces locales — dont explicitement **`README.md`** et la **page publique HTML (`GET /`)** — ainsi que pour la sixième surface **Inter-dépôts (`Cross-repository`)** : dire si elle est touchée, et pourquoi (« non touchée » est une réponse valable uniquement si elle est vérifiée et ÉNONCÉE, jamais passée sous silence).
 2. `npm test` — la suite vitest, hors réseau, dont la garde de parité
    (`tests/catalogue.test.mjs`). Elle attrape les ruptures structurelles ; elle n'attrape
    PAS un sens qui a changé. **Ne PAS employer `node --test`** : depuis le passage à vitest

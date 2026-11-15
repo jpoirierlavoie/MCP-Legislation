@@ -204,3 +204,8 @@ le comportement du JS de la page sans navigateur (`tests/page-client.test.mjs`).
 cette commande unique que lance `.github/workflows/ci.yml`.
 
 Trajectoire mesurée du repérage : recall@10 **40 % → 88 % → 98 %** (`docs/reports/`).
+
+## Sécurité, confidentialité et licence
+
+- **Sécurité, vie privée et secret professionnel :** Consulter [`SECURITY.md`](SECURITY.md) pour signaler de manière privée et coordonnée toute vulnérabilité ou question de confidentialité / secret professionnel à Jason Poirier Lavoie (`jason@poirierlavoie.ca`), sans ouvrir d'issue publique ni joindre de renseignements confidentiels de clients.
+- **Licence :** Le logiciel, les schémas, le pipeline et la documentation originale sont régis par la licence **Creative Commons Attribution - Pas d'Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International (`CC-BY-NC-SA-4.0`)** (Partie A de [`LICENSE`](LICENSE)). Les textes législatifs servis demeurent soumis aux régimes de l'Éditeur officiel du Québec (LégisQuébec) et de la Licence du gouvernement ouvert – Canada (Justice Canada) (Partie B de [`LICENSE`](LICENSE)).

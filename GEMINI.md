@@ -58,20 +58,18 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
 
 ---
 
-## 2. Obligation préalable — Les cinq surfaces (R10), sans exception
+## 2. Évaluation d'impact obligatoire — Cinq surfaces locales (`README.md`, Page publique HTML) et inter-dépôts (R10)
 
-Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **cinq surfaces** n'a pas été évalué et répercuté dans le **même changement** :
+Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **cinq surfaces locales** et sur l'**axe inter-dépôts** n'a pas été évalué, répercuté dans le **même changement** et **explicitement rapporté** (« non touchée » avec justification, jamais passée sous silence — le coût en tokens n'exempte jamais de cette vérification) :
 
-1. **Outils MCP** (`src/tools.ts`, `src/schemas.ts`, `src/routeur.ts`) — noms `legislation_*`, paramètres, comportement, erreurs servies.
-2. **Descriptions et titres** (`src/tools.ts`, `src/serveur.ts` `INSTRUCTIONS`/`PUBLIC_DESCRIPTION`, `catalogue.json`) — R3 borne le delta à ≤ 2 phrases et consigne le delta de tokens.
-3. **Schéma** (`schema.sql`, `schema-decouverte.sql`, `migrations/`, `src/schemas.ts`, forme de `structuredContent`) — toute étiquette limitative voyage en champ obligatoire dans `structuredContent` (R4, décision 001) ; `outputSchema` reste absent à dessein.
-4. **Documentation et manifestes** (`README.md`, [`CLAUDE.md`](CLAUDE.md), `GEMINI.md`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `/mcp/server-card`, `tests/catalogue.test.mjs`).
-5. **Page publique** (`catalogue.json` + `src/site.ts`) — décomptes lus en D1, constantes importées de `src/relevance.ts`, titres issus de `catalogue.json`.
-
-**Sixième surface hors dépôt (`pratique-civile-quebecoise`) :** Le greffon cadre nomme les outils `legislation_*` et leurs schémas. Toute modification impose la mise à jour synchronisée des surfaces du plugin :
-- Manifestes clients : `.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/plugin.json`, `plugin.json`.
-- Compétences manuelles (`skills/`) : notamment `skills/recherche-juridique`, `skills/redaction-juridique`, `skills/calendrier-procedural`.
-- Scripts de synchronisation et de contrôle : `scripts/regenerer_cache_mcp.py --apply`, `scripts/synchroniser_plugin_gemini.py --apply`, `python verifier.py`, et `python verifier_tout.py --mode mock` / `--mode live`.
+| # | Surface d'impact | Où | Ce qu'il faut évaluer et maintenir synchronisé |
+|---|---|---|---|
+| 1 | **Outils MCP** | `src/tools.ts`, `src/schemas.ts`, `src/routeur.ts` | noms `legislation_*`, paramètres, comportement, erreurs servies |
+| 2 | **Descriptions et titres** | `src/tools.ts`, `src/serveur.ts` (`INSTRUCTIONS`/`PUBLIC_DESCRIPTION`), `catalogue.json` | R3 borne le delta à ≤ 2 phrases et exige de consigner le delta de tokens |
+| 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `src/schemas.ts`, `structuredContent` | toute étiquette limitative voyage en champ obligatoire (R4, décision 001) ; `outputSchema` reste absent |
+| 4 | **`README.md`, gouvernance et manifestes** | `README.md`, `SECURITY.md`, `LICENSE` (`CC-BY-NC-SA-4.0`), `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `/mcp/server-card`, `CLAUDE.md`, `GEMINI.md`, `tests/catalogue.test.mjs` | ce que le dépôt annonce faire, ses consignes de connexion, sa licence et sa politique sécurité/confidentialité |
+| 5 | **Page publique HTML (`GET /`)** | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes importées de `src/relevance.ts`, titres issus de `catalogue.json`, section `#acces`, licence et clause de non-conseil |
+| 6 | **Inter-dépôts (`Cross-repository`)** | **`pratique-civile-quebecoise`** (`.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/*`, `plugin.json`, `skills/`, `regenerer_cache_mcp.py --apply`, `synchroniser_plugin_gemini.py --apply`, `verifier.py`, `verifier_tout.py`), **`MCP-Socle-Juridique`** (`#v0.6.0`), **`MCP-Jurisprudence`** (jumeau HTML/CSS), **`pratique-civile-outils`** | répercussions sur les outils nommés à la main dans les compétences, la cohérence de transport/auth ou le style partagé des pages HTML |
 
 `docs/` est une archive datée par défaut (ne fait pas foi sur l'état courant), à l'exception des références techniques citées par le code (`docs/phase0-structure-epub.md`, `docs/phase0-structure-lims.md`).
 
