@@ -31,7 +31,7 @@
     "@cloudflare/vitest-pool-workers": "^0.23.0",
     "@poirierlavoie/socle-juridique": "github:jpoirierlavoie/MCP-Socle-Juridique#v0.6.2",
     "typescript": "^5.9.2",
-    "vitest": "^4.1.12",
+    "vitest": "^5.1.0",
     "wrangler": "^4.162.0"
   },
   "overrides": {
