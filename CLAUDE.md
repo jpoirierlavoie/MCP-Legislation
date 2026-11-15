@@ -27,7 +27,7 @@ qu'une seule ligne fausse servie à un modèle dans un outil juridique.
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
 | 4 | **README.md** et manifestes | racine (`README.md`, `SECURITY.md`, `LICENSE` `CC-BY-NC-SA-4.0`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `GEMINI.md`, `/mcp/server-card`) | tout ce qui change ce que le dépôt *annonce* faire, sa licence, sa politique de sécurité/confidentialité ou sa connectivité client |
 | 5 | **Page publique** (HTML `GET /`) | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | tout ce qui change la page publique HTML rendue à `GET /` (textes bilingues FR/EN, décomptes D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil) |
-| 6 | **Inter-dépôts (Cross-repository)** | `pratique-civile-quebecoise` (manifestes, `skills/`, scripts), `MCP-Socle-Juridique` (`#v0.6.0`), `MCP-Jurisprudence` (jumeau HTML/CSS), `pratique-civile-outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
+| 6 | **Inter-dépôts (Cross-repository)** | `pratique-civile-quebecoise` (manifestes, `skills/`, scripts), `MCP-Socle-Juridique` (`#v0.6.2`), `MCP-Jurisprudence` (jumeau HTML/CSS), `pratique-civile-outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
 
 **Procédure, à exécuter et à RAPPORTER — pas à supposer :**
 
@@ -101,7 +101,7 @@ inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
          └──────────┬──────────┘ └──────────┬──────────┘ └──────────────────────────┘
                     │                       │
                     └───────────┬───────────┘
-                                ▼ (dépendance de dev `#v0.6.0`, zéro runtime dep)
+                                ▼ (dépendance de dev `#v0.6.2`, zéro runtime dep)
                  ┌─────────────────────────────┐
                  │    MCP-Socle-Juridique      │
                  │  Transport JSON-RPC 2.0     │
@@ -130,7 +130,7 @@ Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` ex
    - `python verifier_tout.py --mode mock` / `python verifier_tout.py --mode live`
 
 ### Dépendances croisées et limites de responsabilité
-- **Dépendance envers `MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.0` en `devDependencies`. Avec `"SOCLE": "true"` dans `wrangler.jsonc`, les requêtes sur `/mcp` sont distribuées sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
+- **Dépendance envers `MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Avec `"SOCLE": "true"` dans `wrangler.jsonc`, les requêtes sur `/mcp` sont distribuées sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
 - **Jumeau de `MCP-Jurisprudence`** : Partage la même identité visuelle et typographique sur sa page publique `GET /` (police Georgia, variables CSS `--f`, `--m`, `--b`, `--a`, `--bg`, `--card`). Législation porte le droit textuel consolidé ; Jurisprudence porte les décisions et métadonnées CanLII.
 - **Complémentarité avec `pratique-civile-outils`** : Législation fournit le texte verbatim officiel ; `pratique-civile-outils` exécute les calculs arithmétiques et gère la table des palais et greffes.
 

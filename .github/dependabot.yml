@@ -1,0 +1,41 @@
+version: 2
+updates:
+  # Mises à jour hebdomadaires groupées (npm mineur/correctif et actions GitHub).
+  # Le groupage exclut les montées majeures, qui restent ouvertes individuellement.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+      timezone: "America/Montreal"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+    groups:
+      dev-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+      timezone: "America/Montreal"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

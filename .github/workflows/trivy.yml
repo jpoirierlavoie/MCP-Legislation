@@ -1,0 +1,49 @@
+name: Trivy
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: '28 4 * * 0'  # dimanche 04:28 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Trivy filesystem scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'vuln,misconfig,secret'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: trivy-fs

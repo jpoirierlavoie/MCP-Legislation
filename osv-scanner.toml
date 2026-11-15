@@ -1,0 +1,33 @@
+# OSV-Scanner configuration — https://google.github.io/osv-scanner/configuration/
+#
+# Règles du dépôt :
+#   1. Chaque exemption utilise l'identifiant GHSA exact utilisé par l'OSV (jamais un alias CVE,
+#      car `osv-scanner` échoue sur une exemption inutilisée), avec le MOTIF et la DATE.
+#   2. `osv-scanner` sort en code 1 dès qu'une vulnérabilité existe ; le verdict bloquant appartient
+#      à l'étape « Verdict » de `.github/workflows/osv-scanner.yml` qui inspecte le SARIF filtré.
+#   3. Retirer ces exemptions dès que la migration Cloudflare Durable Objects aura permis de retirer
+#      la classe dormante `QclawMCP` (`@modelcontextprotocol/sdk` / `agents`).
+
+[[IgnoredVulns]]
+id = "GHSA-22jm-h49p-29qw"
+reason = "2026-11-15 : dépendance transitive de la classe Durable Object dormante QclawMCP (@modelcontextprotocol/sdk 1.29.0 / agents 0.17) conservée pour la continuité de migration Cloudflare DO ; le trafic /mcp actif passe par @poirierlavoie/socle-juridique (SOCLE=true)."
+
+[[IgnoredVulns]]
+id = "GHSA-46jr-4wx8-v453"
+reason = "2026-11-15 : dépendance transitive de la classe Durable Object dormante QclawMCP (@modelcontextprotocol/sdk 1.29.0 / agents 0.17) conservée pour la continuité de migration Cloudflare DO ; le trafic /mcp actif passe par @poirierlavoie/socle-juridique (SOCLE=true)."
+
+[[IgnoredVulns]]
+id = "GHSA-6prh-2h8m-c8cw"
+reason = "2026-11-15 : dépendance transitive de la classe Durable Object dormante QclawMCP (@modelcontextprotocol/sdk 1.29.0 / agents 0.17) conservée pour la continuité de migration Cloudflare DO ; le trafic /mcp actif passe par @poirierlavoie/socle-juridique (SOCLE=true)."
+
+[[IgnoredVulns]]
+id = "GHSA-6qxp-vccf-f47h"
+reason = "2026-11-15 : dépendance transitive de la classe Durable Object dormante QclawMCP (@modelcontextprotocol/sdk 1.29.0 / agents 0.17) conservée pour la continuité de migration Cloudflare DO ; le trafic /mcp actif passe par @poirierlavoie/socle-juridique (SOCLE=true)."
+
+[[IgnoredVulns]]
+id = "GHSA-f897-62hf-6gxq"
+reason = "2026-11-15 : dépendance transitive de la classe Durable Object dormante QclawMCP (@modelcontextprotocol/sdk 1.29.0 / agents 0.17) conservée pour la continuité de migration Cloudflare DO ; le trafic /mcp actif passe par @poirierlavoie/socle-juridique (SOCLE=true)."
+
+[[IgnoredVulns]]
+id = "GHSA-rvq5-wwqv-78pq"
+reason = "2026-11-15 : dépendance transitive de la classe Durable Object dormante QclawMCP (@modelcontextprotocol/sdk 1.29.0 / agents 0.17) conservée pour la continuité de migration Cloudflare DO ; le trafic /mcp actif passe par @poirierlavoie/socle-juridique (SOCLE=true)."

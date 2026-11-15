@@ -1,0 +1,74 @@
+name: OSV-Scanner
+
+on:
+  pull_request:
+    branches: ["main"]
+  merge_group:
+    branches: ["main"]
+  schedule:
+    - cron: '40 11 * * 4'
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: OSV-Scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run OSV-Scanner
+        id: scan
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
+        with:
+          scan-args: |-
+            --config=osv-scanner.toml
+            --format=sarif
+            --output=results.sarif
+            --lockfile=package-lock.json
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: results.sarif
+          category: osv-scanner
+
+      - name: Verdict — une vulnérabilité NON exemptée fait échouer le contrôle
+        if: always()
+        run: |
+          set -euo pipefail
+
+          if [ ! -s results.sarif ]; then
+            echo "::error title=Aucun rapport SARIF exploitable::Le scanner n'a produit aucun rapport (sortie ${{ steps.scan.outcome }})."
+            exit 1
+          fi
+
+          if ! n=$(jq '[.runs[]?.results[]?] | length' results.sarif 2>/dev/null); then
+            echo "::error title=Rapport SARIF illisible::Le fichier existe mais ne s'analyse pas."
+            exit 1
+          fi
+
+          if [ "$n" -gt 0 ]; then
+            echo "::error title=${n} vulnérabilité(s) NON exemptée(s)::Chacune est soit à corriger, soit à trier dans osv-scanner.toml."
+            jq -r '.runs[]?.results[]? | "  - \(.ruleId // "sans id") : \(.message.text // "sans message")"' results.sarif || true
+            exit 1
+          fi
+
+          echo "::notice title=Aucune vulnérabilité non exemptée::Sortie brute : ${{ steps.scan.outcome }}."

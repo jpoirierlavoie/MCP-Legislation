@@ -33,7 +33,7 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
          └──────────┬──────────┘ └──────────┬──────────┘ └──────────────────────────┘
                     │                       │
                     └───────────┬───────────┘
-                                ▼ (dépendance de dev `#v0.6.0`, zéro runtime dep)
+                                ▼ (dépendance de dev `#v0.6.2`, zéro runtime dep)
                  ┌─────────────────────────────┐
                  │    MCP-Socle-Juridique      │
                  │  Transport JSON-RPC 2.0     │
@@ -52,7 +52,7 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
 - **Configuration** : Connecté dans `.mcp.json` et `gemini-extension.json` via `https://legislation.poirierlavoie.ca/mcp` avec `Authorization: Bearer ${MCP_LEGISLATION_SECRET}`.
 
 ### Dépendances croisées inter-dépôts
-- **`MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.0` en `devDependencies`. Avec `"SOCLE": "true"` dans `wrangler.jsonc`, les requêtes sur `/mcp` sont distribuées sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
+- **`MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Avec `"SOCLE": "true"` dans `wrangler.jsonc`, les requêtes sur `/mcp` sont distribuées sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
 - **`MCP-Jurisprudence`** : Serveur jumeau partageant la même identité typographique (Georgia) et les mêmes variables CSS sur sa page publique `GET /`.
 - **`pratique-civile-outils`** : Législation fournit le texte des dispositions procédurales et substantielles ; `pratique-civile-outils` exécute les calculs arithmétiques d'échéances et d'intérêts.
 
@@ -69,7 +69,7 @@ Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `src/schemas.ts`, `structuredContent` | toute étiquette limitative voyage en champ obligatoire (R4, décision 001) ; `outputSchema` reste absent |
 | 4 | **`README.md`, gouvernance et manifestes** | `README.md`, `SECURITY.md`, `LICENSE` (`CC-BY-NC-SA-4.0`), `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `/mcp/server-card`, `CLAUDE.md`, `GEMINI.md`, `tests/catalogue.test.mjs` | ce que le dépôt annonce faire, ses consignes de connexion, sa licence et sa politique sécurité/confidentialité |
 | 5 | **Page publique HTML (`GET /`)** | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes importées de `src/relevance.ts`, titres issus de `catalogue.json`, section `#acces`, licence et clause de non-conseil |
-| 6 | **Inter-dépôts (`Cross-repository`)** | **`pratique-civile-quebecoise`** (`.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/*`, `plugin.json`, `skills/`, `regenerer_cache_mcp.py --apply`, `synchroniser_plugin_gemini.py --apply`, `verifier.py`, `verifier_tout.py`), **`MCP-Socle-Juridique`** (`#v0.6.0`), **`MCP-Jurisprudence`** (jumeau HTML/CSS), **`pratique-civile-outils`** | répercussions sur les outils nommés à la main dans les compétences, la cohérence de transport/auth ou le style partagé des pages HTML |
+| 6 | **Inter-dépôts (`Cross-repository`)** | **`pratique-civile-quebecoise`** (`.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/*`, `plugin.json`, `skills/`, `regenerer_cache_mcp.py --apply`, `synchroniser_plugin_gemini.py --apply`, `verifier.py`, `verifier_tout.py`), **`MCP-Socle-Juridique`** (`#v0.6.2`), **`MCP-Jurisprudence`** (jumeau HTML/CSS), **`pratique-civile-outils`** | répercussions sur les outils nommés à la main dans les compétences, la cohérence de transport/auth ou le style partagé des pages HTML |
 
 `docs/` est une archive datée par défaut (ne fait pas foi sur l'état courant), à l'exception des références techniques citées par le code (`docs/phase0-structure-epub.md`, `docs/phase0-structure-lims.md`).
 
