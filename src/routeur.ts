@@ -70,10 +70,10 @@ function normaliser(nom: string, args: Record<string, unknown>): Record<string, 
     const v = out[champ];
     if (v === undefined || v === null) continue;
     out[champ] = Array.isArray(v)
-      ? v.map((x) => (typeof x === "string" ? x : String(x)))
-      : typeof v === "string"
-        ? v
-        : String(v);
+      ? v.map((x) => (typeof x === "number" || typeof x === "bigint" ? String(x) : x))
+      : typeof v === "number" || typeof v === "bigint"
+        ? String(v)
+        : v;
   }
   return out;
 }

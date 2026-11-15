@@ -251,6 +251,28 @@ describe("tools/call", () => {
     });
     expect(await r.text()).not.toContain("doit être une cha");
   });
+
+  it("un objet ou booléen pour un article n'est pas coercé et est rejeté par le validateur", async () => {
+    const rObj = await heritee("tools/call", {
+      name: "legislation_get_article",
+      arguments: { law: "ccq", article: { evil: true } },
+    });
+    const cObj = (await rObj.json()) as {
+      result: { isError: boolean; content: { text: string }[] };
+    };
+    expect(cObj.result.isError).toBe(true);
+    expect(cObj.result.content[0]?.text).toContain("doit être une chaîne de caractères");
+
+    const rBool = await heritee("tools/call", {
+      name: "legislation_get_article",
+      arguments: { law: "ccq", article: true },
+    });
+    const cBool = (await rBool.json()) as {
+      result: { isError: boolean; content: { text: string }[] };
+    };
+    expect(cBool.result.isError).toBe(true);
+    expect(cBool.result.content[0]?.text).toContain("doit être une chaîne de caractères");
+  });
 });
 
 describe("la chaîne intergicielle", () => {

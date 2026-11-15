@@ -6,6 +6,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "fonction": {
           "description": "Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'.",
@@ -52,6 +53,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "lang": {
           "default": "fr",
@@ -81,6 +83,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "law": {
           "type": "string",
@@ -137,6 +140,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "query": {
           "type": "string",
@@ -179,6 +183,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "law": {
           "type": "string",
@@ -220,6 +225,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "law": {
           "type": "string",
@@ -283,6 +289,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "law": {
           "type": "string",
@@ -329,6 +336,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "law": {
           "type": "string",
@@ -392,6 +400,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "query": {
           "type": "string",
@@ -444,6 +453,7 @@
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "citation": {
           "type": "string",

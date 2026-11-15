@@ -48,13 +48,10 @@ describe("schémas engendrés contre référence publiée", () => {
     }
   });
 
-  it("aucun `additionalProperties` n'a été introduit au passage", () => {
-    // Zod écarte les clefs inconnues EN SILENCE ; le sous-ensemble du socle, lui, refuse
-    // quand `additionalProperties: false` est posé. L'ajouter est un CHANGEMENT de
-    // comportement — un argument surnuméraire toléré devient un refus — et cela doit se
-    // décider, pas se glisser dans une conversion.
+  it("verrouille `additionalProperties: false` sur les dix schémas", () => {
+    // Décision M1 : le schéma JSON Schema verrouille explicitement additionalProperties à false.
     for (const nom of noms) {
-      expect(PUBLIES[nom]?.inputSchema.additionalProperties, `${nom}`).toBeUndefined();
+      expect(PUBLIES[nom]?.inputSchema.additionalProperties, `${nom}`).toBe(false);
     }
   });
 

@@ -79,11 +79,6 @@
 // La vérification est faite dans le handler de module, donc AVANT toute instanciation du
 // Durable Object : un appel non autorisé ne coûte ni session DO, ni D1, ni Workers AI.
 
-interface EnvWithSecrets extends Env {
-  MCP_TOKEN?: string;
-  MCP_TOKEN_VEILLE?: string;
-}
-
 const MOUNT = "/mcp";
 const PREFIX = `${MOUNT}/`;
 /**
@@ -149,7 +144,7 @@ function decodeOrNull(segment: string): string | null {
  * rien, ce qui est exactement le genre de panne qu'on cherche du mauvais côté.
  *
  * `Env` est GÉNÉRÉ par wrangler à partir de wrangler.jsonc : les secrets n'y figurent pas,
- * d'où `EnvWithSecrets`.
+ * d'où le transtypage en Record<string, unknown>.
  *
  * FERMÉ PAR DÉFAUT : liste vide ⇒ la boucle d'appariement ne trouve rien ⇒ tout est refusé.
  */

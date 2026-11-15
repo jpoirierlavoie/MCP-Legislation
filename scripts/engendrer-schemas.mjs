@@ -13,9 +13,8 @@
 // Quatre questions ouvertes se règlent du même coup, sans arbitrage :
 //   · `$schema` en draft-07  → conservé, puisqu'il est publié aujourd'hui ;
 //   · `execution`            → conservé pour la même raison ;
-//   · `additionalProperties` → reste ABSENT ; l'ajouter à `false` changerait le
-//     comportement (Zod écarte les clefs inconnues en silence), ce qui est une décision
-//     à prendre séparément, pas un effet de bord de la conversion ;
+//   · `additionalProperties` → verrouillé à `false` sur tous les schémas pour
+//     rejeter les arguments surnuméraires inconnus (décision Milestone M1) ;
 //   · ordre des clefs        → celui du SDK, reproduit tel quel.
 //
 //   node scripts/engendrer-schemas.mjs          # écrit src/schemas.ts

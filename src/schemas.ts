@@ -28,6 +28,7 @@ export const LIST_LAWS: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       fonction: {
         description: "Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'.",
@@ -74,6 +75,7 @@ export const LIST_SUBJECTS: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       lang: {
         default: "fr",
@@ -101,6 +103,7 @@ export const RELATED_LAWS: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       law: {
         type: "string",
@@ -151,6 +154,7 @@ export const FIND_RELEVANT: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       query: {
         type: "string",
@@ -189,6 +193,7 @@ export const GET_ARTICLE: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       law: {
         type: "string",
@@ -226,6 +231,7 @@ export const GET_ARTICLES: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       law: {
         type: "string",
@@ -286,6 +292,7 @@ export const GET_STRUCTURE: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       law: {
         type: "string",
@@ -329,6 +336,7 @@ export const GET_DIVISION: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       law: {
         type: "string",
@@ -389,6 +397,7 @@ export const SEARCH_TEXT: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       query: {
         type: "string",
@@ -438,6 +447,7 @@ export const RESOLVE_REFERENCE: DescripteurPublie = {
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
+    additionalProperties: false,
     properties: {
       citation: {
         type: "string",
