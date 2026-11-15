@@ -1,14 +1,10 @@
 /**
- * Routeur MCP bâti sur le socle — le chemin qui remplacera `McpAgent`.
+ * Routeur MCP bâti sur `@poirierlavoie/socle-juridique`.
  *
  * Il ne réimplémente rien : enveloppe JSON-RPC, validateur, négociation de version,
- * validation d'en-têtes et indices de cache viennent de `@poirierlavoie/socle-juridique`.
+ * validation d'en-têtes et indices de cache viennent du socle.
  * Ce fichier ne porte que ce qui est PROPRE à ce connecteur — son identité, ses
- * descripteurs, et la normalisation des arguments coercés.
- *
- * Tant que `SOCLE !== "true"`, il n'est pas atteint. Les deux chemins appellent LES MÊMES
- * gestionnaires (`construireOutils`) : il n'y a pas deux comportements à tenir
- * synchronisés, seulement deux façons d'y arriver.
+ * descripteurs (`PUBLIES`), et la normalisation des arguments coercés.
  */
 
 import {

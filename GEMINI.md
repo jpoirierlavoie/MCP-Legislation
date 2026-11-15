@@ -52,7 +52,7 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
 - **Configuration** : Connecté dans `.mcp.json` et `gemini-extension.json` via `https://legislation.poirierlavoie.ca/mcp` avec `Authorization: Bearer ${MCP_LEGISLATION_SECRET}`.
 
 ### Dépendances croisées inter-dépôts
-- **`MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Avec `"SOCLE": "true"` dans `wrangler.jsonc`, les requêtes sur `/mcp` sont distribuées sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
+- **`MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Les requêtes sur `/mcp` sont servies directement et sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
 - **`MCP-Jurisprudence`** : Serveur jumeau partageant la même identité typographique (Georgia) et les mêmes variables CSS sur sa page publique `GET /`.
 - **`pratique-civile-outils`** : Législation fournit le texte des dispositions procédurales et substantielles ; `pratique-civile-outils` exécute les calculs arithmétiques d'échéances et d'intérêts.
 
@@ -101,7 +101,7 @@ Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **
 7. **Échelle de recherche & plancher** : Exact → élargissement corpus → leave-one-out (`RELAX_MIN_LOO_TOTAL`) → OU+bm25, puis RRF avec Vectorize, puis sémantique seul sous `SEMANTIC_MIN_SCORE`.
 8. **Vectorize** : Identifiants ≤ 64 octets (hachage court), index de métadonnées créés avant insertion.
 9. **WAF de zone** : Bloque les rafales de `POST` de backfill sur le domaine personnalisé.
-10. **Sessions MCP** : Transport sans état sous `SOCLE=true`.
+10. **Sessions MCP** : Transport sans état via `@poirierlavoie/socle-juridique` (`POST /mcp`).
 11. **Windows / Git Bash** : Tout patch contenant des barres obliques inverses passe par un fichier script.
 12. **Calibration continue** : Pondérations sans seuil discontinu dépendant du nombre de lois ou de la longueur de la requête.
 13. **`description` de matière (`taxonomy.json`)** : Surface d'appariement sans négation ni mention contrastive.

@@ -1,10 +1,4 @@
-// Enregistrement des outils MCP « Lois du Québec » (legislation_*). Tous en lecture seule.
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-// SOURCE UNIQUE des titres (R10) : le titre servi par tools/list et celui affiché sur la
-// page publique sont la MÊME valeur, pas deux copies. catalogue.json porte en outre la
-// prose longue de la page. Parité outils <-> catalogue épinglée par tests/catalogue.test.mjs.
-import catalogue from "../catalogue.json";
+// Gestionnaires des outils MCP « Lois du Québec » (legislation_*). Tous en lecture seule.
 import {
   type ArticleJoined,
   type ArticleRow,
@@ -42,8 +36,6 @@ import {
 } from "./lib";
 import { rank, tokenize, WEIGHTS } from "./relevance";
 
-const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom].title_fr;
-
 /**
  * Garde-fou imposé par le plan (§4.4) — repris TEL QUEL, à ne pas reformuler.
  * Il rappelle que la découverte est heuristique et ne décide pas du droit applicable.
@@ -52,18 +44,6 @@ const GARDE_FOU =
   "Aide heuristique au repérage de lois et de parties de lois candidates. " +
   "Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via " +
   "legislation_get_structure / legislation_get_division / legislation_get_article.";
-
-/** Rappel du patron en deux temps sur les outils d'extraction (§6.4). */
-const DEUX_TEMPS = " Si la loi pertinente est inconnue, commencer par legislation_find_relevant.";
-
-const READONLY = {
-  readOnlyHint: true,
-  idempotentHint: true,
-  destructiveHint: false,
-  openWorldHint: false,
-} as const;
-
-const LANG = z.enum(["fr", "en"]).default("fr").describe("Langue : 'fr' (défaut) ou 'en'.");
 
 // Libellés de type de division, par langue (l'anglais dit « Division » pour la « Section »).
 const KIND_LABEL: Record<Lang, Record<string, string>> = {
@@ -163,7 +143,7 @@ function divisionLabel(
 ): string {
   const label = (KIND_LABEL[lang] ?? KIND_LABEL.fr)[kind] ?? kind;
   const parts = [label, number ?? ""].filter(Boolean).join(" ");
-  return heading ? `${parts} — ${heading}` : parts || (heading ?? "");
+  return heading ? `${parts} — ${heading}` : parts;
 }
 
 function renderArticle(a: ArticleJoined, loi: LawRow, consol: string | null, lang: Lang): string {
@@ -176,26 +156,14 @@ function renderArticle(a: ArticleJoined, loi: LawRow, consol: string | null, lan
   return `${head}\n\n${a.text}${hist}`;
 }
 
-/**
- * Un gestionnaire d'outil vu du registre : arguments déjà validés, résultat d'outil.
- *
- * Les gestionnaires sont typés PRÉCISÉMENT, chacun par le `z.infer` de sa propre forme.
- * La conversion vers ce type commun n'a lieu qu'au dépôt, là où le nom de l'outil — et donc
- * la forme de ses arguments — est de toute façon perdu.
- */
+/** Un gestionnaire d'outil vu du registre : arguments déjà validés, résultat d'outil. */
 export type Gestionnaire = (args: never) => Promise<ToolResult>;
 
 /** Les gestionnaires par nom d'outil. Consommé par le routeur du socle. */
 export type Registre = Record<string, Gestionnaire>;
 
-/**
- * Construit les outils et, si un serveur est fourni, les enregistre auprès du SDK.
- *
- * DEUX CONSOMMATEURS, UN SEUL CORPS DE GESTIONNAIRE. Tant que `McpAgent` et le routeur du
- * socle coexistent (marche 2), le serveur SDK est passé et les deux chemins appellent
- * exactement la même fonction. Le jour où `McpAgent` part, l'argument devient inutile.
- */
-export function construireOutils(env: Env, server?: McpServer): Registre {
+/** Construit les gestionnaires des dix outils `legislation_*` pour le routeur du socle. */
+export function construireOutils(env: Env): Registre {
   const db = env.DB;
   const outils: Registre = {};
 
@@ -252,36 +220,19 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     return `${head}${attrs ? `\n    ${attrs}` : ""}${scope}${divs}${plan}`;
   };
 
-  const S_LIST_LAWS = {
-    fonction: z
-      .string()
-      .optional()
-      .describe("Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'."),
-    forum: z
-      .string()
-      .optional()
-      .describe("Filtrer par forum, ex. 'Tribunal administratif du logement', 'Cour d'appel'."),
-    subject: z
-      .string()
-      .optional()
-      .describe(
-        "Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. legislation_list_subjects).",
-      ),
-    structure: z
-      .boolean()
-      .default(true)
-      .describe(
-        "Inclure le plan profondeur 2 (Livres et leurs Titres) des grands codes (défaut true).",
-      ),
-    lang: LANG.optional(),
-  };
   const H_LIST_LAWS = async ({
     fonction,
     forum,
     subject,
     structure: structureArg,
     lang: langArg,
-  }: z.infer<z.ZodObject<typeof S_LIST_LAWS>>) => {
+  }: {
+    fonction?: string;
+    forum?: string;
+    subject?: string;
+    structure?: boolean;
+    lang?: "fr" | "en";
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const structure = structureArg ?? true;
@@ -347,27 +298,9 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_list_laws = H_LIST_LAWS as Gestionnaire;
-  server?.registerTool(
-    "legislation_list_laws",
-    {
-      title: titre("legislation_list_laws"),
-      description:
-        "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, " +
-        "date de consolidation, nombre d'articles, et les attributs de découverte (fonction, forum, " +
-        "matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). " +
-        "Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; " +
-        "pour partir d'un problème concret, préférer legislation_find_relevant.",
-      inputSchema: S_LIST_LAWS,
-      annotations: READONLY,
-    },
-    H_LIST_LAWS,
-  );
 
   // 1b) legislation_list_subjects ----------------------------------------------------
-  const S_LIST_SUBJECTS = { lang: LANG.optional() };
-  const H_LIST_SUBJECTS = async ({
-    lang: langArg,
-  }: z.infer<z.ZodObject<typeof S_LIST_SUBJECTS>>) => {
+  const H_LIST_SUBJECTS = async ({ lang: langArg }: { lang?: "fr" | "en" }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const en = lang === "en";
@@ -416,54 +349,21 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_list_subjects = H_LIST_SUBJECTS as Gestionnaire;
-  server?.registerTool(
-    "legislation_list_subjects",
-    {
-      title: titre("legislation_list_subjects"),
-      description:
-        "Liste les matières de la taxonomie (droit privé du C.c.Q. et matières spécialisées) : " +
-        "identifiant, libellé, description, et nombre de lois / divisions rattachées. " +
-        "Sert à choisir un domaine, puis à filtrer legislation_list_laws (subject=…).",
-      inputSchema: S_LIST_SUBJECTS,
-      annotations: READONLY,
-    },
-    H_LIST_SUBJECTS,
-  );
 
   // 1c) legislation_related_laws -----------------------------------------------------
-  const S_RELATED_LAWS = {
-    law: z
-      .string()
-      .describe(
-        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws.",
-      ),
-    rel_type: z
-      .string()
-      .optional()
-      .describe(
-        "Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe'.",
-      ),
-    direction: z
-      .enum(["out", "in", "both"])
-      .default("both")
-      .describe("'out' : depuis la loi ; 'in' : vers la loi ; 'both' (défaut)."),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(200)
-      .optional()
-      .describe("Max d'arêtes (défaut 50, max 200)."),
-    lang: LANG.optional(),
-  };
   const H_RELATED_LAWS = async ({
     law,
     rel_type,
     direction: directionArg,
     limit,
     lang: langArg,
-  }: z.infer<z.ZodObject<typeof S_RELATED_LAWS>>) => {
+  }: {
+    law: string;
+    rel_type?: string;
+    direction?: "out" | "in" | "both";
+    limit?: number;
+    lang?: "fr" | "en";
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const direction = directionArg ?? "both";
@@ -523,37 +423,17 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_related_laws = H_RELATED_LAWS as Gestionnaire;
-  server?.registerTool(
-    "legislation_related_laws",
-    {
-      title: titre("legislation_related_laws"),
-      description:
-        "Graphe d'interconnexion d'une loi : règlements pris sous son autorité, loi habilitante, " +
-        "renvois vers d'autres textes, et relations curées (met-en-oeuvre, applique, complète…). " +
-        "Signale les cibles NON disponibles au corpus. Ex. : law='cpc' pour voir ses règlements de cour.",
-      inputSchema: S_RELATED_LAWS,
-      annotations: READONLY,
-    },
-    H_RELATED_LAWS,
-  );
 
   // 1d) legislation_find_relevant ----------------------------------------------------
-  const S_FIND_RELEVANT = {
-    query: z.string().describe("Thème ou description libre du problème, ex. « bail de logement »."),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(50)
-      .optional()
-      .describe("Nombre de candidats (défaut 8, max 50)."),
-    lang: LANG,
-  };
   const H_FIND_RELEVANT = async ({
     query,
     limit,
     lang: langArg,
-  }: z.infer<z.ZodObject<typeof S_FIND_RELEVANT>>) => {
+  }: {
+    query: string;
+    limit?: number;
+    lang?: "fr" | "en";
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const tokens = tokenize(query);
@@ -607,39 +487,17 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     );
   };
   outils.legislation_find_relevant = H_FIND_RELEVANT as Gestionnaire;
-  server?.registerTool(
-    "legislation_find_relevant",
-    {
-      title: titre("legislation_find_relevant"),
-      description:
-        GARDE_FOU +
-        " Classement déterministe sur la matière (taxonomie), les intitulés de divisions, " +
-        "les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', " +
-        "'congédiement', 'bail commercial'. Enchaîner ensuite avec legislation_get_structure / " +
-        "legislation_get_division.",
-      inputSchema: S_FIND_RELEVANT,
-      annotations: READONLY,
-    },
-    H_FIND_RELEVANT,
-  );
 
   // 2) legislation_get_article -------------------------------------------------------
-  const S_GET_ARTICLE = {
-    law: z
-      .string()
-      .describe(
-        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-          "legislation_find_relevant.",
-      ),
-    article: z.coerce.string().describe("Numéro d'article, ex. '1457', '2926.1', '132.0.1'."),
-    lang: LANG,
-  };
   const H_GET_ARTICLE = async ({
     law,
     article,
     lang: langArg,
-  }: z.infer<z.ZodObject<typeof S_GET_ARTICLE>>) => {
+  }: {
+    law: string;
+    article: string;
+    lang?: "fr" | "en";
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const lawRow = await getLaw(db, law, env);
@@ -672,46 +530,8 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_get_article = H_GET_ARTICLE as Gestionnaire;
-  server?.registerTool(
-    "legislation_get_article",
-    {
-      title: titre("legislation_get_article"),
-      description:
-        "Retourne le texte officiel verbatim d'un article, avec citation, chemin hiérarchique, " +
-        "date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions " +
-        "se demandent avec article='préliminaire' ou 'finales'." +
-        DEUX_TEMPS,
-      inputSchema: S_GET_ARTICLE,
-      annotations: READONLY,
-    },
-    H_GET_ARTICLE,
-  );
 
   // 3) legislation_get_articles ------------------------------------------------------
-  const S_GET_ARTICLES = {
-    law: z
-      .string()
-      .describe(
-        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-          "legislation_find_relevant.",
-      ),
-    from: z.coerce.string().optional().describe("Borne basse d'une plage, ex. '1457'."),
-    to: z.coerce.string().optional().describe("Borne haute d'une plage, ex. '1460'."),
-    numbers: z
-      .array(z.coerce.string())
-      .optional()
-      .describe("Liste de numéros, ex. ['1457','1590']."),
-    lang: LANG,
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(200)
-      .optional()
-      .describe("Max d'articles (défaut 50, max 200)."),
-    offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
-  };
   const H_GET_ARTICLES = async ({
     law,
     from,
@@ -720,7 +540,15 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     lang: langArg,
     limit,
     offset,
-  }: z.infer<z.ZodObject<typeof S_GET_ARTICLES>>) => {
+  }: {
+    law: string;
+    from?: string;
+    to?: string;
+    numbers?: string[];
+    lang?: "fr" | "en";
+    limit?: number;
+    offset?: number;
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
@@ -786,39 +614,19 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_get_articles = H_GET_ARTICLES as Gestionnaire;
-  server?.registerTool(
-    "legislation_get_articles",
-    {
-      title: titre("legislation_get_articles"),
-      description:
-        "Retourne plusieurs articles : soit une plage (from..to), soit une liste explicite (numbers). " +
-        "Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']." +
-        DEUX_TEMPS,
-      inputSchema: S_GET_ARTICLES,
-      annotations: READONLY,
-    },
-    H_GET_ARTICLES,
-  );
 
   // 4) legislation_get_structure -----------------------------------------------------
-  const S_GET_STRUCTURE = {
-    law: z
-      .string()
-      .describe(
-        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-          "legislation_find_relevant.",
-      ),
-    lang: LANG,
-    root_path: z.string().optional().describe("Restreindre à ce sous-arbre (path d'une division)."),
-    depth: z.number().int().min(1).max(9).optional().describe("Profondeur affichée (défaut 2)."),
-  };
   const H_GET_STRUCTURE = async ({
     law,
     lang: langArg,
     root_path,
     depth,
-  }: z.infer<z.ZodObject<typeof S_GET_STRUCTURE>>) => {
+  }: {
+    law: string;
+    lang?: "fr" | "en";
+    root_path?: string;
+    depth?: number;
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
@@ -843,50 +651,8 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     return ok(render(tree, 0), { law, lang, root_path: root_path ?? null, depth: d, tree });
   };
   outils.legislation_get_structure = H_GET_STRUCTURE as Gestionnaire;
-  server?.registerTool(
-    "legislation_get_structure",
-    {
-      title: titre("legislation_get_structure"),
-      description:
-        "Arbre hiérarchique des divisions (Livre → Titre → Chapitre → Section → Sous-section), " +
-        "SANS texte d'article — pour explorer avant d'extraire. Chaque nœud donne kind, number, " +
-        "heading et son 'path' (à passer à legislation_get_division). Utiliser root_path pour un sous-arbre " +
-        "et depth pour limiter la profondeur (défaut 2 : livres et titres)." +
-        DEUX_TEMPS,
-      inputSchema: S_GET_STRUCTURE,
-      annotations: READONLY,
-    },
-    H_GET_STRUCTURE,
-  );
 
   // 5) legislation_get_division ------------------------------------------------------
-  const S_GET_DIVISION = {
-    law: z
-      .string()
-      .describe(
-        "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni " +
-          "le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou " +
-          "legislation_find_relevant.",
-      ),
-    path: z
-      .string()
-      .optional()
-      .describe("Chemin de la division (ex. 'ga:l_cinquieme-gb:l_premier')."),
-    division_id: z.number().int().optional().describe("Identifiant numérique de la division."),
-    lang: LANG,
-    include_text: z
-      .boolean()
-      .default(true)
-      .describe("Inclure le texte des articles (défaut true)."),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(200)
-      .optional()
-      .describe("Max d'articles (défaut 50, max 200)."),
-    offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
-  };
   const H_GET_DIVISION = async ({
     law,
     path,
@@ -895,7 +661,15 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     include_text: includeTextArg,
     limit,
     offset,
-  }: z.infer<z.ZodObject<typeof S_GET_DIVISION>>) => {
+  }: {
+    law: string;
+    path?: string;
+    division_id?: number;
+    lang?: "fr" | "en";
+    include_text?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const include_text = includeTextArg ?? true;
@@ -968,49 +742,21 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_get_division = H_GET_DIVISION as Gestionnaire;
-  server?.registerTool(
-    "legislation_get_division",
-    {
-      title: titre("legislation_get_division"),
-      description:
-        "Retourne une division (Livre/Titre/Chapitre/Section/…) : son intitulé, ses sous-divisions " +
-        "immédiates, et les articles qu'elle contient (tout le sous-arbre, paginés). Identifier par " +
-        "path (recommandé, via legislation_get_structure) ou division_id. include_text=false pour n'avoir " +
-        "que les numéros d'articles." +
-        DEUX_TEMPS,
-      inputSchema: S_GET_DIVISION,
-      annotations: READONLY,
-    },
-    H_GET_DIVISION,
-  );
 
   // 6) legislation_search_text -------------------------------------------------------
-  const S_SEARCH_TEXT = {
-    query: z.string().describe("Termes à rechercher, ex. 'responsabilité préjudice'."),
-    law: z
-      .string()
-      .optional()
-      .describe(
-        "Restreindre à une loi par son identifiant court de corpus (ex. 'ccq') ; " +
-          "défaut : tout le corpus.",
-      ),
-    lang: LANG,
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(50)
-      .optional()
-      .describe("Max de résultats (défaut 10, max 50)."),
-    offset: z.number().int().min(0).optional().describe("Décalage de pagination (≥ 0)."),
-  };
   const H_SEARCH_TEXT = async ({
     query,
     law,
     lang: langArg,
     limit,
     offset,
-  }: z.infer<z.ZodObject<typeof S_SEARCH_TEXT>>) => {
+  }: {
+    query: string;
+    law?: string;
+    lang?: "fr" | "en";
+    limit?: number;
+    offset?: number;
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     if (law && !(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
@@ -1192,33 +938,15 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_search_text = H_SEARCH_TEXT as Gestionnaire;
-  server?.registerTool(
-    "legislation_search_text",
-    {
-      title: titre("legislation_search_text"),
-      description:
-        "Recherche plein texte (FTS5) dans le texte des articles. Retourne les correspondances " +
-        "classées par pertinence avec un extrait surligné. Ex. : query='prescription action', " +
-        "law='ccq' (défaut : toutes les lois)." +
-        DEUX_TEMPS +
-        // +1 phrase (plan v2, 1.1 — delta consigné au rapport de phase)
-        " Omettre `law` sauf raison précise de restreindre ; une recherche restreinte sans " +
-        "résultat est automatiquement élargie au corpus.",
-      inputSchema: S_SEARCH_TEXT,
-      annotations: READONLY,
-    },
-    H_SEARCH_TEXT,
-  );
 
   // 7) legislation_resolve_reference -------------------------------------------------
-  const S_RESOLVE_REFERENCE = {
-    citation: z.string().describe("Citation libre, ex. « article 1457 C.c.Q. »."),
-    lang: LANG,
-  };
   const H_RESOLVE_REFERENCE = async ({
     citation,
     lang: langArg,
-  }: z.infer<z.ZodObject<typeof S_RESOLVE_REFERENCE>>) => {
+  }: {
+    citation: string;
+    lang?: "fr" | "en";
+  }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const all = await listLaws(db, {}, "fr", env);
@@ -1276,20 +1004,6 @@ export function construireOutils(env: Env, server?: McpServer): Registre {
     });
   };
   outils.legislation_resolve_reference = H_RESOLVE_REFERENCE as Gestionnaire;
-  server?.registerTool(
-    "legislation_resolve_reference",
-    {
-      title: titre("legislation_resolve_reference"),
-      description:
-        "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») " +
-        "vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, " +
-        "ainsi que les abréviations C.c.Q. et C.p.c." +
-        DEUX_TEMPS,
-      inputSchema: S_RESOLVE_REFERENCE,
-      annotations: READONLY,
-    },
-    H_RESOLVE_REFERENCE,
-  );
 
   return outils;
 }

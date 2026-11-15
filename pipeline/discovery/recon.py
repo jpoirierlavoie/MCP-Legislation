@@ -201,9 +201,11 @@ def build_report(results: list[dict]) -> str:
     notes = [r["law"]["id"] for r in ok if "Note" in r["scan"]["unknown_ids"]]
     L = [f"# Reconnaissance de {len(results)} textes (dry-run, phase B)",
          "",
-         "Généré par `python -m pipeline.discovery.recon` — **aucune écriture en base**. "
-         "Télécharge FR + EN (tolérant), scanne la structure, teste le parseur existant, "
-         "moissonne les renvois. À valider avant l'ingestion (phase C).",
+         (
+             "Généré par `python -m pipeline.discovery.recon` — **aucune écriture en base**. "
+             "Télécharge FR + EN (tolérant), scanne la structure, teste le parseur existant, "
+             "moissonne les renvois. À valider avant l'ingestion (phase C)."
+         ),
          "",
          "## Constats généraux", "",
          f"- **{len(results)} textes**, {len(results) - len(ok)} téléchargement(s) FR en échec.",

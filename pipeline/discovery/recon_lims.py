@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import collections
-import json
 import re
 import subprocess
 import xml.etree.ElementTree as ET

@@ -66,17 +66,12 @@ jamais dans un journal de requêtes. La troisième forme, le segment de chemin
 forme d'aucun client aujourd'hui : elle a échoué dans le formulaire de claude.ai alors
 qu'une session complète y passe en `curl`.
 
-Le transport est **HTTP streamable AVEC ÉTAT** : `initialize` d'abord, puis rejouer
-l'en-tête `mcp-session-id` reçu sur les appels suivants. Un `DELETE` referme proprement la
-session ; le flux `GET` est servi, mais ce serveur n'émet aucune notification
-serveur→client, donc un client qui s'en passe ne perd rien.
+Le transport est **HTTP streamable sans état** (`POST /mcp`, sans en-tête `mcp-session-id` ni ouverture de session côté serveur). Les requêtes `GET /mcp` et `DELETE /mcp` (y compris authentifiées) sont rejetées en `405` ; ce serveur n'émet aucune notification serveur→client.
 
-Deux refus à ne pas confondre, et le second surprend :
+Deux refus à ne pas confondre :
 
 - **429** — cadence trop élevée (limiteur par IP, dans le Worker). Réessayer plus tard.
-- **404** — jeton absent, faux ou révoqué… **ou session inconnue** : le transport répond
-  le même code quand il ne détient plus la session. Un client à état qui purge sa session
-  sur 404 verra donc un jeton révoqué comme un battement de session. Trancher au `curl`.
+- **404** — jeton absent, faux ou révoqué (aucun corps retourné pour ne pas exposer le point d'accès à une découverte OAuth non sollicitée).
 
 ## Le corpus
 

@@ -1,9 +1,5 @@
-// Le chemin du socle doit servir EXACTEMENT ce que servait `McpAgent` — et, sous
-// `2026-07-28`, le servir habillé de ce que la révision exige, sans rien changer d'autre.
-//
-// C'est le contrôle qui décide des marches 2 et 3. Types verts et tests unitaires ne disent
-// rien de ce qu'un client reçoit ; ceci le dit, en comparant la charge utile réelle à la
-// référence capturée du SDK.
+// Le routeur du socle sert directement les outils et, sous `2026-07-28`, les habille
+// de ce que la révision exige sans changer les contrats de `fixtures/tools-list.reference.json`.
 
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
@@ -57,7 +53,6 @@ const moderne = (method: string, params?: Record<string, unknown>) => {
 const e = env as unknown as Record<string, unknown>;
 e.MCP_TOKEN = JETON;
 e.MCP_ENABLED = "true";
-e.SOCLE = "true";
 
 describe("le contrat publié est le même sous les deux ères", () => {
   it("sous une révision héritée, tools/list est EXACTEMENT la référence du SDK", async () => {

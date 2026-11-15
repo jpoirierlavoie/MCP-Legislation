@@ -130,7 +130,7 @@ Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` ex
    - `python verifier_tout.py --mode mock` / `python verifier_tout.py --mode live`
 
 ### Dépendances croisées et limites de responsabilité
-- **Dépendance envers `MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Avec `"SOCLE": "true"` dans `wrangler.jsonc`, les requêtes sur `/mcp` sont distribuées sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
+- **Dépendance envers `MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Les requêtes sur `/mcp` sont servies directement et sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
 - **Jumeau de `MCP-Jurisprudence`** : Partage la même identité visuelle et typographique sur sa page publique `GET /` (police Georgia, variables CSS `--f`, `--m`, `--b`, `--a`, `--bg`, `--card`). Législation porte le droit textuel consolidé ; Jurisprudence porte les décisions et métadonnées CanLII.
 - **Complémentarité avec `pratique-civile-outils`** : Législation fournit le texte verbatim officiel ; `pratique-civile-outils` exécute les calculs arithmétiques et gère la table des palais et greffes.
 
@@ -142,7 +142,7 @@ Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` ex
 
 ### Architecture interne (3 morceaux)
 
-1. **Worker Cloudflare** (`src/`, TypeScript) — McpAgent (Durable Object) + 10 outils
+1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/socle-juridique`) + 10 outils
    `legislation_*`, D1 (`legislation`), Workers AI (bge-m3) + Vectorize (`legislation-articles`) pour la
    recherche hybride. Config : `wrangler.jsonc` (PAS .toml).
 2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours
@@ -284,8 +284,7 @@ npm run deploy                                     # migrations D1 d'abord PUIS 
 9. **Le WAF de la zone bloque les rafales de POST** non-navigateur sur le domaine
    personnalisé. Backfill de vecteurs : activer temporairement `workers_dev: true`,
    passer par `legislation.jpoirierlavoie.workers.dev`, refermer ensuite.
-10. **Une session MCP par lot de vérifications** (`eval/mcp-client.mjs`) — un processus
-    Inspector par appel multiplie les sessions Durable Object (a déjà épuisé un quota).
+10. **Une session MCP par lot de vérifications** (`eval/mcp-client.mjs`).
     L'Inspector CLI sert aux contrôles ponctuels seulement.
 11. **Environnement Windows/Git Bash : les heredocs bash retirent un niveau de `\`**.
     Tout patch contenant des barres obliques inverses passe par un FICHIER script
@@ -419,19 +418,17 @@ npm run deploy                                     # migrations D1 d'abord PUIS 
 `npm run evals` → pousser sur `main` (déploiement continu via `.github/workflows/deploy.yml`
 dans l'environnement `production`, ou repli local via `npm run deploy` /
 `scripts/deployer.mjs` qui exécute les migrations D1 avant `wrangler deploy --var COMMIT:<sha>`) →
-re-vérifier en production (les Durable Objects mettent ~30–60 s à recycler l'ancien code, et
-`/health` annonce désormais le `commit` déployé ; `.github/workflows/verifier-deploiement.yml`
+re-vérifier en production (`/health` annonce désormais le `commit` déployé ; `.github/workflows/verifier-deploiement.yml`
 vérifie chaque jour qu'aucun écart ne subsiste) → `npm run eval` si le comportement de recherche
 a changé — **porte : aucune régression sur les 21 cas**. Ne jamais appeler `npx wrangler deploy`
 seul, ni déclencher `pipeline/` automatiquement en CI ; toute migration destructive reste répétée
 sur une D1 distante jetable avec bookmark Time Travel avant fusion sur `main`.
 
-**Contrôle d'accès de `/mcp`** (`src/auth.ts`) : **DEUX jetons** (`MCP_TOKEN` pour le
+**Contrôle d'accès de `/mcp`** (`src/auth.ts` + `@poirierlavoie/socle-juridique`) : **DEUX jetons** (`MCP_TOKEN` pour le
 connecteur claude.ai, `MCP_TOKEN_VEILLE` pour la veille de consolidation en CI), aux droits
-IDENTIQUES, chacun accepté sous les TROIS mêmes formes. Tableau LITTÉRAL dans `secretsOf`,
+IDENTIQUES, chacun accepté sous les TROIS mêmes formes. Tableau LITTÉRAL (`NOMS_SECRETS` dans `src/auth.ts`),
 pas de convention de nom balayée sur `env` : un nom mal orthographié se poserait sans
-erreur et n'ouvrirait rien. Appariement SANS COURT-CIRCUIT (un `.some()` dirait par le
-temps de réponse QUEL jeton a été présenté, donc quel client on est) et **on ne journalise
+erreur et n'ouvrirait rien. Appariement SHA-256 à temps constant SANS COURT-CIRCUIT (`ouvrir` dans le socle) et **on ne journalise
 ni ne renvoie jamais lequel a servi** — les deux refus sont le même 404. `search_log` reste
 ANONYME par décision : il n'existe aucune attribution par appelant, ni en base ni en log.
 **La forme du connecteur claude.ai est `?key=<jeton>`** — mesurée, pas supposée : le
@@ -447,15 +444,13 @@ Deux constats de production à ne pas réapprendre à la dure (2026-07-23) :
   n'est JAMAIS neutre : il est lu comme « ce serveur demande une authentification ».
 - **Le connecteur émet des `GET /mcp` SANS aucun porteur** (constaté au `wrangler tail` :
   les POST portent `?key=`, les GET arrivent nus). Ces GET — le flux SSE serveur→client,
-  optionnel dans le transport streamable — sont donc refusés en 404 et le connecteur
+  optionnel dans le transport streamable sans état — sont donc refusés en 404 (405 avec porteur) et le connecteur
   retombe en POST seul, sans perte pour les 10 outils (aucune notification serveur→client).
-  Ne pas « réparer » ça en ouvrant les GET : ce serait un trou. L'option propre, si un jour
-  le flux devient utile, est d'accepter le `mcp-session-id` (64 hex émis par le DO) comme
-  preuve sur les GET seulement.
+  Ne pas « réparer » ça en ouvrant les GET : ce serait un trou.
 
 Trois points à ne pas défaire :
-(1) la vérification est dans le handler de module, donc AVANT le Durable Object — c'est ce
-qui fait qu'un appel non autorisé ne coûte rien ; (2) un refus répond **404, jamais 401** —
+(1) la vérification s'exécute dans `fetch` avant tout traitement applicatif (D1, Workers AI) —
+un appel non autorisé ne coûte presque rien ; (2) un refus répond **404, jamais 401** —
 un 401 annonce un serveur MCP et déclenche la découverte OAuth des clients ; (3) **l'endpoint
 est FERMÉ PAR DÉFAUT** (2026-08-27, aligné sur le jumeau) — aucun secret configuré ⇒ tout
 est refusé. **Rouvrir n'est donc PLUS une seule commande** : c'est `npx wrangler secret list`
@@ -651,32 +646,14 @@ avertissement, refus de `get_articles`, fuite du message moteur) et gardé par
    **tout jeton distribué doit être traité comme déjà vu**. `Authorization: Bearer` n'a pas ce
    défaut — c'est la forme à privilégier pour des porteurs publics.
 
-## Échéances en cours (ce qui doit DISPARAÎTRE, et quand)
+## Éléments retirés et trace conservée
 
-Trois objets du dépôt sont **volontairement temporaires**. Chacun documentait sa propre
-péremption — mais uniquement dans le fichier qu'elle concerne, donc lisible seulement par qui
-l'ouvre déjà. C'est exactement ainsi qu'un jetable devient un résidu six mois plus tard.
-
-| Objet | Disparaît quand | Geste |
-|---|---|---|
-| `wrangler.transit.jsonc` + le Worker `legislation-transit` | après le repos de la bascule `qclaw` → `legislation` | `npx wrangler delete -c wrangler.transit.jsonc`, puis retirer le fichier |
-| `scripts/capturer-tools-list.mjs` | avec la dépendance `@modelcontextprotocol/sdk` | **⚠️ À RELANCER AVANT la bascule vers le routeur du socle, jamais après** : le SDK retiré, la référence n'est plus reproductible |
-| `fixtures/tools-list.reference.json` | idem | la fixture RESTE ensuite comme trace de ce qui était servi |
-
-Les deux derniers servent la marche 2 de la phase 1 (remplacement de `McpAgent` et du SDK par
-le routeur du socle, qui oblige à réécrire les dix `inputSchema` de Zod vers du JSON Schema).
-**Rien ne lit la fixture aujourd'hui** — sa valeur est une comparaison À FAIRE À LA MAIN
-après bascule, octet pour octet. Toute évolution de `src/tools.ts` d'ici là la périme en
-silence : la régénérer alors, tant que le SDK est encore là.
-
-**⚠️ ET LE SCRIPT DE CAPTURE NE TOURNE DÉJÀ PLUS** (mesuré le 2026-09-17, avant même que le
-SDK soit retiré) : il charge `src/tools.ts` sous Node nu, or `src/tools.ts:7` fait
-`import catalogue from "../catalogue.json"` SANS l'attribut `with { type: "json" }`.
-Wrangler/esbuild l'accepte, Node l'exige — d'où `ERR_IMPORT_ATTRIBUTE_MISSING`. La consigne
-« à relancer avant la bascule » est donc aujourd'hui INAPPLICABLE telle quelle. Le jour où
-l'on en aura besoin, il faudra soit ajouter l'attribut d'import, soit passer par le
-bundler. La fixture en place, elle, est à jour : vérifié le 2026-09-17, elle porte bien les
-dix noms `legislation_*`.
+L'ancienne implémentation `McpAgent` (`QclawMCP`, `@modelcontextprotocol/sdk`, `agents`,
+`wrangler.transit.jsonc` / Worker `legislation-transit`, `scripts/capturer-tools-list.mjs`,
+et le drapeau `SOCLE`) a été intégralement retirée : le serveur repose exclusivement sur le
+routeur sans état `@poirierlavoie/socle-juridique` et `fixtures/tools-list.reference.json`
+reste conservée comme référence contractuelle des schémas (`src/schemas.ts`,
+`test/schemas-engendres.test.ts`, `test/routeur.test.ts`).
 
 ## Où trouver quoi
 

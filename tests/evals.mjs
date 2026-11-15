@@ -1002,9 +1002,8 @@ async function smokeTests() {
     // --- compatibilité d'un client qui CROIT parler à un serveur à état ---------------
     // Vise le second consommateur : un backend qui parle le cycle de vie complet —
     // initialize, notifications/initialized, GET, DELETE — parce qu'il a été écrit contre
-    // un transport à session. Depuis `SOCLE=true`, il n'y a plus de session du tout ; ce
-    // qui compte est donc qu'aucune de ces quatre étapes ne soit REFUSÉE. Le bloc a gardé
-    // son nom trop longtemps après avoir changé de sens.
+    // un transport à session. Le routeur du socle étant sans état, il n'y a aucune
+    // session côté serveur ; ce qui compte est le comportement déterministe de chaque étape.
     // On éprouve le TRANSPORT et la PORTE, pas le corpus : le contenu est le rôle de la fumée.
     {
       const porteur = jetonVeille ?? jeton;
@@ -1021,12 +1020,8 @@ async function smokeTests() {
       const ini = await post(INIT);
       const sid = ini.headers.get("mcp-session-id");
       const txtIni = await ini.text();
-      // REMPLACE « initialize -> 200 + en-tête mcp-session-id ». Ce contrôle décrivait le
-      // transport d'avant `SOCLE=true` et était rouge depuis la bascule, sans que personne
-      // le relève. La révision 2026-07-28 RETIRE les sessions et le routeur du socle est
-      // sans état : l'absence de l'en-tête n'est plus un défaut, c'est la garantie. Un
-      // retour à un transport à état serait, lui, une régression — et c'est ce que ce
-      // contrôle attrape désormais.
+      // Le routeur du socle est sans état : aucune session n'est émise. Un retour à un
+      // transport à état serait une régression — et c'est ce que ce contrôle attrape.
       add(
         `état (${quel}) : initialize -> 200, et AUCUNE session ouverte`,
         ini.status === 200 && !sid,
@@ -1057,11 +1052,10 @@ async function smokeTests() {
       // Épingler « === 200 » ferait rougir une mise à jour du SDK sans qu'aucun client ne
       // soit cassé — un faux échec, donc un test qu'on désapprend à lire.
 
-      // GET et DELETE PORTEURS, sur la session déjà ouverte (aucune session de plus).
+      // GET et DELETE PORTEURS, sur la requête déjà authentifiée.
       // CE QU'ON AFFIRME : la PORTE ne refuse pas une requête pourtant porteuse.
-      // CE QU'ON N'AFFIRME PAS : que le paquet `agents` serve ces verbes. S'il ne les gère
-      // pas il répondra 405 ou 400 — une réponse du TRANSPORT, pas un refus d'accès, et le
-      // contrôle doit rester vert. Seuls 404 et 401 sont des échecs ici.
+      // Le routeur sans état répond 405 sur ces verbes, une réponse du TRANSPORT, pas un refus d'accès.
+      // Seuls 404 et 401 sont des échecs ici.
       let getCode;
       try {
         const g = await fetch(bare, {
@@ -1089,7 +1083,7 @@ async function smokeTests() {
       );
       console.log(
         `      (transport : GET -> ${getCode}, DELETE -> ${del.status} — mesure, ` +
-          "pas exigence : c'est le paquet `agents` qui répond)",
+          "pas exigence : c'est le routeur du socle qui répond)",
       );
     }
   } else {

@@ -22,7 +22,7 @@ from pathlib import Path
 from pipeline.model import DISPOSITION_SORT_BASE, Law
 from pipeline.parser_lims import (
     Bilan, BalisageIncoherent, ErreurIngestion, derive_citation, derive_in_force,
-    derive_titre, expand_plage, numero_de_division, numero_de_label, parse_lims,
+    derive_titre, expand_plage, numero_de_division, parse_lims,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "lims"

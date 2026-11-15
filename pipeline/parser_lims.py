@@ -339,10 +339,8 @@ def serialise(el: ET.Element, profondeur: int = 0, racine_section: bool = True) 
     txt = el.find("Text")
     if txt is not None:
         lignes.append(f"{prefixe}{tete}{_plat(txt)}".rstrip())
-        tete = ""
     elif tete:
         lignes.append(f"{prefixe}{tete}".rstrip())
-        tete = ""
 
     for enfant in el:
         nom = _sans_ns(enfant.tag)
