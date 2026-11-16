@@ -83,8 +83,8 @@ export function carteServeur() {
  *
  *  1. elle annonçait « tarifs du Québec » et taisait les 18 textes FÉDÉRAUX servis. Un
  *     modèle interrogé sur la faillite écartait le serveur et répondait de mémoire ;
- *  2. elle envoyait vers `get_structure / get_division / get_article` — des noms qui
- *     préfixés différemment. Avec plusieurs serveurs branchés, l'appel
+ *  2. à l'époque où les outils étaient préfixés, elle renvoyait à des noms nus qui
+ *     n'existaient pas alors côté serveur. Avec plusieurs serveurs branchés, l'appel
  *     pouvait partir chez un voisin et rendre un texte étranger au corpus ;
  *  3. elle ne disait nulle part que le corpus est une SÉLECTION FERMÉE, ni que le service
  *     ne donne aucun conseil juridique — or l'avertissement du cabinet ne voyage que sur la
