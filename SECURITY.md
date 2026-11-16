@@ -29,8 +29,9 @@ Ce serveur ne sert que des **textes législatifs et réglementaires publics** en
 
 1. **Journalisation des requêtes de recherche (`search_log` dans D1)** :
    - La fonction `logSearch` enregistre en D1 la chaîne `query` soumise à `search_text` / `find_relevant` afin d'évaluer la qualité du repérage (replis lexicaux/sémantiques).
-   - Ce journal est **anonyme quant à l'usager**, mais **ne comporte pas de purge automatique par délai**. Par prudence déontologique, les appelants et les compétences doivent **formuler des requêtes juridiques abstraites** et **ne jamais insérer de noms de clients ni de faits identifiants confidentiels** dans le paramètre `query`.
-   - En cas d'incident de confidentialité ou de demande d'effacement, écrire à `jason@poirierlavoie.ca` (purge manuelle possible en D1 par horodatage).
+   - Avant persistance, `minimiserRequeteJournal` (`src/lib.ts`) normalise les espaces, masque les numéros de dossier judiciaire (`[DOSSIER]`), adresses courriel (`[COURRIEL]`), numéros de téléphone (`[TEL]`) et identifiants numériques longs NAS/NEQ (`[ID]`), et plafonne la chaîne à **160 caractères**. Chaque écriture déclenche en lot une purge glissante des entrées âgées de plus de **90 jours** (`ts < datetime('now', '-90 days')`).
+   - Ce journal demeure anonyme quant à l'usager, mais le masquage par motifs ne remplace pas la discipline d'appel : par prudence déontologique, les appelants et les compétences doivent **formuler des requêtes juridiques abstraites** et **ne jamais insérer de noms de clients ni de faits identifiants confidentiels** dans le paramètre `query`.
+   - En cas d'incident de confidentialité ou de demande d'effacement immédiat avant l'échéance de 90 jours, écrire à `jason@poirierlavoie.ca` (purge manuelle possible en D1 par horodatage).
 2. **Porteur d'authentification dans l'URL (`?key=` vs `Authorization: Bearer`)** :
    - Trois formes équivalentes sont acceptées (`/mcp` + `Authorization: Bearer <jeton>`, `?key=<jeton>`, et `/mcp/<jeton>`).
    - Le paramètre `?key=` répond aux contraintes du formulaire de connecteur `claude.ai`, mais expose le jeton dans les journaux de requêtes HTTP d'arête Cloudflare ; pour tout client ou script qui le supporte (`Claude Code`, `Antigravity`, `Gemini CLI`, CI), employer systématiquement `Authorization: Bearer`.

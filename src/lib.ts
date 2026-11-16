@@ -1483,14 +1483,39 @@ export interface SearchLogEntry {
  * `or_relax` veut dire que le ET lexical a complètement échoué) et la REFORMULATION
  * RAPPROCHÉE (mêmes minutes, requêtes voisines). `scripts/journal.mjs` les calcule.
  */
+const RETENTION_JOURNAL_JOURS = 90;
+const PLAFOND_REQUETE_JOURNAL = 160;
+
+/**
+ * Réduit le risque qu'un fait ou identifiant confidentiel persiste dans `search_log` :
+ * normalise les espaces, masque les numéros de dossier judiciaire, courriels, téléphones
+ * et identifiants numériques longs (NAS/NEQ), puis plafonne à 160 caractères.
+ */
+export function minimiserRequeteJournal(raw: string): string {
+  const normalisee = raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\d{3}-\d{2}-\d{6}-\d{3}\b/g, "[DOSSIER]")
+    .replace(/[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g, "[COURRIEL]")
+    .replace(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\b\d{3}[\s.-])\d{3}[\s.-]\d{4}\b/g, "[TEL]")
+    .replace(/\b\d{3}[\s-]\d{3}[\s-]\d{3}\b|\b\d{9,10}\b/g, "[ID]");
+  if (normalisee.length <= PLAFOND_REQUETE_JOURNAL) return normalisee;
+  return `${normalisee.slice(0, PLAFOND_REQUETE_JOURNAL - 1)}…`;
+}
+
 export async function logSearch(db: D1Database, e: SearchLogEntry): Promise<void> {
   try {
-    await db
-      .prepare(
-        "INSERT INTO search_log (tool, query, law, lang, result_count, fallback) VALUES (?,?,?,?,?,?)",
-      )
-      .bind(e.tool, e.query, e.law ?? null, e.lang ?? null, e.result_count, e.fallback ?? null)
-      .run();
+    const requete = minimiserRequeteJournal(e.query);
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO search_log (tool, query, law, lang, result_count, fallback) VALUES (?,?,?,?,?,?)",
+        )
+        .bind(e.tool, requete, e.law ?? null, e.lang ?? null, e.result_count, e.fallback ?? null),
+      db
+        .prepare("DELETE FROM search_log WHERE ts < datetime('now', ?)")
+        .bind(`-${RETENTION_JOURNAL_JOURS} days`),
+    ]);
   } catch {
     // table absente (migration non appliquée) ou write refusé : on n'échoue jamais.
   }

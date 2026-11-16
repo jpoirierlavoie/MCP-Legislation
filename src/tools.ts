@@ -437,20 +437,10 @@ export function construireOutils(env: Env): Registre {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const tokens = tokenize(query);
-    const safeQuery = JSON.stringify(
-      Array.from(query, (ch) => {
-        const code = ch.charCodeAt(0);
-        if (code < 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029) return " ";
-        return ch === "`" ? "'" : ch;
-      })
-        .join("")
-        .replace(/\s+/g, " ")
-        .trim(),
-    );
     const page = paginate(limit, 0, 8, 50);
     if (tokens.length === 0) {
       return err(
-        `Aucun terme exploitable dans ${safeQuery}. Reformulez avec des mots porteurs ` +
+        "Aucun terme exploitable dans la requête. Reformulez avec des mots porteurs " +
           "(ex. « bail de logement », « congédiement »), ou consultez list_subjects.",
       );
     }
@@ -464,7 +454,7 @@ export function construireOutils(env: Env): Registre {
     });
     if (cands.length === 0) {
       return err(
-        `Aucun rapprochement pour ${safeQuery} (termes retenus : ${tokens.join(", ")}). ` +
+        `Aucun rapprochement trouvé (termes retenus : ${tokens.join(", ")}). ` +
           "Le corpus est une SÉLECTION FERMÉE de textes du Québec et du fédéral : une absence " +
           "ici ne dit rien de l'existence d'une règle ailleurs. " +
           "Voir les domaines avec list_subjects, ou chercher dans le texte avec search_text.",
@@ -477,7 +467,7 @@ export function construireOutils(env: Env): Registre {
       return `${i + 1}. ${cible}  — score ${c.score}\n     pourquoi : ${c.pourquoi.join(" ; ")}`;
     });
     return ok(
-      `${cands.length} piste(s) pour ${safeQuery} (termes : ${tokens.join(", ")}) :\n` +
+      `${cands.length} piste(s) repérée(s) (termes : ${tokens.join(", ")}) :\n` +
         `${lines.join("\n")}\n\n${GARDE_FOU}`,
       {
         query,
@@ -831,7 +821,7 @@ export function construireOutils(env: Env): Registre {
     // mesuré : « congédiement » n'attrape pas « congédier »).
     if (res.hits.length === 0)
       return err(
-        `Aucun résultat pour « ${query} » (${lang}). Cela ne signifie pas qu'aucune règle ` +
+        `Aucun résultat trouvé (${lang}). Cela ne signifie pas qu'aucune règle ` +
           "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
           "LEXICAL (pas de familles de mots — « congédiement » ne trouve pas « congédier »). " +
           "Essayer d'autres mots exacts du texte, ou find_relevant pour partir du " +
@@ -902,7 +892,7 @@ export function construireOutils(env: Env): Registre {
             ? `Résultats partiels (au moins un terme sur ${nTerms}) :`
             : res.fallback === "semantic"
               ? "Aucune correspondance lexicale ; repérage sémantique :"
-              : `${res.total} résultat(s) pour « ${query} » :`;
+              : `${res.total} résultat(s) trouvé(s) :`;
     // Recherche restreinte avec résultats : signaler ce que la restriction cache (post-mortem)
     const elsewhere = res.elsewhere
       ? `\n\nAilleurs au corpus (${res.elsewhere.total} résultat(s) hors ${law}) — aperçu :\n` +

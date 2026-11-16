@@ -4,6 +4,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import reference from "../fixtures/tools-list.reference.json";
+import { logSearch, minimiserRequeteJournal } from "../src/lib";
 import { PUBLIC_DESCRIPTION, SERVER_INFO, VERSIONS } from "../src/serveur";
 
 const URL_MCP = "https://legislation.test/mcp";
@@ -550,5 +551,54 @@ describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
     } finally {
       e.MCP_ENABLED = "true";
     }
+  });
+});
+
+describe("minimisation et purge du journal search_log", () => {
+  it("préserve les requêtes juridiques abstraites et masque les identifiants sensibles", () => {
+    expect(minimiserRequeteJournal("  vice caché art. 1726 C.c.Q.  ")).toBe(
+      "vice caché art. 1726 C.c.Q.",
+    );
+    expect(minimiserRequeteJournal("art. 535.1 C.p.c. 2024 QCCS 1234")).toBe(
+      "art. 535.1 C.p.c. 2024 QCCS 1234",
+    );
+
+    const sensible = minimiserRequeteJournal(
+      "dossier 500-17-123456-241 client@exemple.ca tel (514) 555-0199 NAS 123-456-789 NEQ 1162345678",
+    );
+    expect(sensible).toBe("dossier [DOSSIER] [COURRIEL] tel [TEL] NAS [ID] NEQ [ID]");
+
+    const longue = minimiserRequeteJournal("résiliation bail ".repeat(20));
+    expect(longue.length).toBeLessThanOrEqual(160);
+    expect(longue.endsWith("…")).toBe(true);
+  });
+
+  it("enregistre la requête minimisée et purge les entrées de plus de 90 jours", async () => {
+    const db = (env as unknown as { DB: D1Database }).DB;
+    const oldMarker = "ancienne-requete-expiree-test";
+    const freshRaw = "bail 500-17-654321-249 client@test.ca";
+    await db
+      .prepare("INSERT INTO search_log (ts, tool, query, result_count) VALUES (?, ?, ?, ?)")
+      .bind("2020-01-01 00:00:00", "search_text", oldMarker, 0)
+      .run();
+
+    await logSearch(db, {
+      tool: "search_text",
+      query: freshRaw,
+      lang: "fr",
+      result_count: 1,
+    });
+
+    const { results: expired } = await db
+      .prepare("SELECT query FROM search_log WHERE query = ?")
+      .bind(oldMarker)
+      .all<{ query: string }>();
+    expect(expired).toHaveLength(0);
+
+    const { results: saved } = await db
+      .prepare("SELECT query FROM search_log WHERE query = ?")
+      .bind("bail [DOSSIER] [COURRIEL]")
+      .all<{ query: string }>();
+    expect(saved).toHaveLength(1);
   });
 });
