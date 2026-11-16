@@ -453,33 +453,34 @@ Trois points à ne pas défaire :
 un appel non autorisé ne coûte presque rien ; (2) un refus répond **404, jamais 401** —
 un 401 annonce un serveur MCP et déclenche la découverte OAuth des clients ; (3) **l'endpoint
 est FERMÉ PAR DÉFAUT** (2026-08-27, aligné sur le jumeau) — aucun secret configuré ⇒ tout
-est refusé. **Rouvrir n'est donc PLUS une seule commande** : c'est `npx wrangler secret list`
-PUIS supprimer TOUS les `MCP_TOKEN*`. En oublier un laisse l'endpoint FERMÉ pendant qu'on
-croit l'avoir rouvert — et le connecteur continue de creuser son trou OAuth pendant qu'on
-cherche ailleurs. Remède de niveau code, souvent plus rapide : `npx wrangler rollback`.
-Corollaire : `wrangler dev` exige désormais `--var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…`.
-Ordre de bascule :
-**mettre le connecteur claude.ai sur son URL FINALE (`…/mcp?key=<jeton>`) AVANT de poser le
-secret**, puis déployer, puis `wrangler secret put`. Cet ordre est contre-intuitif mais
-c'est le seul sûr : `?key=` répond 200 AVEC ET SANS secret (vérifié), donc l'URL finale
-fonctionne déjà pendant que l'endpoint est ouvert, et le connecteur ne voit JAMAIS de 404.
+est refusé en 404 (`NOMS_SECRETS` dans `src/auth.ts`). **Supprimer les secrets `MCP_TOKEN*`
+ne rouvre JAMAIS `/mcp`** : une liste de secrets vide rejette toutes les requêtes. En cas de
+désynchronisation de jeton, le rétablissement consiste à poser ou remplacer un secret valide
+(`npx wrangler secret put MCP_TOKEN`) puis à aligner le porteur du client (`Authorization: Bearer <jeton>`
+ou `…/mcp?key=<jeton>`). Ne **pas** tenter non plus `npx wrangler rollback` au travers de la
+migration Durable Object `v2` (`deleted_classes: ["QclawMCP"]` dans `wrangler.jsonc`) : Cloudflare
+refuse tout retour arrière franchissant une suppression de classe DO ; tout correctif de niveau
+code passe par un **redéploiement avant** compatible avec `v2` (`npm run deploy` ou fusion sur `main`).
+Corollaire local : `wrangler dev` exige `--var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…`.
+Ordre de rotation :
+**pour une rotation réellement sans coupure**, ajouter temporairement un créneau de transition dans
+`NOMS_SECRETS` (déployer puis `npx wrangler secret put <CRÉNEAU_TRANSITOIRE>`), basculer le connecteur
+sur ce porteur transitoire et vérifier qu'il répond `200`, remplacer ensuite `MCP_TOKEN`
+(`npx wrangler secret put MCP_TOKEN`), rebasculer le connecteur sur le nouveau `MCP_TOKEN` (vérifier `200`),
+puis retirer le créneau transitoire ; **sans créneau transitoire (interruption contrôlée)**, effectuer la
+rotation à froid sans émettre aucun appel client entre `npx wrangler secret put MCP_TOKEN` et la mise à
+jour immédiate de l'URL/en-tête du connecteur, car tout appel intermédiaire avec l'ancien jeton recevrait un `404`.
 
-**Pourquoi (incident du 2026-07-25, une demi-journée perdue)** : l'ordre inverse — armer
-d'abord, corriger l'URL ensuite — a exposé le connecteur à une fenêtre de 404. Pour un
-client MCP un 404 n'est pas « pas trouvé » mais « ce serveur exige une authentification » :
-il est parti en découverte OAuth, a échoué à l'enregistrement dynamique, et s'est retrouvé
-COINCÉ avec un enregistrement à moitié créé — plus modifiable, plus déplaçable, plus
-supprimable, plus connectable depuis l'interface claude.ai. Aucune manipulation côté client
-n'en venait à bout. Le SEUL déblocage a été `wrangler secret delete MCP_TOKEN` : l'endpoint
-rouvert, le connecteur s'est réparé tout seul au retry suivant. Retenir : une fenêtre de
-404, même de quelques minutes, peut détruire un connecteur de façon irréversible côté
-client.
-
-**Amendement du 2026-08-27 — ce remède n'est plus une seule commande.** Depuis l'ajout de
-`MCP_TOKEN_VEILLE` et le passage au défaut fermé, l'endpoint ne se rouvre qu'en supprimant
-**TOUS** les secrets `MCP_TOKEN*` ; les lister d'abord (`npx wrangler secret list`).
-Supprimer `MCP_TOKEN` seul laisse la porte close. C'est le coût assumé du découpage par
-client : écrit ici précisément parce que c'est sous pression qu'on viendra le lire.
+**Pourquoi éviter toute fenêtre de 404 (incident historique du 2026-07-25, avant le défaut fermé)** :
+exposer un connecteur `claude.ai` à un 404 sur `/mcp` a déclenché une découverte OAuth suivie
+d'un enregistrement dynamique avorté, laissant le connecteur coincé côté client. À l'époque où
+l'endpoint était encore ouvert sans secret, supprimer `MCP_TOKEN` l'avait rouvert ; **depuis le
+passage au défaut fermé (2026-08-27) et le retrait de `QclawMCP` (`v2`), cette ancienne recette est
+inopérante** : supprimer tous les `MCP_TOKEN*` maintient le 404 intégral, et `wrangler rollback`
+ne peut pas franchir la migration `v2`. En cas de connecteur `claude.ai` coincé aujourd'hui,
+vérifier qu'au moins un secret de `NOMS_SECRETS` est actif (`npx wrangler secret list`), poser au
+besoin un secret connu (`npx wrangler secret put MCP_TOKEN`), recréer le connecteur client avec le
+porteur exact et, si un changement de code est requis, pousser un commit correctif vers l'avant.
 
 **Un 404 de ce serveur est AMBIGU pour un client à état** : le transport rend lui aussi 404
 sur une session qu'il ne détient plus. Le client de Pallas Athéna purge sa session sur 404,

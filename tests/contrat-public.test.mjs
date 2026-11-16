@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { PUBLIES } from "../src/schemas.ts";
 
 /**
  * LE CONTRAT SERVI À UN MODÈLE INCONNU — gardes posées le 2026-09-17, avant l'ouverture
@@ -69,6 +70,15 @@ describe("aucun nom d'outil mort n'est SERVI", () => {
       ...new Set([...sansCommentaires(toolsTs).matchAll(NOMS_MORTS)].map((m) => m[1])),
     ];
     expect(morts, `noms préfixés v1 servis depuis src/tools.ts : ${morts.join(", ")}`).toEqual([]);
+  });
+
+  it("aucune description publiée dans PUBLIES (src/schemas.ts) ne cite un ancien nom préfixé v1", () => {
+    const blocPublies = JSON.stringify(PUBLIES);
+    const morts = [...new Set([...blocPublies.matchAll(NOMS_MORTS)].map((m) => m[1]))];
+    expect(
+      morts,
+      `noms préfixés v1 servis dans PUBLIES (src/schemas.ts) : ${morts.join(", ")}`,
+    ).toEqual([]);
   });
 });
 
