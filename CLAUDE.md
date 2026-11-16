@@ -462,10 +462,14 @@ migration Durable Object `v2` (`deleted_classes: ["QclawMCP"]` dans `wrangler.js
 refuse tout retour arrière franchissant une suppression de classe DO ; tout correctif de niveau
 code passe par un **redéploiement avant** compatible avec `v2` (`npm run deploy` ou fusion sur `main`).
 Corollaire local : `wrangler dev` exige `--var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…`.
-Ordre de rotation sans coupure :
-**poser d'abord le secret côté Worker (`npx wrangler secret put MCP_TOKEN`) ou utiliser le second
-porteur pendant la transition, puis mettre à jour l'URL/en-tête du client** afin que le connecteur
-ne frappe jamais `/mcp` avec un jeton absent ou révoqué.
+Ordre de rotation :
+**pour une rotation réellement sans coupure**, ajouter temporairement un créneau de transition dans
+`NOMS_SECRETS` (déployer puis `npx wrangler secret put <CRÉNEAU_TRANSITOIRE>`), basculer le connecteur
+sur ce porteur transitoire et vérifier qu'il répond `200`, remplacer ensuite `MCP_TOKEN`
+(`npx wrangler secret put MCP_TOKEN`), rebasculer le connecteur sur le nouveau `MCP_TOKEN` (vérifier `200`),
+puis retirer le créneau transitoire ; **sans créneau transitoire (interruption contrôlée)**, effectuer la
+rotation à froid sans émettre aucun appel client entre `npx wrangler secret put MCP_TOKEN` et la mise à
+jour immédiate de l'URL/en-tête du connecteur, car tout appel intermédiaire avec l'ancien jeton recevrait un `404`.
 
 **Pourquoi éviter toute fenêtre de 404 (incident historique du 2026-07-25, avant le défaut fermé)** :
 exposer un connecteur `claude.ai` à un 404 sur `/mcp` a déclenché une découverte OAuth suivie
