@@ -22,20 +22,20 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
              │  calendrier-proc, redaction-juridique, déontologie     │
              └──────┬───────────────────────┬──────────────────┬──────┘
                     │                       │                  │
-   (10 outils `legislation_*`)    (10 outils `jurisprudence_*`) (6 outils `calendrier_*`,
-                    │                       │           `interets_*`, `greffe_*`, `palais_*`)
-                    ▼                       ▼                  ▼
+   (10 outils `legislation_*`)    (10 outils `jurisprudence_*`) (12 outils sur 5 familles :
+                    │                       │            `calcul`, `greffe`, `registre`,
+                    ▼                       ▼            `adresse`, `terminologie`)
          ┌─────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
-         │   MCP-Legislation   │ │  MCP-Jurisprudence  │ │  pratique-civile-outils  │
+         │   MCP-Legislation   │ │  MCP-Jurisprudence  │ │        MCP-Outils        │
          │  (Worker Cloudflare │ │ (Worker Cloudflare  │ │    (Worker Cloudflare    │
-         │  D1 + Vectorize +   │ │  D1 cache CanLII    │ │    public, sans état,    │
-         │    Workers AI)      │ │  authentifié Bearer │ │    zéro secret, Zod)     │
+         │  D1 + Vectorize +   │ │  D1 cache CanLII    │ │   public, zéro secret,   │
+         │    Workers AI)      │ │  authentifié Bearer │ │  3 D1 lecture seule, Zod)│
          └──────────┬──────────┘ └──────────┬──────────┘ └──────────────────────────┘
                     │                       │
                     └───────────┬───────────┘
-                                ▼ (dépendance de dev `#v0.6.2`, zéro runtime dep)
+                                ▼ (dépendance de dev `#v0.7.0`, zéro runtime dep)
                  ┌─────────────────────────────┐
-                 │    MCP-Socle-Juridique      │
+                 │          MCP-Socle          │
                  │  Transport JSON-RPC 2.0     │
                  │  Streamable HTTP sans état  │
                  │  Auth SHA-256 temps constant│
@@ -52,9 +52,9 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
 - **Configuration** : Connecté dans `.mcp.json` et `gemini-extension.json` via `https://legislation.poirierlavoie.ca/mcp` avec `Authorization: Bearer ${MCP_LEGISLATION_SECRET}`.
 
 ### Dépendances croisées inter-dépôts
-- **`MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Les requêtes sur `/mcp` sont servies directement et sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
+- **`MCP-Socle`** : Consomme `@poirierlavoie/mcp-socle#v0.7.0` en `devDependencies`. Les requêtes sur `/mcp` sont servies directement et sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
 - **`MCP-Jurisprudence`** : Serveur jumeau partageant la même identité typographique (Georgia) et les mêmes variables CSS sur sa page publique `GET /`.
-- **`pratique-civile-outils`** : Législation fournit le texte des dispositions procédurales et substantielles ; `pratique-civile-outils` exécute les calculs arithmétiques d'échéances et d'intérêts.
+- **`MCP-Outils`** : Législation fournit le texte des dispositions procédurales et substantielles ; `MCP-Outils` exécute les calculs arithmétiques d'échéances et d'intérêts et sert les instantanés de registres, adresses RQA et terminologie.
 
 ---
 
@@ -69,7 +69,7 @@ Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `src/schemas.ts`, `structuredContent` | toute étiquette limitative voyage en champ obligatoire (R4, décision 001) ; `outputSchema` reste absent |
 | 4 | **`README.md`, gouvernance et manifestes** | `README.md`, `SECURITY.md`, `LICENSE` (`CC-BY-NC-SA-4.0`), `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `/mcp/server-card`, `CLAUDE.md`, `GEMINI.md`, `tests/catalogue.test.mjs` | ce que le dépôt annonce faire, ses consignes de connexion, sa licence et sa politique sécurité/confidentialité |
 | 5 | **Page publique HTML (`GET /`)** | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes importées de `src/relevance.ts`, titres issus de `catalogue.json`, section `#acces`, licence et clause de non-conseil |
-| 6 | **Inter-dépôts (`Cross-repository`)** | **`pratique-civile-quebecoise`** (`.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/*`, `plugin.json`, `skills/`, `regenerer_cache_mcp.py --apply`, `synchroniser_plugin_gemini.py --apply`, `verifier.py`, `verifier_tout.py`), **`MCP-Socle-Juridique`** (`#v0.6.2`), **`MCP-Jurisprudence`** (jumeau HTML/CSS), **`pratique-civile-outils`** | répercussions sur les outils nommés à la main dans les compétences, la cohérence de transport/auth ou le style partagé des pages HTML |
+| 6 | **Inter-dépôts (`Cross-repository`)** | **`pratique-civile-quebecoise`** (`.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/*`, `plugin.json`, `skills/`, `regenerer_cache_mcp.py --apply`, `synchroniser_plugin_gemini.py --apply`, `verifier.py`, `verifier_tout.py`), **`MCP-Socle`** (`#v0.7.0`), **`MCP-Jurisprudence`** (jumeau HTML/CSS), **`MCP-Outils`** | répercussions sur les outils nommés à la main dans les compétences, la cohérence de transport/auth ou le style partagé des pages HTML |
 
 `docs/` est une archive datée par défaut (ne fait pas foi sur l'état courant), à l'exception des références techniques citées par le code (`docs/phase0-structure-epub.md`, `docs/phase0-structure-lims.md`).
 
@@ -101,7 +101,7 @@ Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **
 7. **Échelle de recherche & plancher** : Exact → élargissement corpus → leave-one-out (`RELAX_MIN_LOO_TOTAL`) → OU+bm25, puis RRF avec Vectorize, puis sémantique seul sous `SEMANTIC_MIN_SCORE`.
 8. **Vectorize** : Identifiants ≤ 64 octets (hachage court), index de métadonnées créés avant insertion.
 9. **WAF de zone** : Bloque les rafales de `POST` de backfill sur le domaine personnalisé.
-10. **Sessions MCP** : Transport sans état via `@poirierlavoie/socle-juridique` (`POST /mcp`).
+10. **Sessions MCP** : Transport sans état via `@poirierlavoie/mcp-socle` (`POST /mcp`).
 11. **Windows / Git Bash** : Tout patch contenant des barres obliques inverses passe par un fichier script.
 12. **Calibration continue** : Pondérations sans seuil discontinu dépendant du nombre de lois ou de la longueur de la requête.
 13. **`description` de matière (`taxonomy.json`)** : Surface d'appariement sans négation ni mention contrastive.

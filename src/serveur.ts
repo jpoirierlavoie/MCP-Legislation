@@ -2,7 +2,7 @@
  * Identité du serveur, fiche publique SEP-2127 et versions servies.
  */
 
-import { construireCarteServeur, SERVER_CARD_SCHEMA } from "@poirierlavoie/socle-juridique";
+import { construireCarteServeur, SERVER_CARD_SCHEMA } from "@poirierlavoie/mcp-socle";
 
 export { SERVER_CARD_SCHEMA };
 

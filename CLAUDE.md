@@ -27,7 +27,7 @@ qu'une seule ligne fausse servie à un modèle dans un outil juridique.
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
 | 4 | **README.md** et manifestes | racine (`README.md`, `SECURITY.md`, `LICENSE` `CC-BY-NC-SA-4.0`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `GEMINI.md`, `/mcp/server-card`) | tout ce qui change ce que le dépôt *annonce* faire, sa licence, sa politique de sécurité/confidentialité ou sa connectivité client |
 | 5 | **Page publique** (HTML `GET /`) | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | tout ce qui change la page publique HTML rendue à `GET /` (textes bilingues FR/EN, décomptes D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil) |
-| 6 | **Inter-dépôts (Cross-repository)** | `pratique-civile-quebecoise` (manifestes, `skills/`, scripts), `MCP-Socle-Juridique` (`#v0.6.2`), `MCP-Jurisprudence` (jumeau HTML/CSS), `pratique-civile-outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
+| 6 | **Inter-dépôts (Cross-repository)** | `pratique-civile-quebecoise` (manifestes, `skills/`, scripts), `MCP-Socle` (`#v0.7.0`), `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
 
 **Procédure, à exécuter et à RAPPORTER — pas à supposer :**
 
@@ -90,20 +90,20 @@ inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
              │  calendrier-proc, redaction-juridique, déontologie     │
              └──────┬───────────────────────┬──────────────────┬──────┘
                     │                       │                  │
-   (10 outils `legislation_*`)    (10 outils `jurisprudence_*`) (6 outils `calendrier_*`,
-                    │                       │           `interets_*`, `greffe_*`, `palais_*`)
-                    ▼                       ▼                  ▼
+   (10 outils `legislation_*`)    (10 outils `jurisprudence_*`) (12 outils sur 5 familles :
+                    │                       │            `calcul`, `greffe`, `registre`,
+                    ▼                       ▼            `adresse`, `terminologie`)
          ┌─────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
-         │   MCP-Legislation   │ │  MCP-Jurisprudence  │ │  pratique-civile-outils  │
+         │   MCP-Legislation   │ │  MCP-Jurisprudence  │ │        MCP-Outils        │
          │  (Worker Cloudflare │ │ (Worker Cloudflare  │ │    (Worker Cloudflare    │
-         │  D1 + Vectorize +   │ │  D1 cache CanLII    │ │    public, sans état,    │
-         │    Workers AI)      │ │  authentifié Bearer │ │    zéro secret, Zod)     │
+         │  D1 + Vectorize +   │ │  D1 cache CanLII    │ │   public, zéro secret,   │
+         │    Workers AI)      │ │  authentifié Bearer │ │  3 D1 lecture seule, Zod)│
          └──────────┬──────────┘ └──────────┬──────────┘ └──────────────────────────┘
                     │                       │
                     └───────────┬───────────┘
-                                ▼ (dépendance de dev `#v0.6.2`, zéro runtime dep)
+                                ▼ (dépendance de dev `#v0.7.0`, zéro runtime dep)
                  ┌─────────────────────────────┐
-                 │    MCP-Socle-Juridique      │
+                 │          MCP-Socle          │
                  │  Transport JSON-RPC 2.0     │
                  │  Streamable HTTP sans état  │
                  │  Auth SHA-256 temps constant│
@@ -130,9 +130,9 @@ Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` ex
    - `python verifier_tout.py --mode mock` / `python verifier_tout.py --mode live`
 
 ### Dépendances croisées et limites de responsabilité
-- **Dépendance envers `MCP-Socle-Juridique`** : Consomme `@poirierlavoie/socle-juridique#v0.6.2` en `devDependencies`. Les requêtes sur `/mcp` sont servies directement et sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
+- **Dépendance envers `MCP-Socle`** : Consomme `@poirierlavoie/mcp-socle#v0.7.0` en `devDependencies`. Les requêtes sur `/mcp` sont servies directement et sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
 - **Jumeau de `MCP-Jurisprudence`** : Partage la même identité visuelle et typographique sur sa page publique `GET /` (police Georgia, variables CSS `--f`, `--m`, `--b`, `--a`, `--bg`, `--card`). Législation porte le droit textuel consolidé ; Jurisprudence porte les décisions et métadonnées CanLII.
-- **Complémentarité avec `pratique-civile-outils`** : Législation fournit le texte verbatim officiel ; `pratique-civile-outils` exécute les calculs arithmétiques et gère la table des palais et greffes.
+- **Complémentarité avec `MCP-Outils`** : Législation fournit le texte verbatim officiel ; `MCP-Outils` exécute les calculs arithmétiques, gère la table des palais et greffes et expose les instantanés de registres, adresses RQA et terminologie bilingue.
 
 ### Contrats d'entrée/sortie et sécurité
 - **Corpus officiel verbatim** : Texte consolidé en lecture seule des lois et règlements du Québec (via EPUB LégisQuébec) et du Canada (via XML LIMS de Justice Canada conditionné par le drapeau `FEDERAL_CORPUS`). Conformément à la règle R10, aucun décompte vivant n'est figé en dur dans la documentation : les décomptes vivants dérivent exclusivement de `laws.config.json`, de `pipeline/expected/served.json` et de la base D1.
@@ -142,7 +142,7 @@ Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` ex
 
 ### Architecture interne (3 morceaux)
 
-1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/socle-juridique`) + 10 outils
+1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle`) + 10 outils
    `legislation_*`, D1 (`legislation`), Workers AI (bge-m3) + Vectorize (`legislation-articles`) pour la
    recherche hybride. Config : `wrangler.jsonc` (PAS .toml).
 2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours
@@ -424,7 +424,7 @@ a changé — **porte : aucune régression sur les 21 cas**. Ne jamais appeler `
 seul, ni déclencher `pipeline/` automatiquement en CI ; toute migration destructive reste répétée
 sur une D1 distante jetable avec bookmark Time Travel avant fusion sur `main`.
 
-**Contrôle d'accès de `/mcp`** (`src/auth.ts` + `@poirierlavoie/socle-juridique`) : **DEUX jetons** (`MCP_TOKEN` pour le
+**Contrôle d'accès de `/mcp`** (`src/auth.ts` + `@poirierlavoie/mcp-socle`) : **DEUX jetons** (`MCP_TOKEN` pour le
 connecteur claude.ai, `MCP_TOKEN_VEILLE` pour la veille de consolidation en CI), aux droits
 IDENTIQUES, chacun accepté sous les TROIS mêmes formes. Tableau LITTÉRAL (`NOMS_SECRETS` dans `src/auth.ts`),
 pas de convention de nom balayée sur `env` : un nom mal orthographié se poserait sans
@@ -651,7 +651,7 @@ avertissement, refus de `get_articles`, fuite du message moteur) et gardé par
 L'ancienne implémentation `McpAgent` (`QclawMCP`, `@modelcontextprotocol/sdk`, `agents`,
 `wrangler.transit.jsonc` / Worker `legislation-transit`, `scripts/capturer-tools-list.mjs`,
 et le drapeau `SOCLE`) a été intégralement retirée : le serveur repose exclusivement sur le
-routeur sans état `@poirierlavoie/socle-juridique` et `fixtures/tools-list.reference.json`
+routeur sans état `@poirierlavoie/mcp-socle` et `fixtures/tools-list.reference.json`
 reste conservée comme référence contractuelle des schémas (`src/schemas.ts`,
 `test/schemas-engendres.test.ts`, `test/routeur.test.ts`).
 

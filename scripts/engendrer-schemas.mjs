@@ -32,7 +32,7 @@ const ENTETE = `// ⚠ FICHIER ENGENDRÉ — ne pas modifier à la main.
 // Pour les régénérer : \`node scripts/engendrer-schemas.mjs\`.
 // \`test/schemas-engendres.test.ts\` échoue si ce fichier et la référence divergent.
 
-import type { JsonSchema } from "@poirierlavoie/socle-juridique/protocole/valide";
+import type { JsonSchema } from "@poirierlavoie/mcp-socle/protocole/valide";
 import catalogue from "../catalogue.json";
 
 const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom].title_fr;

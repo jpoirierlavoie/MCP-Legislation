@@ -1,5 +1,5 @@
 /**
- * Routeur MCP bâti sur `@poirierlavoie/socle-juridique`.
+ * Routeur MCP bâti sur `@poirierlavoie/mcp-socle`.
  *
  * Il ne réimplémente rien : enveloppe JSON-RPC, validateur, négociation de version,
  * validation d'en-têtes et indices de cache viennent du socle.
@@ -15,7 +15,7 @@ import {
   servirRequeteMcp,
   type ToolResult,
   validateArgs,
-} from "@poirierlavoie/socle-juridique";
+} from "@poirierlavoie/mcp-socle";
 
 import { PUBLIES } from "./schemas";
 import { CAPACITES, INSTRUCTIONS, SERVER_INFO, VERSIONS } from "./serveur";
