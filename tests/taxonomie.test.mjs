@@ -4,7 +4,7 @@
 // POURQUOI CETTE GARDE EXISTE. Le chapitre « DU LOUAGE » du C.c.Q. — art. 1851 et suivants,
 // dont les sections I à III sont le régime général applicable au BAIL COMMERCIAL — portait
 // la matière « Louage résidentiel », et elle seule. Conséquences mesurées en production le
-// 2026-09-17 : `legislation_find_relevant("bail commercial")` servait à un modèle le motif
+// 2026-09-17 : `find_relevant("bail commercial")` servait à un modèle le motif
 // « matière : Louage résidentiel » pour du droit commercial, et le chapitre sortait derrière
 // la Loi sur la concurrence. Rien ne rougissait : une étiquette fausse n'est pas une erreur
 // de structure, et aucun test ne regardait la taxonomie.

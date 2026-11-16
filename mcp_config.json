@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "legislation": {
+    "lois": {
       "url": "https://legislation.poirierlavoie.ca/mcp",
       "headers": {
         "Authorization": "Bearer ${MCP_LEGISLATION_SECRET}"

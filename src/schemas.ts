@@ -23,9 +23,9 @@ export interface DescripteurPublie {
 }
 
 export const LIST_LAWS: DescripteurPublie = {
-  title: titre("legislation_list_laws"),
+  title: titre("list_laws"),
   description:
-    "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, date de consolidation, nombre d'articles, et les attributs de découverte (fonction, forum, matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; pour partir d'un problème concret, préférer legislation_find_relevant.",
+    "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, date de consolidation, nombre d'articles, et les attributs de découverte (fonction, forum, matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; pour partir d'un problème concret, préférer find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -41,7 +41,7 @@ export const LIST_LAWS: DescripteurPublie = {
       },
       subject: {
         description:
-          "Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. legislation_list_subjects).",
+          "Filtrer par identifiant de matière, ex. 'louage-residentiel' (cf. list_subjects).",
         type: "string",
       },
       structure: {
@@ -70,9 +70,9 @@ export const LIST_LAWS: DescripteurPublie = {
 };
 
 export const LIST_SUBJECTS: DescripteurPublie = {
-  title: titre("legislation_list_subjects"),
+  title: titre("list_subjects"),
   description:
-    "Liste les matières de la taxonomie (droit privé du C.c.Q. et matières spécialisées) : identifiant, libellé, description, et nombre de lois / divisions rattachées. Sert à choisir un domaine, puis à filtrer legislation_list_laws (subject=…).",
+    "Liste les matières de la taxonomie (droit privé du C.c.Q. et matières spécialisées) : identifiant, libellé, description, et nombre de lois / divisions rattachées. Sert à choisir un domaine, puis à filtrer list_laws (subject=…).",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -98,7 +98,7 @@ export const LIST_SUBJECTS: DescripteurPublie = {
 };
 
 export const RELATED_LAWS: DescripteurPublie = {
-  title: titre("legislation_related_laws"),
+  title: titre("related_laws"),
   description:
     "Graphe d'interconnexion d'une loi : règlements pris sous son autorité, loi habilitante, renvois vers d'autres textes, et relations curées (met-en-oeuvre, applique, complète…). Signale les cibles NON disponibles au corpus. Ex. : law='cpc' pour voir ses règlements de cour.",
   inputSchema: {
@@ -109,7 +109,7 @@ export const RELATED_LAWS: DescripteurPublie = {
       law: {
         type: "string",
         description:
-          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws.",
+          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par list_laws.",
       },
       rel_type: {
         description:
@@ -149,9 +149,9 @@ export const RELATED_LAWS: DescripteurPublie = {
 };
 
 export const FIND_RELEVANT: DescripteurPublie = {
-  title: titre("legislation_find_relevant"),
+  title: titre("find_relevant"),
   description:
-    "Aide heuristique au repérage de lois et de parties de lois candidates. Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via legislation_get_structure / legislation_get_division / legislation_get_article. Classement déterministe sur la matière (taxonomie), les intitulés de divisions, les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', 'congédiement', 'bail commercial'. Enchaîner ensuite avec legislation_get_structure / legislation_get_division.",
+    "Aide heuristique au repérage de lois et de parties de lois candidates. Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via get_structure / get_division / get_article. Classement déterministe sur la matière (taxonomie), les intitulés de divisions, les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', 'congédiement', 'bail commercial'. Enchaîner ensuite avec get_structure / get_division.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -188,9 +188,9 @@ export const FIND_RELEVANT: DescripteurPublie = {
 };
 
 export const GET_ARTICLE: DescripteurPublie = {
-  title: titre("legislation_get_article"),
+  title: titre("get_article"),
   description:
-    "Retourne le texte officiel verbatim d'un article, avec citation, chemin hiérarchique, date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions se demandent avec article='préliminaire' ou 'finales'. Si la loi pertinente est inconnue, commencer par legislation_find_relevant.",
+    "Retourne le texte officiel verbatim d'un article, avec citation, chemin hiérarchique, date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions se demandent avec article='préliminaire' ou 'finales'. Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -199,7 +199,7 @@ export const GET_ARTICLE: DescripteurPublie = {
       law: {
         type: "string",
         description:
-          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant.",
+          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par list_laws ou find_relevant.",
       },
       article: {
         type: "string",
@@ -226,9 +226,9 @@ export const GET_ARTICLE: DescripteurPublie = {
 };
 
 export const GET_ARTICLES: DescripteurPublie = {
-  title: titre("legislation_get_articles"),
+  title: titre("get_articles"),
   description:
-    "Retourne plusieurs articles : soit une plage (from..to), soit une liste explicite (numbers). Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']. Si la loi pertinente est inconnue, commencer par legislation_find_relevant.",
+    "Retourne plusieurs articles : soit une plage (from..to), soit une liste explicite (numbers). Paginé. Ex. : law='ccq', from='1457', to='1460' ; ou numbers=['1457','1590']. Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -237,7 +237,7 @@ export const GET_ARTICLES: DescripteurPublie = {
       law: {
         type: "string",
         description:
-          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant.",
+          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par list_laws ou find_relevant.",
       },
       from: {
         description: "Borne basse d'une plage, ex. '1457'.",
@@ -287,9 +287,9 @@ export const GET_ARTICLES: DescripteurPublie = {
 };
 
 export const GET_STRUCTURE: DescripteurPublie = {
-  title: titre("legislation_get_structure"),
+  title: titre("get_structure"),
   description:
-    "Arbre hiérarchique des divisions (Livre → Titre → Chapitre → Section → Sous-section), SANS texte d'article — pour explorer avant d'extraire. Chaque nœud donne kind, number, heading et son 'path' (à passer à legislation_get_division). Utiliser root_path pour un sous-arbre et depth pour limiter la profondeur (défaut 2 : livres et titres). Si la loi pertinente est inconnue, commencer par legislation_find_relevant.",
+    "Arbre hiérarchique des divisions (Livre → Titre → Chapitre → Section → Sous-section), SANS texte d'article — pour explorer avant d'extraire. Chaque nœud donne kind, number, heading et son 'path' (à passer à get_division). Utiliser root_path pour un sous-arbre et depth pour limiter la profondeur (défaut 2 : livres et titres). Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -298,7 +298,7 @@ export const GET_STRUCTURE: DescripteurPublie = {
       law: {
         type: "string",
         description:
-          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant.",
+          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par list_laws ou find_relevant.",
       },
       lang: {
         default: "fr",
@@ -331,9 +331,9 @@ export const GET_STRUCTURE: DescripteurPublie = {
 };
 
 export const GET_DIVISION: DescripteurPublie = {
-  title: titre("legislation_get_division"),
+  title: titre("get_division"),
   description:
-    "Retourne une division (Livre/Titre/Chapitre/Section/…) : son intitulé, ses sous-divisions immédiates, et les articles qu'elle contient (tout le sous-arbre, paginés). Identifier par path (recommandé, via legislation_get_structure) ou division_id. include_text=false pour n'avoir que les numéros d'articles. Si la loi pertinente est inconnue, commencer par legislation_find_relevant.",
+    "Retourne une division (Livre/Titre/Chapitre/Section/…) : son intitulé, ses sous-divisions immédiates, et les articles qu'elle contient (tout le sous-arbre, paginés). Identifier par path (recommandé, via get_structure) ou division_id. include_text=false pour n'avoir que les numéros d'articles. Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -342,7 +342,7 @@ export const GET_DIVISION: DescripteurPublie = {
       law: {
         type: "string",
         description:
-          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par legislation_list_laws ou legislation_find_relevant.",
+          "Identifiant COURT propre à ce corpus (ex. 'ccq', 'cpc', 'ca-b-3') — ce n'est ni le chapitre RLRQ ni le titre. Obtenu par list_laws ou find_relevant.",
       },
       path: {
         description: "Chemin de la division (ex. 'ga:l_cinquieme-gb:l_premier').",
@@ -392,9 +392,9 @@ export const GET_DIVISION: DescripteurPublie = {
 };
 
 export const SEARCH_TEXT: DescripteurPublie = {
-  title: titre("legislation_search_text"),
+  title: titre("search_text"),
   description:
-    "Recherche plein texte (FTS5) dans le texte des articles. Retourne les correspondances classées par pertinence avec un extrait surligné. Ex. : query='prescription action', law='ccq' (défaut : toutes les lois). Si la loi pertinente est inconnue, commencer par legislation_find_relevant. Omettre `law` sauf raison précise de restreindre ; une recherche restreinte sans résultat est automatiquement élargie au corpus.",
+    "Recherche plein texte (FTS5) dans le texte des articles. Retourne les correspondances classées par pertinence avec un extrait surligné. Ex. : query='prescription action', law='ccq' (défaut : toutes les lois). Si la loi pertinente est inconnue, commencer par find_relevant. Omettre `law` sauf raison précise de restreindre ; une recherche restreinte sans résultat est automatiquement élargie au corpus.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -442,9 +442,9 @@ export const SEARCH_TEXT: DescripteurPublie = {
 };
 
 export const RESOLVE_REFERENCE: DescripteurPublie = {
-  title: titre("legislation_resolve_reference"),
+  title: titre("resolve_reference"),
   description:
-    "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, ainsi que les abréviations C.c.Q. et C.p.c. Si la loi pertinente est inconnue, commencer par legislation_find_relevant.",
+    "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, ainsi que les abréviations C.c.Q. et C.p.c. Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -476,14 +476,14 @@ export const RESOLVE_REFERENCE: DescripteurPublie = {
 
 /** Les dix descripteurs, dans l'ordre où `tools/list` les rend aujourd'hui. */
 export const PUBLIES: Record<string, DescripteurPublie> = {
-  legislation_list_laws: LIST_LAWS,
-  legislation_list_subjects: LIST_SUBJECTS,
-  legislation_related_laws: RELATED_LAWS,
-  legislation_find_relevant: FIND_RELEVANT,
-  legislation_get_article: GET_ARTICLE,
-  legislation_get_articles: GET_ARTICLES,
-  legislation_get_structure: GET_STRUCTURE,
-  legislation_get_division: GET_DIVISION,
-  legislation_search_text: SEARCH_TEXT,
-  legislation_resolve_reference: RESOLVE_REFERENCE,
+  list_laws: LIST_LAWS,
+  list_subjects: LIST_SUBJECTS,
+  related_laws: RELATED_LAWS,
+  find_relevant: FIND_RELEVANT,
+  get_article: GET_ARTICLE,
+  get_articles: GET_ARTICLES,
+  get_structure: GET_STRUCTURE,
+  get_division: GET_DIVISION,
+  search_text: SEARCH_TEXT,
+  resolve_reference: RESOLVE_REFERENCE,
 };

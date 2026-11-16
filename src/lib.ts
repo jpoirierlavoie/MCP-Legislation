@@ -703,7 +703,7 @@ export async function relatedLaws(
   env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<RelationEdge[]> {
   const typeClause = relType ? "AND rel_type = ?" : "";
-  // Le bout SUJET est déjà gardé : `legislation_related_laws` passe par `getLaw(db, law, env)` et
+  // Le bout SUJET est déjà gardé : `related_laws` passe par `getLaw(db, law, env)` et
   // refuse avant d'arriver ici. C'est l'AUTRE bout qui fuyait — une arête vers un texte
   // fédéral serait rendue avec `in_corpus = 1` et son nom résolu, donc le modèle irait
   // appeler `get_article` dessus et se ferait refuser. Servir une piste qu'on refuse ensuite
@@ -1118,7 +1118,7 @@ function pruneDepth(nodes: StructureNode[], depth: number): void {
   }
 }
 
-// --- analyse d'une citation libre (legislation_resolve_reference) -------------------
+// --- analyse d'une citation libre (resolve_reference) -------------------
 
 export interface ParsedCitation {
   law: string | null;
@@ -1242,7 +1242,7 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   };
 }
 
-// --- données de pertinence (legislation_find_relevant) ------------------------------
+// --- données de pertinence (find_relevant) ------------------------------
 
 /** Plafond de divisions préfiltrées ramenées du SQL (le tri fin se fait en mémoire). */
 const DIVISION_PREFILTER_LIMIT = 2000;

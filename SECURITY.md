@@ -28,7 +28,7 @@ Hors portée :
 Ce serveur ne sert que des **textes législatifs et réglementaires publics** en lecture seule et n'héberge aucun dossier client. Deux points importants relatifs à la confidentialité et à la rétention sont toutefois exposés en toute transparence :
 
 1. **Journalisation des requêtes de recherche (`search_log` dans D1)** :
-   - La fonction `logSearch` enregistre en D1 la chaîne `query` soumise à `legislation_search_text` / `legislation_find_relevant` afin d'évaluer la qualité du repérage (replis lexicaux/sémantiques).
+   - La fonction `logSearch` enregistre en D1 la chaîne `query` soumise à `search_text` / `find_relevant` afin d'évaluer la qualité du repérage (replis lexicaux/sémantiques).
    - Ce journal est **anonyme quant à l'usager**, mais **ne comporte pas de purge automatique par délai**. Par prudence déontologique, les appelants et les compétences doivent **formuler des requêtes juridiques abstraites** et **ne jamais insérer de noms de clients ni de faits identifiants confidentiels** dans le paramètre `query`.
    - En cas d'incident de confidentialité ou de demande d'effacement, écrire à `jason@poirierlavoie.ca` (purge manuelle possible en D1 par horodatage).
 2. **Porteur d'authentification dans l'URL (`?key=` vs `Authorization: Bearer`)** :

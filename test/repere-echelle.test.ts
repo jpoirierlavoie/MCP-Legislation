@@ -1,4 +1,4 @@
-// Garde de l'ÉCHELLE de `legislation_search_text` : quel barreau arrête la descente, et
+// Garde de l'ÉCHELLE de `search_text` : quel barreau arrête la descente, et
 // sous quelle étiquette.
 //
 // POURQUOI CETTE GARDE EXISTE. L'échelle s'arrêtait au premier barreau rendant au moins UN
@@ -208,7 +208,7 @@ describe("l'échelle de recherche, barreau par barreau", () => {
 
 describe("les trois décomptes servis, et leurs trois sens", () => {
   it("`total` compte le lexique, `returned` la page, `sources` les départage", async () => {
-    const res = await registre().legislation_search_text({ query: Q_MAIGRE, limit: 5 } as never);
+    const res = await registre().search_text({ query: Q_MAIGRE, limit: 5 } as never);
     const sc = res.structuredContent as {
       total: number;
       returned: number;
@@ -227,7 +227,7 @@ describe("les trois décomptes servis, et leurs trois sens", () => {
   });
 
   it("l'étiquette de repli voyage dans l'objet typé, pas seulement en prose", async () => {
-    const res = await registre().legislation_search_text({
+    const res = await registre().search_text({
       query: Q_FOURNIE,
       limit: 5,
     } as never);

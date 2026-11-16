@@ -25,7 +25,7 @@ export { carteServeur };
 /**
  * Serveur MCP « MCP Legislation » (paquet mcp-legislation).
  *
- * Expose les outils legislation_* (PLAN §3), en lecture seule sur D1. Transport HTTP
+ * Expose les 10 outils de législation (PLAN §3), en lecture seule sur D1. Transport HTTP
  * streamable sans état sur POST /mcp.
  */
 

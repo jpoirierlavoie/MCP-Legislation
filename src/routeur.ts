@@ -54,8 +54,8 @@ const SERT_AVANT_2025_06_18 = true;
  * valider, par une table EXPLICITE : rien n'est converti par surprise.
  */
 const COERCITIONS: Record<string, readonly string[]> = {
-  legislation_get_article: ["article"],
-  legislation_get_articles: ["from", "to", "numbers"],
+  get_article: ["article"],
+  get_articles: ["from", "to", "numbers"],
 };
 
 function normaliser(nom: string, args: Record<string, unknown>): Record<string, unknown> {
@@ -80,7 +80,7 @@ function normaliser(nom: string, args: Record<string, unknown>): Record<string, 
  * ⚠ L'ORDRE EST CELUI D'INSERTION, et c'est DÉLIBÉRÉMENT le seul tri appliqué. La révision
  *   `2026-07-28` recommande un ordre DÉTERMINISTE — ce que l'ordre d'insertion est déjà —
  *   et n'exige nulle part l'ordre alphabétique. Trier par nom déplacerait
- *   `legislation_find_relevant`, que les `INSTRUCTIONS` désignent comme point de départ, et
+ *   `find_relevant`, que les `INSTRUCTIONS` désignent comme point de départ, et
  *   ferait bouger la page publique qui dérive du même registre. On gagnerait un tri qui n'est
  *   demandé par personne, on perdrait la pédagogie de l'ordre.
  */

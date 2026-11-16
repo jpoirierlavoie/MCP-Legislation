@@ -50,7 +50,7 @@ export interface DescripteurPublie {
 
 const corps = outils
   .map((o) => {
-    const cle = o.name.replace(/^legislation_/, "").toUpperCase();
+    const cle = o.name.toUpperCase();
     const publie = {
       title: `__TITRE_${cle}__`,
       description: o.description,
@@ -70,7 +70,7 @@ const table = `
 
 /** Les dix descripteurs, dans l'ordre où \`tools/list\` les rend aujourd'hui. */
 export const PUBLIES: Record<string, DescripteurPublie> = {
-${outils.map((o) => `  ${o.name}: ${o.name.replace(/^legislation_/, "").toUpperCase()},`).join("\n")}
+${outils.map((o) => `  ${o.name}: ${o.name.toUpperCase()},`).join("\n")}
 };
 `;
 

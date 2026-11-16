@@ -30,9 +30,9 @@ const indexTs = `${lire("src/serveur.ts")}
 ${lire("src/index.ts")}`;
 const toolsTs = lire("src/tools.ts");
 
-/** Noms d'outils SANS préfixe — aucun n'existe côté serveur. */
+/** Anciens noms v1 préfixés `legislation_*` — retirés depuis v2.0.0 (plafond <= 64 car.). */
 const NOMS_MORTS =
-  /(?<![a-z_])(get_structure|get_division|get_articles?|list_laws|list_subjects|search_text|find_relevant|related_laws|resolve_reference)(?![a-z_])/g;
+  /\b(legislation_(?:get_structure|get_division|get_articles?|list_laws|list_subjects|search_text|find_relevant|related_laws|resolve_reference))\b/g;
 
 /**
  * Ne garde que ce qui est SERVI. Deux exclusions, chacune vérifiée :
@@ -52,7 +52,7 @@ describe("aucun nom d'outil mort n'est SERVI", () => {
   it("les instructions du serveur ne citent que des outils existants", () => {
     const bloc = indexTs.match(/const INSTRUCTIONS =([\s\S]*?);\n/)?.[1] ?? "";
     const morts = [...new Set([...bloc.matchAll(NOMS_MORTS)].map((m) => m[1]))];
-    expect(morts, `noms sans préfixe dans INSTRUCTIONS : ${morts.join(", ")}`).toEqual([]);
+    expect(morts, `noms préfixés v1 dans INSTRUCTIONS : ${morts.join(", ")}`).toEqual([]);
   });
 
   it("le garde-fou de find_relevant ne cite que des outils existants", () => {
@@ -61,14 +61,14 @@ describe("aucun nom d'outil mort n'est SERVI", () => {
     const bloc = toolsTs.match(/const GARDE_FOU =([\s\S]*?);\n/)?.[1] ?? "";
     expect(bloc.length, "GARDE_FOU introuvable — la regex a-t-elle cassé ?").toBeGreaterThan(50);
     const morts = [...new Set([...bloc.matchAll(NOMS_MORTS)].map((m) => m[1]))];
-    expect(morts, `noms sans préfixe dans GARDE_FOU : ${morts.join(", ")}`).toEqual([]);
+    expect(morts, `noms préfixés v1 dans GARDE_FOU : ${morts.join(", ")}`).toEqual([]);
   });
 
-  it("aucune description d'outil ne cite un nom sans préfixe", () => {
+  it("aucune sortie d'outil ne cite un ancien nom préfixé v1", () => {
     const morts = [
       ...new Set([...sansCommentaires(toolsTs).matchAll(NOMS_MORTS)].map((m) => m[1])),
     ];
-    expect(morts, `noms sans préfixe servis depuis src/tools.ts : ${morts.join(", ")}`).toEqual([]);
+    expect(morts, `noms préfixés v1 servis depuis src/tools.ts : ${morts.join(", ")}`).toEqual([]);
   });
 });
 

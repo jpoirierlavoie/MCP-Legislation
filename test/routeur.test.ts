@@ -146,7 +146,7 @@ describe("validation en-tête contre corps, sous révision moderne SEULEMENT", (
         jsonrpc: "2.0",
         id: 1,
         method: "tools/call",
-        params: { name: "legislation_list_laws", arguments: {} },
+        params: { name: "list_laws", arguments: {} },
       },
       { "MCP-Protocol-Version": MODERNE, "Mcp-Method": "tools/call", "Mcp-Name": "autre_outil" },
     );
@@ -177,7 +177,7 @@ describe("server/discover", () => {
     expect(c.result.serverInfo).toBeUndefined();
     expect(c.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
       name: "Législation du Québec et du Canada",
-      version: "0.2.0",
+      version: "2.0.0",
     });
   });
 
@@ -222,14 +222,14 @@ describe("méthodes et erreurs", () => {
 
 describe("tools/call", () => {
   it("un outil inconnu est une erreur d'OUTIL, pas de protocole", async () => {
-    const r = await heritee("tools/call", { name: "legislation_inexistant", arguments: {} });
+    const r = await heritee("tools/call", { name: "outil_inexistant", arguments: {} });
     const c = (await r.json()) as { result: { isError: boolean; content: { text: string }[] } };
     expect(c.result.isError).toBe(true);
     expect(c.result.content[0]?.text).toContain("Outil inconnu");
   });
 
   it("des arguments invalides sont lisibles par le modèle", async () => {
-    const r = await heritee("tools/call", { name: "legislation_get_article", arguments: {} });
+    const r = await heritee("tools/call", { name: "get_article", arguments: {} });
     const c = (await r.json()) as { result: { isError: boolean; content: { text: string }[] } };
     expect(c.result.isError).toBe(true);
     expect(c.result.content[0]?.text).toContain("obligatoire");
@@ -241,7 +241,7 @@ describe("tools/call", () => {
     // plus appelé tomberait. La base de test est vide : on éprouve la VALIDATION, pas le
     // résultat — un refus de type dirait « doit être une chaîne ».
     const r = await heritee("tools/call", {
-      name: "legislation_get_article",
+      name: "get_article",
       arguments: { law: "ccq", article: 1457 },
     });
     expect(await r.text()).not.toContain("doit être une cha");
@@ -249,7 +249,7 @@ describe("tools/call", () => {
 
   it("un objet ou booléen pour un article n'est pas coercé et est rejeté par le validateur", async () => {
     const rObj = await heritee("tools/call", {
-      name: "legislation_get_article",
+      name: "get_article",
       arguments: { law: "ccq", article: { evil: true } },
     });
     const cObj = (await rObj.json()) as {
@@ -259,7 +259,7 @@ describe("tools/call", () => {
     expect(cObj.result.content[0]?.text).toContain("doit être une chaîne de caractères");
 
     const rBool = await heritee("tools/call", {
-      name: "legislation_get_article",
+      name: "get_article",
       arguments: { law: "ccq", article: true },
     });
     const cBool = (await rBool.json()) as {

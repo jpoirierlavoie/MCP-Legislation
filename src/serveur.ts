@@ -40,7 +40,7 @@ export const PACKAGE_NAME = "mcp-legislation";
 
 export const SERVER_INFO = {
   name: "Législation du Québec et du Canada",
-  version: "0.2.0",
+  version: "2.0.0",
 } as const;
 
 /**
@@ -84,7 +84,7 @@ export function carteServeur() {
  *  1. elle annonçait « tarifs du Québec » et taisait les 18 textes FÉDÉRAUX servis. Un
  *     modèle interrogé sur la faillite écartait le serveur et répondait de mémoire ;
  *  2. elle envoyait vers `get_structure / get_division / get_article` — des noms qui
- *     N'EXISTENT PAS (tout est `legislation_*`). Avec plusieurs serveurs branchés, l'appel
+ *     préfixés différemment. Avec plusieurs serveurs branchés, l'appel
  *     pouvait partir chez un voisin et rendre un texte étranger au corpus ;
  *  3. elle ne disait nulle part que le corpus est une SÉLECTION FERMÉE, ni que le service
  *     ne donne aucun conseil juridique — or l'avertissement du cabinet ne voyage que sur la
@@ -93,9 +93,9 @@ export function carteServeur() {
 export const INSTRUCTIONS =
   "Texte officiel de lois et règlements du QUÉBEC et du CANADA (fédéral) : codes, lois, " +
   "règles de procédure et tarifs, en français et en anglais. " +
-  "Pour partir d'un problème concret, commencer par legislation_find_relevant ; pour explorer " +
-  "le corpus, legislation_list_laws. Cibler ensuite avec legislation_get_structure → " +
-  "legislation_get_division / legislation_get_article. " +
+  "Pour partir d'un problème concret, commencer par find_relevant ; pour explorer " +
+  "le corpus, list_laws. Cibler ensuite avec get_structure → " +
+  "get_division / get_article. " +
   "PORTÉE : le corpus est une SÉLECTION FERMÉE de textes, pas tout le droit applicable — il ne " +
   "contient ni jurisprudence, ni versions antérieures d'un article, ni l'ancien Code de " +
   "procédure civile (c. C-25). Une absence de résultat ne signifie donc JAMAIS qu'aucune règle " +
