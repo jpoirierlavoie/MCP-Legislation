@@ -84,7 +84,7 @@ Deux refus à ne pas confondre :
 
 Les décomptes exacts (nombre d'articles par langue, dates de consolidation) sont calculés
 en base et affichés sur la [page publique](https://legislation.poirierlavoie.ca/) ainsi que
-par l'outil `legislation_list_laws` — ils ne sont pas recopiés ici (R10). Rafraîchissement
+par l'outil `list_laws` — ils ne sont pas recopiés ici (R10). Rafraîchissement
 semestriel.
 
 **Ce que le corpus NE couvre PAS, et qu'il vaut mieux savoir avant d'en avoir besoin.**
@@ -93,7 +93,7 @@ versions antérieures, ni point de vue historique. En particulier, l'**ancien Co
 procédure civile** (RLRQ, c. C-25), abrogé et remplacé le 1er janvier 2016 par le Code
 actuel (c. C-25.01), **n'y figure pas** : c'est une décision de portée, pas un oubli.
 Comme la recodification a **renuméroté** le code, l'article N de l'ancien n'est pas
-l'article N du nouveau — aussi `legislation_resolve_reference` refuse-t-il NOMMÉMENT une
+l'article N du nouveau — aussi `resolve_reference` refuse-t-il NOMMÉMENT une
 citation de l'ancien code (« ancien C.p.c. », « c. C-25 », « C.p.c. de 1965 ») plutôt que de
 la rabattre en silence sur son successeur. Côté fédéral, la portée exclut également le Code
 criminel, la Loi de l'impôt sur le revenu et les lois constitutionnelles (voir l'invariant 17
@@ -107,25 +107,25 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 
 | Outil | Rôle | Exemple |
 |---|---|---|
-| `legislation_find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats, avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
-| `legislation_list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, loi habilitante, plan des grands codes ; filtres `fonction`/`forum`/`subject` | `fonction=tarif` → les 4 tarifs |
-| `legislation_list_subjects` | Les 44 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
-| `legislation_related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées | `law=cpc` → ses 6 règlements de cour |
+| `find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats, avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
+| `list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, loi habilitante, plan des grands codes ; filtres `fonction`/`forum`/`subject` | `fonction=tarif` → les 4 tarifs |
+| `list_subjects` | Les 44 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
+| `related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées | `law=cpc` → ses 6 règlements de cour |
 
 ### Extraction
 
 | Outil | Rôle | Exemple |
 |---|---|---|
-| `legislation_get_article` | Un article verbatim, avec citation, hiérarchie, historique, date | `law=ccq, article=1457` |
-| `legislation_get_articles` | Plage (`from`/`to`) ou liste (`numbers`) d'articles, paginée | `law=cpc, from=489, to=496` |
-| `legislation_get_structure` | L'arbre des divisions, sans texte — pour explorer avant d'extraire | `law=ccq, depth=2` |
-| `legislation_get_division` | Une division (Livre/Titre/Chapitre…) : intitulé, sous-divisions, articles | `path=ga:l_cinquieme` |
-| `legislation_search_text` | Recherche hybride dans le texte des articles (voir ci-dessous) | `« délai réponse défendeur hors du Québec »` |
-| `legislation_resolve_reference` | D'une citation libre vers l'article officiel ; reconnaît les chapitres RLRQ et les abréviations C.c.Q./C.p.c. | `« RLRQ, c. T-16, art. 12 »` |
+| `get_article` | Un article verbatim, avec citation, hiérarchie, historique, date | `law=ccq, article=1457` |
+| `get_articles` | Plage (`from`/`to`) ou liste (`numbers`) d'articles, paginée | `law=cpc, from=489, to=496` |
+| `get_structure` | L'arbre des divisions, sans texte — pour explorer avant d'extraire | `law=ccq, depth=2` |
+| `get_division` | Une division (Livre/Titre/Chapitre…) : intitulé, sous-divisions, articles | `path=ga:l_cinquieme` |
+| `search_text` | Recherche hybride dans le texte des articles (voir ci-dessous) | `« délai réponse défendeur hors du Québec »` |
+| `resolve_reference` | D'une citation libre vers l'article officiel ; reconnaît les chapitres RLRQ et les abréviations C.c.Q./C.p.c. | `« RLRQ, c. T-16, art. 12 »` |
 
 ## La recherche, en détail
 
-`legislation_search_text` combine deux moteurs et **dit toujours quel chemin a produit les
+`search_text` combine deux moteurs et **dit toujours quel chemin a produit les
 résultats** :
 
 1. **Lexical** (FTS5, insensible aux accents) — correspondance exacte d'abord ; si une
@@ -153,9 +153,9 @@ Les recherches corpus sont regroupées par loi (max 6 par loi).
 
 ## Avertissement
 
-L'aide au repérage (`legislation_find_relevant`, taxonomie, relations) est **heuristique** :
+L'aide au repérage (`find_relevant`, taxonomie, relations) est **heuristique** :
 elle ne détermine pas le droit applicable. Toujours vérifier en lisant le texte via
-`legislation_get_structure` / `legislation_get_division` / `legislation_get_article`.
+`get_structure` / `get_division` / `get_article`.
 Ce serveur ne fournit pas de conseil juridique ; en cas de doute, consulter la version
 officielle du publieur (LégisQuébec ou Justice Canada) et un professionnel du droit.
 

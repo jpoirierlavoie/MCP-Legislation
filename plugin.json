@@ -2,7 +2,7 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "mcp-legislation",
   "displayName": "Législation du Québec et du Canada",
-  "version": "0.2.0",
+  "version": "2.0.0",
   "description": "Texte officiel en lecture seule de lois et règlements du Québec et du Canada (en français et en anglais), hiérarchie complète des divisions et recherche hybride lexicale et sémantique.",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [

@@ -7,7 +7,7 @@ import { type LawRow, parseCitation } from "../src/lib";
  *
  * POURQUOI CE FICHIER EXISTE. Mesuré en production le 2026-09-17 :
  *
- *     legislation_resolve_reference({ citation: "art. 2 ancien C.p.c." })
+ *     resolve_reference({ citation: "art. 2 ancien C.p.c." })
  *       -> RLRQ, c. C-25.01, art. 2  (à jour au …)
  *
  * L'abréviation « C.p.c. » appariait et le mot « ancien » était purement ignoré. Or la

@@ -27,7 +27,7 @@ qu'une seule ligne fausse servie à un modèle dans un outil juridique.
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
 | 4 | **README.md** et manifestes | racine (`README.md`, `SECURITY.md`, `LICENSE` `CC-BY-NC-SA-4.0`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `GEMINI.md`, `/mcp/server-card`) | tout ce qui change ce que le dépôt *annonce* faire, sa licence, sa politique de sécurité/confidentialité ou sa connectivité client |
 | 5 | **Page publique** (HTML `GET /`) | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | tout ce qui change la page publique HTML rendue à `GET /` (textes bilingues FR/EN, décomptes D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil) |
-| 6 | **Inter-dépôts (Cross-repository)** | `pratique-civile-quebecoise` (manifestes, `skills/`, scripts), `MCP-Socle` (`#v0.7.0`), `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
+| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (manifestes, `skills/`, scripts), `MCP-Socle` (`#v0.7.0`), `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
 
 **Procédure, à exécuter et à RAPPORTER — pas à supposer :**
 
@@ -44,7 +44,7 @@ qu'une seule ligne fausse servie à un modèle dans un outil juridique.
    (corollaire structuré de R4, décision 001).
 
 **Pourquoi cette obligation existe.** La dérive n'est pas hypothétique ici, elle est
-documentée : `legislation_resolve_reference` a servi aux modèles « Voir les 38 textes
+documentée : `resolve_reference` a servi aux modèles « Voir les 38 textes
 disponibles » pendant que le corpus en comptait 79 ; le README annonçait 3 tarifs sur 4,
 ~46 000 articles sur 49 255, 57 contrôles sur 62, et publiait une configuration de
 connexion qui renvoyait 404 ; `docs/ARCHITECTURE-NOTES.md` est resté à 38 lois / 28 matières.
@@ -71,8 +71,8 @@ les dix outils à son modèle depuis `athena/chat/worker_tools.py` **engendré**
 **Ce générateur n'existe plus. Ne pas le chercher, ne pas tenter de le relancer** — la
 consigne qui figurait ici jusqu'au 2026-09-16 prescrivait un remède injouable.
 Le couplage, lui, a SURVÉCU en changeant de support : il vit désormais dans le greffon
-Antigravity et les compétences de **`pratique-civile-quebecoise`** (notamment `recherche-juridique`,
-`redaction-juridique`, `calendrier-procedural` et `deontologie-professionnelle`), qui nomment les outils
+Antigravity et les compétences de **`droit-civil-quebecois`** (notamment `recherche-juridique`,
+`redaction-juridique`, `administration-litige` et `deontologie-et-pratique`), qui nomment les outils
 `legislation_*` **à la main**. Rien ne les engendre automatiquement, donc rien ne peut les réparer
 seul : après tout ajout, retrait ou renommage d'outil, les corriger À LA MAIN dans le greffon.
 Sinon l'échec n'apparaît qu'en pleine recherche juridique, sous la forme d'un outil qui « n'existe pas ».
@@ -81,16 +81,16 @@ inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
 
 ## Architecture et intégration dans le cadre global
 
-### Le cadre global à trois couches (`pratique-civile-quebecoise`)
+### Le cadre global à trois couches (`droit-civil-quebecois`)
 
 ```
              ┌────────────────────────────────────────────────────────┐
-             │       pratique-civile-quebecoise (Plugin Cadre)        │
-             │   5 compétences : recherche-juridique, analyse-doc,     │
-             │  calendrier-proc, redaction-juridique, déontologie     │
+             │       droit-civil-quebecois (Plugin Cadre)        │
+             │   5 compétences : recherche-juridique, analyse-juridique │
+             │  redaction-juridique, administration-litige, déonto  │
              └──────┬───────────────────────┬──────────────────┬──────┘
                     │                       │                  │
-   (10 outils `legislation_*`)    (10 outils `jurisprudence_*`) (12 outils sur 5 familles :
+   (serveur `lois`, 10 outils)     (serveur `juris`, 10 outils) (12 outils sur 5 familles :
                     │                       │            `calcul`, `greffe`, `registre`,
                     ▼                       ▼            `adresse`, `terminologie`)
          ┌─────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
@@ -111,18 +111,18 @@ inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
                  └─────────────────────────────┘
 ```
 
-### Intégration avec le plugin et les compétences (`pratique-civile-quebecoise`)
-- **`skills/recherche-juridique`** : Consomme les 10 outils `legislation_*` comme source primaire de droit textuel. Suit le pattern d'utilisation en deux temps : Découverte (`legislation_find_relevant`, `legislation_list_laws`, `legislation_list_subjects`, `legislation_related_laws`), puis Extraction (`legislation_get_article`, `legislation_get_articles`, `legislation_get_structure`, `legislation_get_division`, `legislation_search_text`, `legislation_resolve_reference`). Nomme également les 10 outils `jurisprudence_*`, `greffe_parse_court_file_number`, `palais_list`, `palais_get` et `interets_compute_1619` (notamment dans `references/methode-sources.md`, `livrables.md`, `preliminaires.md`, `sources-doctrinales.md`), et mobilise les besoins d'aptitude `TEXTE`, `CALCUL`, `GREFFE`, `INSCRIPTION`. Transmet les lois et articles découverts au citateur de `MCP-Jurisprudence` (`jurisprudence_citator` avec `rel="legislation"`).
-- **`skills/redaction-juridique`** : Utilise explicitement `legislation_get_article` (dont `lang="en"` pour extraire la terminologie officielle anglaise des concepts juridiques québécois du C.c.Q. et du C.p.c. et purger la contamination provenant de la common law), `legislation_search_text`, `calendrier_compute_deadlines` et `interets_compute_1619`, sous les besoins d'aptitude `CALCUL` et `GREFFE`.
-- **`skills/calendrier-procedural`** : Consomme `calendrier_compute_deadlines` et `calendrier_list_holidays` (avec repli local `scripts/calcul_delai.py`) sous les besoins `CALCUL`, `INSCRIPTION`, `TEXTE`. N'appelle aucun outil `legislation_*` directement (délègue la recherche législative et la prescription à `recherche-juridique`).
-- **`skills/analyse-documentaire`** : Ne nomme AUCUN outil MCP directement. Exprime des besoins d'aptitude abstraits `GREFFE`, `TEXTE` et `INSCRIPTION`, en déléguant la recherche juridique et la vérification de citations à `recherche-juridique` et les délais à `calendrier-procedural`.
-- **`skills/deontologie-professionnelle`** : Ne nomme AUCUN outil MCP directement ; délègue le droit substantiel et procédural hors déontologie à `recherche-juridique` et les délais à `calendrier-procedural`.
-- **Configuration** : Câblé dans `.mcp.json` et `gemini-extension.json` sous `legislation` (`https://legislation.poirierlavoie.ca/mcp`) avec `Authorization: Bearer ${MCP_LEGISLATION_SECRET}`.
+### Intégration avec le plugin et les compétences (`droit-civil-quebecois`)
+- **`skills/recherche-juridique`** : Consomme les 10 outils de `lois` comme source primaire de droit textuel. Suit le pattern d'utilisation en deux temps : Découverte (`find_relevant`, `list_laws`, `list_subjects`, `related_laws`), puis Extraction (`get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`). Nomme également les 10 outils de `juris`, `greffe_parse_number`, `palais_list`, `palais_get` et `interets_1619` (notamment dans `references/methode-sources.md`, `livrables.md`, `preliminaires.md`, `sources-doctrinales.md`), et mobilise les besoins d'aptitude `TEXTE`, `CALCUL`, `GREFFE`, `INSCRIPTION`. Transmet les lois et articles découverts au citateur de `MCP-Jurisprudence` (`citator` avec `rel="legislation"`).
+- **`skills/redaction-juridique`** : Utilise explicitement `get_article` (dont `lang="en"` pour extraire la terminologie officielle anglaise des concepts juridiques québécois du C.c.Q. et du C.p.c. et purger la contamination provenant de la common law), `search_text`, `calendrier_deadlines` et `interets_1619`, sous les besoins d'aptitude `CALCUL` et `GREFFE`.
+- **`skills/administration-litige`** : Consomme `calendrier_deadlines` et `calendrier_holidays` (avec repli local `scripts/calcul_delai.py`) sous les besoins `CALCUL`, `INSCRIPTION`, `TEXTE`. N'appelle aucun outil de `lois` directement (délègue la recherche législative et la prescription à `recherche-juridique`).
+- **`skills/analyse-juridique`** : Ne nomme AUCUN outil MCP directement. Exprime des besoins d'aptitude abstraits `GREFFE`, `TEXTE` et `INSCRIPTION`, en déléguant la recherche juridique et la vérification de citations à `recherche-juridique` et les délais à `administration-litige`.
+- **`skills/deontologie-et-pratique`** : Ne nomme AUCUN outil MCP directement ; délègue le droit substantiel et procédural hors déontologie à `recherche-juridique` et les délais à `administration-litige`.
+- **Configuration** : Câblé dans `.mcp.json` et `gemini-extension.json` sous `lois` (`https://legislation.poirierlavoie.ca/mcp`) avec `Authorization: Bearer ${MCP_LEGISLATION_SECRET}`.
 
-### Surfaces de synchronisation du plugin cadre (`pratique-civile-quebecoise`)
+### Surfaces de synchronisation du plugin cadre (`droit-civil-quebecois`)
 Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` exige la mise à jour synchronisée des surfaces du plugin cadre :
 1. **Manifestes clients** : `.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/plugin.json`, `plugin.json`.
-2. **Définitions manuelles des compétences (`skills/`)** : notamment `skills/recherche-juridique`, `skills/redaction-juridique`, `skills/calendrier-procedural`.
+2. **Définitions manuelles des compétences (`skills/`)** : notamment `skills/recherche-juridique`, `skills/redaction-juridique`, `skills/administration-litige`.
 3. **Scripts de synchronisation et de contrôle** :
    - `scripts/regenerer_cache_mcp.py --apply`
    - `scripts/synchroniser_plugin_gemini.py --apply`
@@ -395,7 +395,7 @@ npm run deploy                                     # migrations D1 d'abord PUIS 
   se CALCULE (D1, JSON versionné) ou s'IMPORTE (`WEIGHTS`, `SEMANTIC_MIN_SCORE`) — jamais
   recopié dans de la prose. Un fait *historique daté* reste licite AVEC sa date
   (« mesuré à 38 lois : 36 en avaient », « recall@10 40 % → 88 % → 98 % »).
-  **Preuve que la consigne seule ne suffit pas** : `legislation_resolve_reference` a servi aux
+  **Preuve que la consigne seule ne suffit pas** : `resolve_reference` a servi aux
   modèles « Voir les 38 textes disponibles » alors que le corpus en comptait 79 ; le README
   annonçait 3 tarifs sur 4 ; `docs/ARCHITECTURE-NOTES.md` est resté à 38 lois / 28 matières.
   Tout cela sans qu'aucun test n'échoue. Garde : `tests/catalogue.test.mjs` (hors réseau,
@@ -602,7 +602,7 @@ laissant les embeddings sur l'ancien texte donc du droit périmé rendu en silen
 **Veille de consolidation** (`.github/workflows/veille-consolidation.yml` +
 `scripts/check-consolidation.mjs`) : job **en LECTURE SEULE**, mensuel, qui compare la
 date « À jour au » de chaque loi **sur son publieur officiel** à `consol_date_*` en D1
-(lue via `legislation_list_laws` sur l'endpoint MCP — jeton de LECTURE `MCP_TOKEN` en secret
+(lue via `list_laws` sur l'endpoint MCP — jeton de LECTURE `MCP_TOKEN` en secret
 GitHub, toujours AUCUN secret Cloudflare) et ouvre/actualise une
 issue étiquetée `veille-consolidation` quand un rafraîchissement est dû (issue close
 automatiquement à la résolution). Il DÉTECTE, il ne bascule jamais.

@@ -1,4 +1,4 @@
-// Gestionnaires des outils MCP « Lois du Québec » (legislation_*). Tous en lecture seule.
+// Gestionnaires des outils MCP « Lois du Québec et du Canada ». Tous en lecture seule.
 import {
   type ArticleJoined,
   type ArticleRow,
@@ -43,7 +43,7 @@ import { rank, tokenize, WEIGHTS } from "./relevance";
 const GARDE_FOU =
   "Aide heuristique au repérage de lois et de parties de lois candidates. " +
   "Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via " +
-  "legislation_get_structure / legislation_get_division / legislation_get_article.";
+  "get_structure / get_division / get_article.";
 
 // Libellés de type de division, par langue (l'anglais dit « Division » pour la « Section »).
 const KIND_LABEL: Record<Lang, Record<string, string>> = {
@@ -73,7 +73,7 @@ const KIND_LABEL: Record<Lang, Record<string, string>> = {
   },
 };
 
-// Libellés de legislation_related_laws, par langue. Même motif que KIND_LABEL : l'outil
+// Libellés de related_laws, par langue. Même motif que KIND_LABEL : l'outil
 // déclarait `lang` sans l'honorer — un client qui demandait l'anglais recevait du français
 // sans la moindre étiquette, ce qui est « faux, servi, silencieux ».
 const REL_LABEL: Record<
@@ -100,7 +100,7 @@ const REL_LABEL: Record<
     aucuneRel: (l) => `Aucune relation pour '${l}'`,
     deType: (t) => ` de type '${t}'`,
     enDirection: (d) => ` en direction '${d}'`,
-    essayez: "Essayez sans filtre, ou legislation_list_laws pour la carte du corpus.",
+    essayez: "Essayez sans filtre, ou list_laws pour la carte du corpus.",
     horsCorpus: "NON disponible au corpus (candidat d'acquisition)",
     renvois: "renvoi(s)",
     relations: "relation(s) pour",
@@ -114,7 +114,7 @@ const REL_LABEL: Record<
     aucuneRel: (l) => `No relation for '${l}'`,
     deType: (t) => ` of type '${t}'`,
     enDirection: (d) => ` in direction '${d}'`,
-    essayez: "Try without a filter, or legislation_list_laws for the corpus map.",
+    essayez: "Try without a filter, or list_laws for the corpus map.",
     horsCorpus: "NOT available in the corpus (acquisition candidate)",
     renvois: "reference(s)",
     relations: "relation(s) for",
@@ -167,7 +167,7 @@ export function construireOutils(env: Env): Registre {
   const db = env.DB;
   const outils: Registre = {};
 
-  // 1) legislation_list_laws ---------------------------------------------------------
+  // 1) list_laws ---------------------------------------------------------
   //
   // Écart au plan v2 (1.4), consigné au rapport : le critère « toute loi dont les
   // divisions comportent le kind livre » rate sa cible — le parseur classe
@@ -257,8 +257,8 @@ export function construireOutils(env: Env): Registre {
         .join(", ");
       return err(
         applied
-          ? `Aucune loi pour ${applied}. Vérifiez les valeurs (legislation_list_subjects pour les matières) ` +
-              "ou appelez legislation_list_laws sans filtre."
+          ? `Aucune loi pour ${applied}. Vérifiez les valeurs (list_subjects pour les matières) ` +
+              "ou appelez list_laws sans filtre."
           : "Aucune loi chargée dans la base.",
       );
     }
@@ -297,9 +297,9 @@ export function construireOutils(env: Env): Registre {
       })),
     });
   };
-  outils.legislation_list_laws = H_LIST_LAWS as Gestionnaire;
+  outils.list_laws = H_LIST_LAWS as Gestionnaire;
 
-  // 1b) legislation_list_subjects ----------------------------------------------------
+  // 1b) list_subjects ----------------------------------------------------
   const H_LIST_SUBJECTS = async ({ lang: langArg }: { lang?: "fr" | "en" }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
@@ -348,9 +348,9 @@ export function construireOutils(env: Env): Registre {
       })),
     });
   };
-  outils.legislation_list_subjects = H_LIST_SUBJECTS as Gestionnaire;
+  outils.list_subjects = H_LIST_SUBJECTS as Gestionnaire;
 
-  // 1c) legislation_related_laws -----------------------------------------------------
+  // 1c) related_laws -----------------------------------------------------
   const H_RELATED_LAWS = async ({
     law,
     rel_type,
@@ -422,9 +422,9 @@ export function construireOutils(env: Env): Registre {
       })),
     });
   };
-  outils.legislation_related_laws = H_RELATED_LAWS as Gestionnaire;
+  outils.related_laws = H_RELATED_LAWS as Gestionnaire;
 
-  // 1d) legislation_find_relevant ----------------------------------------------------
+  // 1d) find_relevant ----------------------------------------------------
   const H_FIND_RELEVANT = async ({
     query,
     limit,
@@ -440,8 +440,8 @@ export function construireOutils(env: Env): Registre {
     const page = paginate(limit, 0, 8, 50);
     if (tokens.length === 0) {
       return err(
-        `Aucun terme exploitable dans « ${query} ». Reformulez avec des mots porteurs ` +
-          "(ex. « bail de logement », « congédiement »), ou consultez legislation_list_subjects.",
+        "Aucun terme exploitable dans la requête. Reformulez avec des mots porteurs " +
+          "(ex. « bail de logement », « congédiement »), ou consultez list_subjects.",
       );
     }
     const data = await loadRelevanceData(db, tokens, lang as Lang, env);
@@ -454,10 +454,10 @@ export function construireOutils(env: Env): Registre {
     });
     if (cands.length === 0) {
       return err(
-        `Aucun rapprochement pour « ${query} » (termes retenus : ${tokens.join(", ")}). ` +
+        `Aucun rapprochement trouvé (termes retenus : ${tokens.join(", ")}). ` +
           "Le corpus est une SÉLECTION FERMÉE de textes du Québec et du fédéral : une absence " +
           "ici ne dit rien de l'existence d'une règle ailleurs. " +
-          "Voir les domaines avec legislation_list_subjects, ou chercher dans le texte avec legislation_search_text.",
+          "Voir les domaines avec list_subjects, ou chercher dans le texte avec search_text.",
       );
     }
     const lines = cands.map((c, i) => {
@@ -467,7 +467,7 @@ export function construireOutils(env: Env): Registre {
       return `${i + 1}. ${cible}  — score ${c.score}\n     pourquoi : ${c.pourquoi.join(" ; ")}`;
     });
     return ok(
-      `${cands.length} piste(s) pour « ${query} » (termes : ${tokens.join(", ")}) :\n` +
+      `${cands.length} piste(s) repérée(s) (termes : ${tokens.join(", ")}) :\n` +
         `${lines.join("\n")}\n\n${GARDE_FOU}`,
       {
         query,
@@ -486,9 +486,9 @@ export function construireOutils(env: Env): Registre {
       },
     );
   };
-  outils.legislation_find_relevant = H_FIND_RELEVANT as Gestionnaire;
+  outils.find_relevant = H_FIND_RELEVANT as Gestionnaire;
 
-  // 2) legislation_get_article -------------------------------------------------------
+  // 2) get_article -------------------------------------------------------
   const H_GET_ARTICLE = async ({
     law,
     article,
@@ -529,9 +529,9 @@ export function construireOutils(env: Env): Registre {
       text: row.text,
     });
   };
-  outils.legislation_get_article = H_GET_ARTICLE as Gestionnaire;
+  outils.get_article = H_GET_ARTICLE as Gestionnaire;
 
-  // 3) legislation_get_articles ------------------------------------------------------
+  // 3) get_articles ------------------------------------------------------
   const H_GET_ARTICLES = async ({
     law,
     from,
@@ -613,9 +613,9 @@ export function construireOutils(env: Env): Registre {
       })),
     });
   };
-  outils.legislation_get_articles = H_GET_ARTICLES as Gestionnaire;
+  outils.get_articles = H_GET_ARTICLES as Gestionnaire;
 
-  // 4) legislation_get_structure -----------------------------------------------------
+  // 4) get_structure -----------------------------------------------------
   const H_GET_STRUCTURE = async ({
     law,
     lang: langArg,
@@ -650,9 +650,9 @@ export function construireOutils(env: Env): Registre {
         .join("\n");
     return ok(render(tree, 0), { law, lang, root_path: root_path ?? null, depth: d, tree });
   };
-  outils.legislation_get_structure = H_GET_STRUCTURE as Gestionnaire;
+  outils.get_structure = H_GET_STRUCTURE as Gestionnaire;
 
-  // 5) legislation_get_division ------------------------------------------------------
+  // 5) get_division ------------------------------------------------------
   const H_GET_DIVISION = async ({
     law,
     path,
@@ -741,9 +741,9 @@ export function construireOutils(env: Env): Registre {
       pagination: { limit: page.limit, offset: page.offset, total },
     });
   };
-  outils.legislation_get_division = H_GET_DIVISION as Gestionnaire;
+  outils.get_division = H_GET_DIVISION as Gestionnaire;
 
-  // 6) legislation_search_text -------------------------------------------------------
+  // 6) search_text -------------------------------------------------------
   const H_SEARCH_TEXT = async ({
     query,
     law,
@@ -821,10 +821,10 @@ export function construireOutils(env: Env): Registre {
     // mesuré : « congédiement » n'attrape pas « congédier »).
     if (res.hits.length === 0)
       return err(
-        `Aucun résultat pour « ${query} » (${lang}). Cela ne signifie pas qu'aucune règle ` +
+        `Aucun résultat trouvé (${lang}). Cela ne signifie pas qu'aucune règle ` +
           "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
           "LEXICAL (pas de familles de mots — « congédiement » ne trouve pas « congédier »). " +
-          "Essayer d'autres mots exacts du texte, ou legislation_find_relevant pour partir du " +
+          "Essayer d'autres mots exacts du texte, ou find_relevant pour partir du " +
           "problème plutôt que des mots.",
       );
 
@@ -892,7 +892,7 @@ export function construireOutils(env: Env): Registre {
             ? `Résultats partiels (au moins un terme sur ${nTerms}) :`
             : res.fallback === "semantic"
               ? "Aucune correspondance lexicale ; repérage sémantique :"
-              : `${res.total} résultat(s) pour « ${query} » :`;
+              : `${res.total} résultat(s) trouvé(s) :`;
     // Recherche restreinte avec résultats : signaler ce que la restriction cache (post-mortem)
     const elsewhere = res.elsewhere
       ? `\n\nAilleurs au corpus (${res.elsewhere.total} résultat(s) hors ${law}) — aperçu :\n` +
@@ -937,9 +937,9 @@ export function construireOutils(env: Env): Registre {
       results: res.hits.map(enrich),
     });
   };
-  outils.legislation_search_text = H_SEARCH_TEXT as Gestionnaire;
+  outils.search_text = H_SEARCH_TEXT as Gestionnaire;
 
-  // 7) legislation_resolve_reference -------------------------------------------------
+  // 7) resolve_reference -------------------------------------------------
   const H_RESOLVE_REFERENCE = async ({
     citation,
     lang: langArg,
@@ -972,11 +972,11 @@ export function construireOutils(env: Env): Registre {
         parsed.chapitre_inconnu
           ? `Le chapitre « ${parsed.chapitre_inconnu} » n'est pas au corpus — aucune loi n'a été ` +
               "résolue (il n'est PAS rabattu sur un chapitre voisin). " +
-              `Voir les ${all.length} textes disponibles avec legislation_list_laws. ` +
+              `Voir les ${all.length} textes disponibles avec list_laws. ` +
               `Article détecté : ${parsed.article ?? "aucun"}.`
           : `Loi non reconnue dans « ${citation} ». Précisez le chapitre RLRQ (ex. « RLRQ, c. T-16 ») ` +
-              "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez legislation_get_article avec law=… " +
-              `(voir legislation_list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
+              "ou une abréviation connue (C.c.Q., C.p.c.), ou utilisez get_article avec law=… " +
+              `(voir list_laws). Article détecté : ${parsed.article ?? "aucun"}.`,
       );
     }
     const law = parsed.law;
@@ -1003,7 +1003,7 @@ export function construireOutils(env: Env): Registre {
       text: row.text,
     });
   };
-  outils.legislation_resolve_reference = H_RESOLVE_REFERENCE as Gestionnaire;
+  outils.resolve_reference = H_RESOLVE_REFERENCE as Gestionnaire;
 
   return outils;
 }

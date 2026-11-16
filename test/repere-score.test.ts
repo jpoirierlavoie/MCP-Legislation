@@ -1,4 +1,4 @@
-// Garde du classement de `legislation_find_relevant` — le facteur de COUVERTURE, et les
+// Garde du classement de `find_relevant` — le facteur de COUVERTURE, et les
 // deux faux positifs qu'il ferme.
 //
 // POURQUOI CETTE GARDE EXISTE. Mesuré en production le 2026-09-17, sur la requête

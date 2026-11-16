@@ -4,6 +4,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import reference from "../fixtures/tools-list.reference.json";
+import { logSearch, minimiserRequeteJournal } from "../src/lib";
 import { PUBLIC_DESCRIPTION, SERVER_INFO, VERSIONS } from "../src/serveur";
 
 const URL_MCP = "https://legislation.test/mcp";
@@ -146,7 +147,7 @@ describe("validation en-tête contre corps, sous révision moderne SEULEMENT", (
         jsonrpc: "2.0",
         id: 1,
         method: "tools/call",
-        params: { name: "legislation_list_laws", arguments: {} },
+        params: { name: "list_laws", arguments: {} },
       },
       { "MCP-Protocol-Version": MODERNE, "Mcp-Method": "tools/call", "Mcp-Name": "autre_outil" },
     );
@@ -177,7 +178,7 @@ describe("server/discover", () => {
     expect(c.result.serverInfo).toBeUndefined();
     expect(c.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
       name: "Législation du Québec et du Canada",
-      version: "0.2.0",
+      version: "2.0.0",
     });
   });
 
@@ -222,14 +223,14 @@ describe("méthodes et erreurs", () => {
 
 describe("tools/call", () => {
   it("un outil inconnu est une erreur d'OUTIL, pas de protocole", async () => {
-    const r = await heritee("tools/call", { name: "legislation_inexistant", arguments: {} });
+    const r = await heritee("tools/call", { name: "outil_inexistant", arguments: {} });
     const c = (await r.json()) as { result: { isError: boolean; content: { text: string }[] } };
     expect(c.result.isError).toBe(true);
     expect(c.result.content[0]?.text).toContain("Outil inconnu");
   });
 
   it("des arguments invalides sont lisibles par le modèle", async () => {
-    const r = await heritee("tools/call", { name: "legislation_get_article", arguments: {} });
+    const r = await heritee("tools/call", { name: "get_article", arguments: {} });
     const c = (await r.json()) as { result: { isError: boolean; content: { text: string }[] } };
     expect(c.result.isError).toBe(true);
     expect(c.result.content[0]?.text).toContain("obligatoire");
@@ -241,7 +242,7 @@ describe("tools/call", () => {
     // plus appelé tomberait. La base de test est vide : on éprouve la VALIDATION, pas le
     // résultat — un refus de type dirait « doit être une chaîne ».
     const r = await heritee("tools/call", {
-      name: "legislation_get_article",
+      name: "get_article",
       arguments: { law: "ccq", article: 1457 },
     });
     expect(await r.text()).not.toContain("doit être une cha");
@@ -249,7 +250,7 @@ describe("tools/call", () => {
 
   it("un objet ou booléen pour un article n'est pas coercé et est rejeté par le validateur", async () => {
     const rObj = await heritee("tools/call", {
-      name: "legislation_get_article",
+      name: "get_article",
       arguments: { law: "ccq", article: { evil: true } },
     });
     const cObj = (await rObj.json()) as {
@@ -259,7 +260,7 @@ describe("tools/call", () => {
     expect(cObj.result.content[0]?.text).toContain("doit être une chaîne de caractères");
 
     const rBool = await heritee("tools/call", {
-      name: "legislation_get_article",
+      name: "get_article",
       arguments: { law: "ccq", article: true },
     });
     const cBool = (await rBool.json()) as {
@@ -550,5 +551,60 @@ describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
     } finally {
       e.MCP_ENABLED = "true";
     }
+  });
+});
+
+describe("minimisation et purge du journal search_log", () => {
+  it("préserve les requêtes juridiques abstraites et masque les identifiants sensibles", () => {
+    expect(minimiserRequeteJournal("  vice caché art. 1726 C.c.Q.  ")).toBe(
+      "vice caché art. 1726 C.c.Q.",
+    );
+    expect(minimiserRequeteJournal("art. 535.1 C.p.c. 2024 QCCS 1234")).toBe(
+      "art. 535.1 C.p.c. 2024 QCCS 1234",
+    );
+
+    const sensible = minimiserRequeteJournal(
+      "dossier 500-17-123456-241 client@exemple.ca tel (514) 555-0199 NAS 123-456-789 NEQ 1162345678",
+    );
+    expect(sensible).toBe("dossier [DOSSIER] [COURRIEL] tel [TEL] NAS [ID] NEQ [ID]");
+
+    const longue = minimiserRequeteJournal("résiliation bail ".repeat(20));
+    expect(longue.length).toBeLessThanOrEqual(160);
+    expect(longue.endsWith("…")).toBe(true);
+  });
+
+  it("enregistre le marqueur fixe [REDACTED] sans persister e.query et purge les entrées > 90 jours", async () => {
+    const db = (env as unknown as { DB: D1Database }).DB;
+    const oldMarker = "ancienne-requete-expiree-test";
+    const freshSecret = "secret-client-confidentiel-test";
+    await db
+      .prepare("INSERT INTO search_log (ts, tool, query, result_count) VALUES (?, ?, ?, ?)")
+      .bind("2020-01-01 00:00:00", "search_text", oldMarker, 0)
+      .run();
+
+    await logSearch(db, {
+      tool: "search_text",
+      query: freshSecret,
+      lang: "fr",
+      result_count: 1,
+    });
+
+    const { results: expired } = await db
+      .prepare("SELECT query FROM search_log WHERE query = ?")
+      .bind(oldMarker)
+      .all<{ query: string }>();
+    expect(expired).toHaveLength(0);
+
+    const { results: leaked } = await db
+      .prepare("SELECT query FROM search_log WHERE query = ?")
+      .bind(freshSecret)
+      .all<{ query: string }>();
+    expect(leaked).toHaveLength(0);
+
+    const { results: saved } = await db
+      .prepare("SELECT query FROM search_log WHERE query = ?")
+      .bind("[REDACTED]")
+      .all<{ query: string }>();
+    expect(saved).toHaveLength(1);
   });
 });

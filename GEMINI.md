@@ -17,12 +17,12 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
 
 ```
              ┌────────────────────────────────────────────────────────┐
-             │       pratique-civile-quebecoise (Plugin Cadre)        │
-             │   5 compétences : recherche-juridique, analyse-doc,     │
-             │  calendrier-proc, redaction-juridique, déontologie     │
+             │       droit-civil-quebecois (Plugin Cadre)        │
+             │   5 compétences : recherche-juridique, analyse-juridique │
+             │  redaction-juridique, administration-litige, déonto  │
              └──────┬───────────────────────┬──────────────────┬──────┘
                     │                       │                  │
-   (10 outils `legislation_*`)    (10 outils `jurisprudence_*`) (12 outils sur 5 familles :
+   (serveur `lois`, 10 outils)     (serveur `juris`, 10 outils) (12 outils sur 5 familles :
                     │                       │            `calcul`, `greffe`, `registre`,
                     ▼                       ▼            `adresse`, `terminologie`)
          ┌─────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
@@ -43,12 +43,12 @@ Règles d'espace de travail pour **Google Antigravity** et **Gemini CLI** lors d
                  └─────────────────────────────┘
 ```
 
-### Intégration avec les compétences du plugin (`pratique-civile-quebecoise`)
-- **`skills/recherche-juridique`** : Consomme les 10 outils `legislation_*` comme source primaire de droit textuel. Suit le pattern d'utilisation en deux temps : Découverte (`legislation_find_relevant`, `legislation_list_laws`, `legislation_list_subjects`, `legislation_related_laws`), puis Extraction (`legislation_get_article`, `legislation_get_articles`, `legislation_get_structure`, `legislation_get_division`, `legislation_search_text`, `legislation_resolve_reference`). Nomme également l'ensemble des 10 outils `jurisprudence_*`, `greffe_parse_court_file_number`, `palais_list`, `palais_get` et `interets_compute_1619` (notamment dans `references/methode-sources.md`, `livrables.md`, `preliminaires.md`, `sources-doctrinales.md`), et mobilise les besoins d'aptitude `TEXTE`, `CALCUL`, `GREFFE`, `INSCRIPTION`. Transmet les lois et articles identifiés à `MCP-Jurisprudence` (`jurisprudence_citator` avec `rel="legislation"`).
-- **`skills/redaction-juridique`** : Invoque explicitement `legislation_get_article` (dont `lang="en"` pour extraire la terminologie officielle anglaise des concepts québécois du C.c.Q. et du C.p.c. et purger la contamination de common law), `legislation_search_text`, `calendrier_compute_deadlines` et `interets_compute_1619`, sous les besoins d'aptitude `CALCUL` et `GREFFE`.
-- **`skills/calendrier-procedural`** : Consomme `calendrier_compute_deadlines` et `calendrier_list_holidays` (avec repli local `scripts/calcul_delai.py`) sous les besoins `CALCUL`, `INSCRIPTION`, `TEXTE`. N'appelle aucun outil `legislation_*` directement (délègue la recherche législative et la prescription à `recherche-juridique`).
-- **`skills/analyse-documentaire`** : Ne nomme AUCUN outil MCP directement. Exprime des besoins d'aptitude abstraits `GREFFE`, `TEXTE` et `INSCRIPTION`, en déléguant la recherche juridique et la vérification de citations à `recherche-juridique` et les délais à `calendrier-procedural`.
-- **`skills/deontologie-professionnelle`** : Ne nomme AUCUN outil MCP directement ; délègue le droit substantiel et procédural hors déontologie à `recherche-juridique` et les délais à `calendrier-procedural`.
+### Intégration avec les compétences du plugin (`droit-civil-quebecois`)
+- **`skills/recherche-juridique`** : Consomme les 10 outils de `lois` comme source primaire de droit textuel. Suit le pattern d'utilisation en deux temps : Découverte (`find_relevant`, `list_laws`, `list_subjects`, `related_laws`), puis Extraction (`get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`). Nomme également l'ensemble des 10 outils de `juris`, `greffe_parse_number`, `palais_list`, `palais_get` et `interets_1619` (notamment dans `references/methode-sources.md`, `livrables.md`, `preliminaires.md`, `sources-doctrinales.md`), et mobilise les besoins d'aptitude `TEXTE`, `CALCUL`, `GREFFE`, `INSCRIPTION`. Transmet les lois et articles identifiés à `MCP-Jurisprudence` (`citator` avec `rel="legislation"`).
+- **`skills/redaction-juridique`** : Invoque explicitement `get_article` (dont `lang="en"` pour extraire la terminologie officielle anglaise des concepts québécois du C.c.Q. et du C.p.c. et purger la contamination de common law), `search_text`, `calendrier_deadlines` et `interets_1619`, sous les besoins d'aptitude `CALCUL` et `GREFFE`.
+- **`skills/administration-litige`** : Consomme `calendrier_deadlines` et `calendrier_holidays` (avec repli local `scripts/calcul_delai.py`) sous les besoins `CALCUL`, `INSCRIPTION`, `TEXTE`. N'appelle aucun outil de `lois` directement (délègue la recherche législative et la prescription à `recherche-juridique`).
+- **`skills/analyse-juridique`** : Ne nomme AUCUN outil MCP directement. Exprime des besoins d'aptitude abstraits `GREFFE`, `TEXTE` et `INSCRIPTION`, en déléguant la recherche juridique et la vérification de citations à `recherche-juridique` et les délais à `administration-litige`.
+- **`skills/deontologie-et-pratique`** : Ne nomme AUCUN outil MCP directement ; délègue le droit substantiel et procédural hors déontologie à `recherche-juridique` et les délais à `administration-litige`.
 - **Configuration** : Connecté dans `.mcp.json` et `gemini-extension.json` via `https://legislation.poirierlavoie.ca/mcp` avec `Authorization: Bearer ${MCP_LEGISLATION_SECRET}`.
 
 ### Dépendances croisées inter-dépôts
@@ -64,12 +64,12 @@ Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **
 
 | # | Surface d'impact | Où | Ce qu'il faut évaluer et maintenir synchronisé |
 |---|---|---|---|
-| 1 | **Outils MCP** | `src/tools.ts`, `src/schemas.ts`, `src/routeur.ts` | noms `legislation_*`, paramètres, comportement, erreurs servies |
+| 1 | **Outils MCP** | `src/tools.ts`, `src/schemas.ts`, `src/routeur.ts` | noms courts (`list_laws`..`resolve_reference`), paramètres, comportement, erreurs servies |
 | 2 | **Descriptions et titres** | `src/tools.ts`, `src/serveur.ts` (`INSTRUCTIONS`/`PUBLIC_DESCRIPTION`), `catalogue.json` | R3 borne le delta à ≤ 2 phrases et exige de consigner le delta de tokens |
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `src/schemas.ts`, `structuredContent` | toute étiquette limitative voyage en champ obligatoire (R4, décision 001) ; `outputSchema` reste absent |
 | 4 | **`README.md`, gouvernance et manifestes** | `README.md`, `SECURITY.md`, `LICENSE` (`CC-BY-NC-SA-4.0`), `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `/mcp/server-card`, `CLAUDE.md`, `GEMINI.md`, `tests/catalogue.test.mjs` | ce que le dépôt annonce faire, ses consignes de connexion, sa licence et sa politique sécurité/confidentialité |
 | 5 | **Page publique HTML (`GET /`)** | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes importées de `src/relevance.ts`, titres issus de `catalogue.json`, section `#acces`, licence et clause de non-conseil |
-| 6 | **Inter-dépôts (`Cross-repository`)** | **`pratique-civile-quebecoise`** (`.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/*`, `plugin.json`, `skills/`, `regenerer_cache_mcp.py --apply`, `synchroniser_plugin_gemini.py --apply`, `verifier.py`, `verifier_tout.py`), **`MCP-Socle`** (`#v0.7.0`), **`MCP-Jurisprudence`** (jumeau HTML/CSS), **`MCP-Outils`** | répercussions sur les outils nommés à la main dans les compétences, la cohérence de transport/auth ou le style partagé des pages HTML |
+| 6 | **Inter-dépôts (`Cross-repository`)** | **`droit-civil-quebecois`** (`.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/*`, `plugin.json`, `skills/`, `regenerer_cache_mcp.py --apply`, `synchroniser_plugin_gemini.py --apply`, `verifier.py`, `verifier_tout.py`), **`MCP-Socle`** (`#v0.7.0`), **`MCP-Jurisprudence`** (jumeau HTML/CSS), **`MCP-Outils`** | répercussions sur les outils nommés à la main dans les compétences, la cohérence de transport/auth ou le style partagé des pages HTML |
 
 `docs/` est une archive datée par défaut (ne fait pas foi sur l'état courant), à l'exception des références techniques citées par le code (`docs/phase0-structure-epub.md`, `docs/phase0-structure-lims.md`).
 
@@ -82,7 +82,7 @@ Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **
 - **Sortie double :** Prose descriptive dans `content[0].text` et données plates dans `structuredContent`. Aucun `outputSchema` publié dans `tools/list` pour préserver le budget de jetons de contexte.
 - **R2** : Aucun nouvel outil MCP sans approbation explicite.
 - **R3** : Delta de description d'outil ≤ 2 phrases ; consigner le coût en tokens.
-- **R4** : Toute aide éditoriale est visiblement étiquetée non officielle ; la garde `GARDE_FOU` de `legislation_find_relevant` est imposée mot pour mot.
+- **R4** : Toute aide éditoriale est visiblement étiquetée non officielle ; la garde `GARDE_FOU` de `find_relevant` est imposée mot pour mot.
 - **R7** : Fail open toujours annoncé explicitement (étiquettes d'élargissement, de relaxation et de repérage sémantique).
 - **R8** : Chemins sensibles derrière variables d'environnement (`RELAX_SEARCH`, `HYBRID_SEARCH`, `FEDERAL_CORPUS`).
 - **R9** : Réponse de recherche ~≤ 800 tokens en régime normal.
@@ -109,7 +109,7 @@ Aucune tâche touchant ce dépôt n'est terminée tant que son impact sur les **
 15. **Plafond de diversité par matière (`MAX_PER_SUBJECT`)** hors signaux S2/S3/S4.
 16. **Vérité terrain (evals)** : Ne jamais modifier `eval/cases.json` ni le contenu éditorial sans décision du praticien.
 17. **Corpus fédéral (`pipeline/parser_lims.py`)** : Descendre `Body` et `Schedule` explicitement ; portée arrêtée (hors Code criminel, LIR, lois constitutionnelles).
-18. **`label` de matière (`taxonomy.json`)** : Motif servi par `legislation_find_relevant` ; vérifier l'étendue des divisions avant rattachement.
+18. **`label` de matière (`taxonomy.json`)** : Motif servi par `find_relevant` ; vérifier l'étendue des divisions avant rattachement.
 
 ---
 

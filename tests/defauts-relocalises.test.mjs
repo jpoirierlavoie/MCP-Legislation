@@ -34,7 +34,7 @@ function blocs() {
 test("les dix outils sont découpés", () => {
   const b = blocs();
   assert.equal(b.length, 10, `${b.length} blocs extraits, 10 attendus`);
-  for (const { nom } of b) assert.match(nom, /^legislation_[a-z_]+$/, `nom inattendu : ${nom}`);
+  for (const { nom } of b) assert.ok(Object.hasOwn(PUBLIES, nom), `nom inattendu : ${nom}`);
 });
 
 test("chaque défaut déclaré est relocalisé dans son gestionnaire", () => {

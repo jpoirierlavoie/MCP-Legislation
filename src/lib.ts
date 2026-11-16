@@ -703,7 +703,7 @@ export async function relatedLaws(
   env: { FEDERAL_CORPUS?: string } = {},
 ): Promise<RelationEdge[]> {
   const typeClause = relType ? "AND rel_type = ?" : "";
-  // Le bout SUJET est déjà gardé : `legislation_related_laws` passe par `getLaw(db, law, env)` et
+  // Le bout SUJET est déjà gardé : `related_laws` passe par `getLaw(db, law, env)` et
   // refuse avant d'arriver ici. C'est l'AUTRE bout qui fuyait — une arête vers un texte
   // fédéral serait rendue avec `in_corpus = 1` et son nom résolu, donc le modèle irait
   // appeler `get_article` dessus et se ferait refuser. Servir une piste qu'on refuse ensuite
@@ -1118,7 +1118,7 @@ function pruneDepth(nodes: StructureNode[], depth: number): void {
   }
 }
 
-// --- analyse d'une citation libre (legislation_resolve_reference) -------------------
+// --- analyse d'une citation libre (resolve_reference) -------------------
 
 export interface ParsedCitation {
   law: string | null;
@@ -1242,7 +1242,7 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   };
 }
 
-// --- données de pertinence (legislation_find_relevant) ------------------------------
+// --- données de pertinence (find_relevant) ------------------------------
 
 /** Plafond de divisions préfiltrées ramenées du SQL (le tri fin se fait en mémoire). */
 const DIVISION_PREFILTER_LIMIT = 2000;
@@ -1483,14 +1483,45 @@ export interface SearchLogEntry {
  * `or_relax` veut dire que le ET lexical a complètement échoué) et la REFORMULATION
  * RAPPROCHÉE (mêmes minutes, requêtes voisines). `scripts/journal.mjs` les calcule.
  */
+const RETENTION_JOURNAL_JOURS = 90;
+const PLAFOND_REQUETE_JOURNAL = 160;
+
+/**
+ * Réduit le risque qu'un fait ou identifiant confidentiel persiste dans `search_log` :
+ * normalise les espaces, masque les numéros de dossier judiciaire, courriels, téléphones
+ * et identifiants numériques longs (NAS/NEQ), puis plafonne à 160 caractères.
+ */
+export function minimiserRequeteJournal(raw: string): string {
+  const normalisee = raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\d{3}-\d{2}-\d{6}-\d{3}\b/g, "[DOSSIER]")
+    .replace(/[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g, "[COURRIEL]")
+    .replace(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\b\d{3}[\s.-])\d{3}[\s.-]\d{4}\b/g, "[TEL]")
+    .replace(/\b\d{3}[\s-]\d{3}[\s-]\d{3}\b|\b\d{9,10}\b/g, "[ID]");
+  if (normalisee.length <= PLAFOND_REQUETE_JOURNAL) return normalisee;
+  return `${normalisee.slice(0, PLAFOND_REQUETE_JOURNAL - 1)}…`;
+}
+
 export async function logSearch(db: D1Database, e: SearchLogEntry): Promise<void> {
   try {
-    await db
-      .prepare(
-        "INSERT INTO search_log (tool, query, law, lang, result_count, fallback) VALUES (?,?,?,?,?,?)",
-      )
-      .bind(e.tool, e.query, e.law ?? null, e.lang ?? null, e.result_count, e.fallback ?? null)
-      .run();
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO search_log (tool, query, law, lang, result_count, fallback) VALUES (?,?,?,?,?,?)",
+        )
+        .bind(
+          e.tool,
+          "[REDACTED]",
+          e.law ?? null,
+          e.lang ?? null,
+          e.result_count,
+          e.fallback ?? null,
+        ),
+      db
+        .prepare("DELETE FROM search_log WHERE ts < datetime('now', ?)")
+        .bind(`-${RETENTION_JOURNAL_JOURS} days`),
+    ]);
   } catch {
     // table absente (migration non appliquée) ou write refusé : on n'échoue jamais.
   }

@@ -77,7 +77,7 @@ const RAPPEL =
   "src/tools.ts, catalogue.json (donc la page publique) et README.md. Voir R10 dans CLAUDE.md.";
 
 /** Noms réellement exposés par le routeur MCP (src/tools.ts + PUBLIES de src/schemas.ts). */
-const enregistres = [...toolsTs.matchAll(/outils\.(legislation_[a-z_]+)\s*=/g)].map((m) => m[1]);
+const enregistres = [...toolsTs.matchAll(/outils\.([a-z][a-z0-9_]*)\s*=/g)].map((m) => m[1]);
 
 test("parité : outils enregistrés <-> schémas publiés <-> catalogue", () => {
   assert.ok(
@@ -141,13 +141,13 @@ test("chaque outil du catalogue est complet et bilingue", () => {
 });
 
 test("les titres servis par MCP sont ceux du catalogue (source unique)", () => {
-  // src/schemas.ts doit appeler titre("legislation_x") — jamais un littéral. Un littéral
+  // src/schemas.ts doit appeler titre("...") — jamais un littéral. Un littéral
   // rétablirait la copie que le catalogue existe précisément pour supprimer.
   const litteraux = [...schemasTs.matchAll(/title:\s*"([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(
     litteraux,
     [],
-    `titres écrits en dur dans src/schemas.ts : ${litteraux.join(" | ")} — utiliser titre("legislation_…"). ${RAPPEL}`,
+    `titres écrits en dur dans src/schemas.ts : ${litteraux.join(" | ")} — utiliser titre("…"). ${RAPPEL}`,
   );
   for (const nom of enregistres) {
     assert.ok(
@@ -493,7 +493,7 @@ test("manifestes Antigravity / Gemini, version et description concordent partout
   }
 
   const expectedAuth = ["Bearer $", "{MCP_LEGISLATION_SECRET}"].join("");
-  const agy = mcpConfig.mcpServers?.legislation;
+  const agy = mcpConfig.mcpServers?.lois;
   assert.equal(agy?.url, "https://legislation.poirierlavoie.ca/mcp");
   assert.equal(agy?.headers?.Authorization, expectedAuth);
   assert.equal(agy?.eager, undefined);
@@ -504,7 +504,7 @@ test("manifestes Antigravity / Gemini, version et description concordent partout
 
   // Critiquement vide : évite d'injecter le GEMINI.md de développement dans les sessions utilisateur.
   assert.deepEqual(geminiExt.contextFileName, []);
-  const gcli = geminiExt.mcpServers?.legislation;
+  const gcli = geminiExt.mcpServers?.lois;
   assert.equal(gcli?.httpUrl, "https://legislation.poirierlavoie.ca/mcp");
   assert.equal(gcli?.headers?.Authorization, expectedAuth);
   assert.ok(
