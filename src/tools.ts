@@ -437,10 +437,20 @@ export function construireOutils(env: Env): Registre {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const tokens = tokenize(query);
+    const safeQuery = JSON.stringify(
+      Array.from(query, (ch) => {
+        const code = ch.charCodeAt(0);
+        if (code < 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029) return " ";
+        return ch === "`" ? "'" : ch;
+      })
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
     const page = paginate(limit, 0, 8, 50);
     if (tokens.length === 0) {
       return err(
-        `Aucun terme exploitable dans « ${query} ». Reformulez avec des mots porteurs ` +
+        `Aucun terme exploitable dans ${safeQuery}. Reformulez avec des mots porteurs ` +
           "(ex. « bail de logement », « congédiement »), ou consultez list_subjects.",
       );
     }
@@ -454,7 +464,7 @@ export function construireOutils(env: Env): Registre {
     });
     if (cands.length === 0) {
       return err(
-        `Aucun rapprochement pour « ${query} » (termes retenus : ${tokens.join(", ")}). ` +
+        `Aucun rapprochement pour ${safeQuery} (termes retenus : ${tokens.join(", ")}). ` +
           "Le corpus est une SÉLECTION FERMÉE de textes du Québec et du fédéral : une absence " +
           "ici ne dit rien de l'existence d'une règle ailleurs. " +
           "Voir les domaines avec list_subjects, ou chercher dans le texte avec search_text.",
@@ -467,7 +477,7 @@ export function construireOutils(env: Env): Registre {
       return `${i + 1}. ${cible}  — score ${c.score}\n     pourquoi : ${c.pourquoi.join(" ; ")}`;
     });
     return ok(
-      `${cands.length} piste(s) pour « ${query} » (termes : ${tokens.join(", ")}) :\n` +
+      `${cands.length} piste(s) pour ${safeQuery} (termes : ${tokens.join(", ")}) :\n` +
         `${lines.join("\n")}\n\n${GARDE_FOU}`,
       {
         query,
