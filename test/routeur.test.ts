@@ -573,10 +573,10 @@ describe("minimisation et purge du journal search_log", () => {
     expect(longue.endsWith("…")).toBe(true);
   });
 
-  it("enregistre la requête minimisée et purge les entrées de plus de 90 jours", async () => {
+  it("enregistre le marqueur fixe [REDACTED] sans persister e.query et purge les entrées > 90 jours", async () => {
     const db = (env as unknown as { DB: D1Database }).DB;
     const oldMarker = "ancienne-requete-expiree-test";
-    const freshRaw = "bail 500-17-654321-249 client@test.ca";
+    const freshSecret = "secret-client-confidentiel-test";
     await db
       .prepare("INSERT INTO search_log (ts, tool, query, result_count) VALUES (?, ?, ?, ?)")
       .bind("2020-01-01 00:00:00", "search_text", oldMarker, 0)
@@ -584,7 +584,7 @@ describe("minimisation et purge du journal search_log", () => {
 
     await logSearch(db, {
       tool: "search_text",
-      query: freshRaw,
+      query: freshSecret,
       lang: "fr",
       result_count: 1,
     });
@@ -595,9 +595,15 @@ describe("minimisation et purge du journal search_log", () => {
       .all<{ query: string }>();
     expect(expired).toHaveLength(0);
 
+    const { results: leaked } = await db
+      .prepare("SELECT query FROM search_log WHERE query = ?")
+      .bind(freshSecret)
+      .all<{ query: string }>();
+    expect(leaked).toHaveLength(0);
+
     const { results: saved } = await db
       .prepare("SELECT query FROM search_log WHERE query = ?")
-      .bind("bail [DOSSIER] [COURRIEL]")
+      .bind("[REDACTED]")
       .all<{ query: string }>();
     expect(saved).toHaveLength(1);
   });

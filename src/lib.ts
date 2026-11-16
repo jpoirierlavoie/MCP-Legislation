@@ -1505,13 +1505,19 @@ export function minimiserRequeteJournal(raw: string): string {
 
 export async function logSearch(db: D1Database, e: SearchLogEntry): Promise<void> {
   try {
-    const requete = minimiserRequeteJournal(e.query);
     await db.batch([
       db
         .prepare(
           "INSERT INTO search_log (tool, query, law, lang, result_count, fallback) VALUES (?,?,?,?,?,?)",
         )
-        .bind(e.tool, requete, e.law ?? null, e.lang ?? null, e.result_count, e.fallback ?? null),
+        .bind(
+          e.tool,
+          "[REDACTED]",
+          e.law ?? null,
+          e.lang ?? null,
+          e.result_count,
+          e.fallback ?? null,
+        ),
       db
         .prepare("DELETE FROM search_log WHERE ts < datetime('now', ?)")
         .bind(`-${RETENTION_JOURNAL_JOURS} days`),
