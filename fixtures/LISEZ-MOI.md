@@ -3,7 +3,7 @@
 ## `tools-list.reference.json`
 
 Charge utile de référence capturée le **2026-09-16** depuis l'ancien serveur SDK avant
-le passage définitif au routeur sans état `@poirierlavoie/socle-juridique`.
+le passage définitif au routeur sans état `@poirierlavoie/mcp-socle`.
 
 **À quoi ça sert.** Elle fige le contrat `tools/list` historique (noms, descriptions,
 `inputSchema`, `required`, annotations, `$schema`, `execution`) et alimente la

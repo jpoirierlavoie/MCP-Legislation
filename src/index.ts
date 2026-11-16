@@ -12,7 +12,7 @@ import {
   repondreCarteServeur,
   reponseSante,
   tropDeRequetes,
-} from "@poirierlavoie/socle-juridique";
+} from "@poirierlavoie/mcp-socle";
 
 import { PORTE } from "./auth";
 import { handleBackfill } from "./backfill";
