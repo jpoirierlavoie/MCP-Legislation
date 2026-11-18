@@ -452,6 +452,8 @@ def parse_epub(epub_path: str | Path, law: Law, lang: str) -> tuple[list[Divisio
     sort_order = 0
 
     disp_idx = 0
+    all_paths: set[str] = set()
+    dup_counts: dict[str, int] = {}
 
     def add_special(res):
         nonlocal sort_order, disp_idx
@@ -487,16 +489,47 @@ def parse_epub(epub_path: str | Path, law: Law, lang: str) -> tuple[list[Divisio
             except KeyError:
                 continue
             soup = _soup(html)
+            resolved_by_tag: dict[int, tuple[str, str]] = {}
 
             # 1) divisions + articles ordinaires (dans l'ordre du document)
             current_div_path: str | None = None
             for el in soup.find_all(id=True):
                 eid = el.get("id")
                 if is_division_id(eid):
+                    # Désambiguïsation des chemins de division en doublon (ex. c-73.2-r.6 /
+                    # D. 297-2010, qui édicte officiellement deux « CHAPITRE II » / « CHAPTER II »
+                    # portant tous deux l'id `ga:l_ii`). On évite la fusion en une fausse
+                    # « SECTION II » (qui altérerait les intitulés officiels en violation de R4) et
+                    # l'underscore simple `_2` (déjà utilisé par Irosoft pour les décimales comme
+                    # `gd:l_ii_1` / `gd:l_ii_2`). `__<k>` préserve l'unicité dans tout l'EPUB,
+                    # propage le préfixe désambiguïsé aux descendants DOM, reste un seul segment
+                    # pour `SEG_SPLIT`, et isole les sous-arbres sous `subtreeClause`
+                    # (`_` 0x5F > `.` 0x2E > `-` 0x2D).
+                    base_path = eid
+                    for anc in el.parents:
+                        if id(anc) in resolved_by_tag:
+                            anc_raw, anc_res = resolved_by_tag[id(anc)]
+                            if eid.startswith(anc_raw + "-"):
+                                base_path = anc_res + eid[len(anc_raw):]
+                                break
+                    if base_path not in all_paths:
+                        path = base_path
+                        dup_counts[base_path] = 1
+                    else:
+                        k = dup_counts.get(base_path, 1) + 1
+                        while f"{base_path}__{k}" in all_paths:
+                            k += 1
+                        dup_counts[base_path] = k
+                        path = f"{base_path}__{k}"
+                    all_paths.add(path)
+                    resolved_by_tag[id(el)] = (eid, path)
+
                     div = extract_division(el, law.id, lang, sort_order, cfg["labels"])
+                    div.path = path
+                    div.parent_path = _parent_path(path)
                     sort_order += 1
                     divisions.append(div)
-                    current_div_path = eid
+                    current_div_path = path
                 elif _ART_ID.fullmatch(eid):
                     text, art_html, history, repealed = extract_article_body(el, number_from_article_id(eid))
                     articles.append(Article(

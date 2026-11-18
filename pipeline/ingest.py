@@ -9,6 +9,7 @@ Par défaut, l'EPUB est lu depuis pipeline/samples/ ; --download le récupère d
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from . import config, load, validate
+from . import config, d1_api, load, validate
 from .model import Law
 from .parser import opf_metadata, parse_epub
 
@@ -48,9 +49,11 @@ def _id_base(law_id: str, lang: str) -> int:
 
 
 def _download(url: str, dest: Path) -> Path:
+    if not url.startswith("https://"):
+        raise ValueError(f"Schéma URL non autorisé : {url}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
-    with urllib.request.urlopen(req) as resp, open(dest, "wb") as f:
+    with urllib.request.urlopen(req, timeout=30) as resp, open(dest, "wb") as f:
         f.write(resp.read())
     return dest
 
@@ -69,20 +72,39 @@ def _law_from_config(cfg_law: dict) -> Law:
     )
 
 
-def fetch_consolidation(url: str) -> str | None:
-    """Extrait la date « À jour au JJ mois AAAA » (ISO) de la page HTML de la loi.
-    LégisQuébec l'affiche en français même sur les pages EN. Non fatal : None si échec."""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
-        html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
-    except Exception:
-        return None
+def extrait_consolidation_quebec(html: str) -> str | None:
+    """Extrait la date « À jour au JJ mois AAAA » (ISO) depuis le HTML LégisQuébec.
+
+    Portée bornée aux blocs `class="text-end"` (comme `extractConsolidation` côté JS) ;
+    retourne `None` si la bannière est absente ou illisible.
+    """
     soup = BeautifulSoup(html, "html.parser")
     for d in soup.find_all("div", class_="text-end"):
-        m = re.search(r"jour au\s*(\d{1,2})\s*(?:er)?\s*([A-Za-zÀ-ÿ]+)\s*(\d{4})",
-                      re.sub(r"\s+", " ", d.get_text()), re.I)
+        m = re.search(
+            r"jour au\s*(\d{1,2})\s*(?:er)?\s*([A-Za-zÀ-ÿ]+)\s*(\d{4})",
+            re.sub(r"\s+", " ", d.get_text()),
+            re.I,
+        )
         if m and m.group(2).lower() in _FR_MONTHS:
             return f"{m.group(3)}-{_FR_MONTHS[m.group(2).lower()]:02d}-{int(m.group(1)):02d}"
+    return None
+
+
+def fetch_consolidation(url: str, essais: int = 4) -> str | None:
+    """Télécharge la page LégisQuébec avec reprise réseau bornée et extrait la date « À jour au ».
+    LégisQuébec l'affiche en français même sur les pages EN. Retourne None si injoignable ou illisible."""
+    if not url.startswith("https://"):
+        raise ValueError(f"Schéma URL non autorisé : {url}")
+    for essai in range(essais):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
+            html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+        except Exception:
+            if essai + 1 < essais:
+                time.sleep(3 * (2**essai))
+                continue
+            return None
+        return extrait_consolidation_quebec(html)
     return None
 
 
@@ -126,7 +148,7 @@ def extrait_consolidation_federale(html: str) -> str | None:
     return m.group(1) if m else None
 
 
-def fetch_consolidation_federale(url: str, essais: int = 3) -> str | None:
+def fetch_consolidation_federale(url: str, essais: int = 4) -> str | None:
     """Frère fédéral de `fetch_consolidation` : télécharge, puis délègue l'extraction.
 
     REPRISE BORNÉE, et elle n'affaiblit rien. Une lecture ratée est FATALE ici (cf.
@@ -139,13 +161,15 @@ def fetch_consolidation_federale(url: str, essais: int = 3) -> str | None:
     pas : là-bas, une page injoignable est le SIGNAL que le job doit rapporter, et la
     réessayer le masquerait. Ici, c'est un obstacle à une opération humaine supervisée.
     """
+    if not url.startswith("https://"):
+        raise ValueError(f"Schéma URL non autorisé : {url}")
     for essai in range(essais):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
-            html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+            html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
         except Exception:
             if essai + 1 < essais:
-                time.sleep(2 * (essai + 1))
+                time.sleep(3 * (2**essai))
                 continue
             return None
         date = extrait_consolidation_federale(html)
@@ -190,15 +214,24 @@ def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
     for remote in ([False] if apply_local else []) + ([True] if apply_remote else []):
         flag = "--remote" if remote else "--local"
         print(f"\nApplication des données en D1 {flag} …")
-        cmd = f'npx wrangler d1 execute {DB_NAME} {flag} --file="{sql_path}"' + (" -y" if remote else "")
-        res = subprocess.run(cmd, shell=True, cwd=config.REPO_ROOT)
+        cmd = [
+            d1_api.npx_command(), "wrangler", "d1", "execute", DB_NAME, flag,
+            f"--file={sql_path}", *(["-y"] if remote else []),
+        ]
+        res = subprocess.run(cmd, cwd=config.REPO_ROOT)
         if res.returncode != 0:
             print(f"wrangler a échoué (code {res.returncode}).")
             return res.returncode
     return 0 if rep.ok else 2
 
 
-def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
+def _acquiert_lims(
+    cfg_law: dict,
+    law,
+    lang: str,
+    allow_not_in_force: bool,
+    consol_date_override: str | None = None,
+):
     """Acquisition + parsing d'un texte FÉDÉRAL. Rend (divisions, articles, bilan).
 
     Pendant du bloc EPUB, et volontairement SÉPARÉ de lui : quatre choses y sont propres à
@@ -219,6 +252,7 @@ def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
     chemin = cfg_law["xml"][lang]
     print(f"Lecture {chemin} @ {config.LIMS_REF} ({law.id}/{lang}) …")
     data = parser_lims.git_show_lims(config.LIMS_REF, chemin)
+    source_sha256 = hashlib.sha256(data).hexdigest()
     racine = ET.fromstring(data)
 
     # Métadonnées DÉRIVÉES du fichier, jamais recopiées de la config (R10).
@@ -264,7 +298,11 @@ def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
     # servi : exactement le faux silencieux que ce dépôt refuse. Une ingestion refusée
     # coûte une reprise ; elle est manuelle et surveillée (CLAUDE.md, « Rafraîchissement
     # semestriel »), donc quelqu'un lit ce message à l'instant où il tombe.
-    consol = fetch_consolidation_federale(cfg_law["official_source"][lang])
+    consol = (
+        consol_date_override
+        if consol_date_override is not None
+        else fetch_consolidation_federale(cfg_law["official_source"][lang])
+    )
     if not consol:
         raise DateDeConsolidationIntrouvable(
             f"{law.id}/{lang} : la page officielle "
@@ -286,6 +324,7 @@ def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
         )
 
     bilan = parser_lims.Bilan()
+    bilan.source_sha256 = source_sha256  # type: ignore[attr-defined]
     divisions, articles = parser_lims.parse_lims(data, law, lang, bilan=bilan)
     print(f"  bilan de matière : {bilan.as_dict()}")
     return divisions, articles, bilan

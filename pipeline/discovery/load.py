@@ -37,11 +37,13 @@ def _insert_rows(db, table: str, cols: list[str], rows: list[list], or_ignore: b
     db.run(f"{verb} {table} ({', '.join(cols)}) VALUES {values}")
 
 
-def seed_laws(db) -> int:
+def seed_laws(db, only_laws: set[str] | None = None) -> int:
     """Enregistre les lois de la configuration (métadonnées) et pose les attributs de
-    découverte sur TOUTES — pas seulement sur les textes ajoutés, sans quoi ccq/cpc restaient
+    découverte sur TOUTES (ou sur `only_laws` si précisé) — sans quoi ccq/cpc restaient
     sans `fonction` et échappaient au filtre correspondant."""
     laws = config.load_all_laws()
+    if only_laws is not None:
+        laws = [l for l in laws if l["id"] in only_laws]
     rows = [[l["id"], l["name_fr"], l.get("name_en") or l["name_fr"], l["official_cite"]]
             for l in laws]
     _insert_rows(db, "laws", ["id", "name_fr", "name_en", "official_cite"], rows, or_ignore=True)
@@ -78,15 +80,23 @@ def seed_laws(db) -> int:
         # Le raisonnement du commentaire ci-dessus reste juste POUR LE QUÉBEC, où la config
         # porte les dates. Il est exactement faux pour le fédéral, où elle ne les porte pas.
         if consol.get("fr"):
-            sets.append(f"consol_date_fr = {q(consol['fr'])}")
+            d_fr = q(consol["fr"])
+            sets.append(
+                f"consol_date_fr = CASE WHEN consol_date_fr IS NULL OR consol_date_fr < {d_fr} "
+                f"THEN {d_fr} ELSE consol_date_fr END"
+            )
         if consol.get("en"):
-            sets.append(f"consol_date_en = {q(consol['en'])}")
+            d_en = q(consol["en"])
+            sets.append(
+                f"consol_date_en = CASE WHEN consol_date_en IS NULL OR consol_date_en < {d_en} "
+                f"THEN {d_en} ELSE consol_date_en END"
+            )
 
         db.run(f"UPDATE laws SET {', '.join(sets)} WHERE id = {q(l['id'])}")
     return len(laws)
 
 
-def validate(db, taxonomy: dict, relations: dict) -> list[str]:
+def validate(db, taxonomy: dict, relations: dict, only_laws: set[str] | None = None) -> list[str]:
     v: list[str] = []
     law_ids = {r["id"] for r in db.run("SELECT id FROM laws")}
     subject_ids = {s["id"] for s in taxonomy["subjects"]}
@@ -108,6 +118,8 @@ def validate(db, taxonomy: dict, relations: dict) -> list[str]:
         if key in seen:
             v.append(f"mappage en doublon : {key}")
         seen.add(key)
+        if only_laws is not None and law not in only_laws:
+            continue
         if subj not in subject_ids:
             v.append(f"sujet non déclaré : '{subj}' (mappage vers '{law}')")
         if law not in law_ids:
@@ -125,6 +137,8 @@ def validate(db, taxonomy: dict, relations: dict) -> list[str]:
                          f"(le routeur serait muet en anglais sur cette matière)")
 
     for rel in relations["relations"]:
+        if only_laws is not None and rel["from"] not in only_laws:
+            continue
         if rel["from"] not in law_ids:
             v.append(f"relation 'from' absente de `laws` : '{rel['from']}' -> '{rel['to']}'")
     return v
@@ -160,8 +174,9 @@ def load(db, taxonomy: dict, relations: dict) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Chargeur des données de découverte.")
     ap.add_argument("--target", default="local", choices=["local", "cloud"])
+    ap.add_argument("--persist-to", default=None, help="Répertoire D1 local (--local uniquement).")
     args = ap.parse_args(argv)
-    db = make_client(args.target)
+    db = make_client(args.target, persist_to=args.persist_to)
 
     taxonomy = _read("taxonomy.json")
     relations = _read("relations.json")

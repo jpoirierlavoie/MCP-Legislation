@@ -29,6 +29,8 @@ describe("la base de test porte le schéma de production", () => {
     for (const n of ["search_log", "division_links", "concept_gazetteer", "article_headnotes"])
       expect(t, n).toContain(n);
     expect(t).toContain("article_numbers"); // migration 0004
+    expect(t).toContain("vector_state"); // migration 0005
+    expect(t).toContain("refresh_state"); // migration 0005
   });
 
   it("la migration 0004 a bien renommé rlrq_cite en official_cite", async () => {

@@ -94,6 +94,10 @@ class TestSeedLawsNeDetruitPas(unittest.TestCase):
             self.assertIsNotNone(sql, f"{lid} : aucun UPDATE émis")
             self.assertIn("consol_date_fr =", sql,
                           f"{lid} : la date de la config n'est plus synchronisée")
+            self.assertIn(
+                "CASE WHEN consol_date_fr IS NULL OR consol_date_fr <", sql,
+                f"{lid} : seed_laws pourrait écraser une date plus récente ingérée en D1",
+            )
 
     def test_les_autres_metadonnees_restent_synchronisees_partout(self):
         """`fonction`, `forum`, `name_fr` et `name_norm` viennent bien de la config, pour

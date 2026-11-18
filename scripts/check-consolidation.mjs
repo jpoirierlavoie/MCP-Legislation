@@ -504,10 +504,10 @@ function buildReport(d) {
   }
 
   md += `\n---\n`;
-  md += `Pour rafraîchir : suivre la procédure **« Rafraîchissement semestriel »** de `;
-  md += `\`CLAUDE.md\` (ingestion staging→bascule, rechargement découverte, re-backfill des `;
-  md += `vecteurs, éval de non-régression). Ce job ne fait que détecter ; il n'écrit jamais `;
-  md += `en base. Rapport régénéré à chaque exécution.\n`;
+  md += `Pour rafraîchir : exécuter le flux **\`rafraichir-corpus\`** (\`mode=preparer\` puis `;
+  md += `\`mode=appliquer\` après revue du diff) ou suivre la procédure \`pipeline.refresh\` `;
+  md += `de \`CLAUDE.md\` (staging→bascule incrémentale, découverte, backfill incrémental des `;
+  md += `vecteurs, porte \`eval:gate\`). Ce job ne fait que détecter ; il n'écrit jamais en base.\n`;
   return md;
 }
 

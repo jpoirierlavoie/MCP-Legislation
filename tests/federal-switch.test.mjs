@@ -260,14 +260,31 @@ const TOLERES = new Map(
       "filtrés par `filtreVecteurs`, qui est LA garde du canal vectoriel — le masque D1 ne " +
       "peut pas l'atteindre, les identifiants venant des métadonnées de Vectorize.",
 
+    "src/backfill.ts :: handleBackfillInner :: SELECT id FROM laws WHERE id = ?":
+      "hors surface servie : sonde de présence en base pour `mode='ping'` de la route ADMIN " +
+      "`/admin/backfill-vectors`, derrière `BACKFILL_TOKEN`.",
+
     "src/backfill.ts :: handleBackfillInner :: SELECT id, name_fr FROM laws WHERE id = ?":
       "hors surface servie : route ADMIN `/admin/backfill-vectors`, derrière un porteur " +
       "distinct (`backfill.token`), jamais un outil MCP. L'interrupteur borne ce qui est " +
       "SERVI, pas ce qui est indexé ; le filtre de juridiction des vecteurs est l'index de " +
       "métadonnées `jurisdiction` de la phase 6, posé AVANT le premier upsert (invariant 8).",
 
-    "src/backfill.ts :: handleBackfillInner :: SELECT number, division_path, text FROM articles WHERE law_id = ? AND ":
-      "hors surface servie : idem, la requête d'indexation de la même route admin.",
+    "src/backfill.ts :: chargerPageBackfill :: SELECT number, division_path, text FROM articles WHERE law_id = ? AND ":
+      "hors surface servie : requête paginée d'indexation de la route ADMIN `/admin/backfill-vectors`, " +
+      "gardée par `BACKFILL_TOKEN` (comparaison SHA-256 à temps constant).",
+
+    "src/backfill.ts :: chargerPageBackfill :: SELECT path, heading FROM divisions WHERE law_id = ? AND lang = fr ORD":
+      "hors surface servie : requête paginée des divisions FR pour indexation de la route ADMIN " +
+      "`/admin/backfill-vectors`, gardée par `BACKFILL_TOKEN`.",
+
+    "src/backfill.ts :: pruneVectors :: SELECT number FROM articles WHERE law_id = ? AND lang = fr":
+      "hors surface servie : relevé des articles FR vivants pour purger les vecteurs orphelins " +
+      "lors d'un appel `mode='prune'` de la route ADMIN `/admin/backfill-vectors`.",
+
+    "src/backfill.ts :: pruneVectors :: SELECT path FROM divisions WHERE law_id = ? AND lang = fr":
+      "hors surface servie : relevé des divisions FR vivantes pour purger les vecteurs orphelins " +
+      "lors d'un appel `mode='prune'` de la route ADMIN `/admin/backfill-vectors`.",
   }),
 );
 

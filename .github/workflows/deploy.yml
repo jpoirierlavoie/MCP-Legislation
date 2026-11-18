@@ -191,10 +191,22 @@ jobs:
           npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('article_numbers')" \
             | grep -q '"n": *4' || { echo "article_numbers absente ou incomplète"; exit 1; }
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('vector_state')" \
+            | grep -q '"n": *5' || { echo "vector_state absente ou incomplète"; exit 1; }
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('refresh_state')" \
+            | grep -q '"n": *3' || { echo "refresh_state absente ou incomplète"; exit 1; }
           rm -rf "$T"
 
       - name: Paquet de déploiement (à blanc)
         run: npx wrangler deploy --dry-run
+
+      - name: Relevé du signet Time Travel D1 avant migration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_COMPTE }}
+        run: npx wrangler d1 time-travel info legislation --json
 
       - name: Migrations D1 et déploiement (npm run deploy)
         id: deploy
