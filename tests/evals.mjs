@@ -977,27 +977,6 @@ async function smokeTests() {
       );
     }
 
-    // Le connecteur claude.ai émet des GET NUS (mesuré au wrangler tail) : refusés en 404,
-    // il retombe en POST seul, sans perte pour les 10 outils. Ne PAS « réparer » ça
-    // (CLAUDE.md) — donc l'épingler, sinon quelqu'un le réparera.
-    {
-      const code = await fetch(bare, {
-        method: "GET",
-        headers: { Accept: "text/event-stream" },
-        signal: AbortSignal.timeout(5000),
-      })
-        .then((r) => {
-          r.body?.cancel();
-          return r.status;
-        })
-        .catch((e) => `abandon (${e.name})`);
-      add(
-        "accès : GET sans jeton -> 404 (comportement VOULU, cf. CLAUDE.md)",
-        code === 404,
-        `status=${code}`,
-      );
-    }
-
     // --- compatibilité d'un client qui CROIT parler à un serveur à état ---------------
     // Vise le second consommateur : un backend qui parle le cycle de vie complet —
     // initialize, notifications/initialized, GET, DELETE — parce qu'il a été écrit contre
@@ -1055,9 +1034,12 @@ async function smokeTests() {
       // CE QU'ON AFFIRME : la PORTE ne refuse pas une requête pourtant porteuse.
       // Le routeur sans état répond 405 sur ces verbes, une réponse du TRANSPORT, pas un refus d'accès.
       // Seuls 404 et 401 sont des échecs ici.
+      // Paramètre anti-cache : Cloudflare met en cache d'arête (180 s) les GET /mcp -> 404
+      // anonymes (absence de Cache-Control: no-store sur refuser) et servirait ce 404 en cache
+      // au GET porteur sans passer par le Worker (`?_cb=` contourne le cache en gardant Bearer).
       let getCode;
       try {
-        const g = await fetch(bare, {
+        const g = await fetch(`${bare}?_cb=${Date.now()}`, {
           method: "GET",
           headers: entetes(sid),
           signal: AbortSignal.timeout(5000),
@@ -1083,6 +1065,28 @@ async function smokeTests() {
       console.log(
         `      (transport : GET -> ${getCode}, DELETE -> ${del.status} — mesure, ` +
           "pas exigence : c'est le routeur du socle qui répond)",
+      );
+    }
+
+    // Le connecteur claude.ai émet des GET NUS (mesuré au wrangler tail) : refusés en 404,
+    // il retombe en POST seul, sans perte pour les 10 outils. Ne PAS « réparer » ça
+    // (CLAUDE.md) — donc l'épingler, sinon quelqu'un le réparera.
+    // Exécuté APRÈS le bloc porteur ci-dessus pour ne pas empoisonner le cache d'arête 404.
+    {
+      const code = await fetch(bare, {
+        method: "GET",
+        headers: { Accept: "text/event-stream" },
+        signal: AbortSignal.timeout(5000),
+      })
+        .then((r) => {
+          r.body?.cancel();
+          return r.status;
+        })
+        .catch((e) => `abandon (${e.name})`);
+      add(
+        "accès : GET sans jeton -> 404 (comportement VOULU, cf. CLAUDE.md)",
+        code === 404,
+        `status=${code}`,
       );
     }
   } else {
