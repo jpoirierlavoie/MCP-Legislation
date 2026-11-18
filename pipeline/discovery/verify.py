@@ -7,9 +7,10 @@ from __future__ import annotations
 import argparse
 
 from ..d1_api import make_client
+from ..validate import EXPECTED
 
 
-def verify(db) -> bool:
+def verify(db, *, allow_witness_drift: bool = False) -> bool:
     ok = True
     print(f"=== Vérification [{db.name}] ===")
 
@@ -59,14 +60,23 @@ def verify(db) -> bool:
     if not sans_en:
         print("   ✓ toute loi à chemin mappé porte aussi des divisions anglaises")
 
-    # 3. Non-destruction : ccq = 3525, cpc = 878 (articles, toutes langues)
+    # 3. Non-destruction : comptes dérivés de EXPECTED (R10)
     print("\n  Non-destruction (articles) :")
-    for law_id, expected in (("ccq", 3525), ("cpc", 878)):
+    for law_id in ("ccq", "cpc"):
         for lang in ("fr", "en"):
+            exp = EXPECTED[(law_id, lang)]
+            expected = exp["articles_real"] + exp["dispositions"]
             n = db.run(f"SELECT COUNT(*) AS n FROM articles WHERE law_id='{law_id}' AND lang='{lang}'")[0]["n"]
-            good = n == expected
+            if allow_witness_drift:
+                good = n >= expected - 20
+                mark = "✓" if n == expected else ("⚠" if good else "✗")
+                note = "" if n == expected else f" (témoin figé {expected})"
+            else:
+                good = n == expected
+                mark = "✓" if good else "✗"
+                note = "" if good else f" (attendu {expected})"
             ok &= good
-            print(f"   {'✓' if good else '✗'} {law_id}/{lang} : {n}" + ("" if good else f" (attendu {expected})"))
+            print(f"   {mark} {law_id}/{lang} : {n}{note}")
 
     # 4. Colonnes *_norm remplies pour ccq/cpc
     laws_norm = db.run("SELECT COUNT(*) AS n FROM laws WHERE id IN ('ccq','cpc') AND name_norm IS NOT NULL")[0]["n"]
@@ -80,8 +90,13 @@ def verify(db) -> bool:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Preuves de la phase A.")
     ap.add_argument("--target", default="local", choices=["local", "cloud"])
+    ap.add_argument("--persist-to", default=None, help="Répertoire D1 local (--local uniquement).")
+    ap.add_argument("--allow-witness-drift", action="store_true",
+                    help="Tolère une évolution des comptes témoins au-dessus du plancher.")
     args = ap.parse_args(argv)
-    return 0 if verify(make_client(args.target)) else 1
+    ok = verify(make_client(args.target, persist_to=args.persist_to),
+                allow_witness_drift=args.allow_witness_drift)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

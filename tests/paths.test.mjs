@@ -60,6 +60,9 @@ test("décompte de segments : les deux familles, et les valeurs à trait d'union
     // Québec : un trait d'union DANS la valeur d'un segment — le piège du découpeur naïf
     ["gc:l_dix-septieme", 1],
     ["ga:l_x-gc:l_dix-septieme", 2],
+    // Québec : désambiguïsation de chemins de division en doublon (c-73.2-r.6)
+    ["ga:l_ii__2", 1],
+    ["ga:l_ii__2-gb:l_i", 2],
     // Québec : pseudo-divisions en slug, mesurées en production (118 cas)
     ["disposition-preliminaire", 1],
     ["annexe-a", 1],
@@ -77,6 +80,7 @@ test("la troncature rend un PRÉFIXE qui est lui-même un chemin valide", () => 
   assert.equal(tronque("fh1:3-fh2:5-fh3:1", 2), "fh1:3-fh2:5");
   assert.equal(tronque("fs:2-fh1:1", 1), "fs:2");
   assert.equal(tronque("ga:l_x-gc:l_dix-septieme", 1), "ga:l_x");
+  assert.equal(tronque("ga:l_ii__2-gb:l_i", 1), "ga:l_ii__2");
   // Le défaut mesuré : l'ancien découpeur rendait `annexe` et `repeal`.
   assert.equal(tronque("annexe-a", 1), "annexe-a");
   assert.equal(tronque("repeal-schedules", 1), "repeal-schedules");
@@ -104,6 +108,12 @@ test("l'intervalle [p+'-', p+'.') ne capte pas un frère au préfixe commun", ()
     ["ga:l_x", "ga:l_xi", false],
     ["annexe-a", "annexe-a", true],
     ["annexe-a", "annexe-abrogative", false],
+    ["ga:l_ii", "ga:l_ii-gb:l_i", true],
+    ["ga:l_ii", "ga:l_ii__2", false],
+    ["ga:l_ii", "ga:l_ii__2-gb:l_i", false],
+    ["ga:l_ii__2", "ga:l_ii__2", true],
+    ["ga:l_ii__2", "ga:l_ii__2-gb:l_i", true],
+    ["ga:l_ii__2", "ga:l_ii-gb:l_i", false],
   ];
   for (const [p, c, attendu] of cas) {
     assert.equal(

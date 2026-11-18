@@ -44,11 +44,16 @@ from __future__ import annotations
 import argparse
 import re
 import zipfile
+from pathlib import Path
 
 from .. import config
 from ..d1_api import make_client, q
-from ..ingest import _sample_path
 from ..parser import harvest_renvois
+
+
+def _fr_epub_path(law_id: str, samples_dir: Path | None = None) -> Path:
+    base = samples_dir if samples_dir is not None else config.SAMPLES_DIR
+    return base / f"{law_id.upper()}-fr.epub"
 
 
 def _chapter_declare(law: dict) -> str | None:
@@ -176,24 +181,25 @@ def _carte(laws: list[dict], root: bool, seulement_lois: bool) -> dict[tuple[str
     return out
 
 
-def epubs_manquants(laws: list[dict]) -> list[str]:
+def epubs_manquants(laws: list[dict], samples_dir: Path | None = None) -> list[str]:
     """Textes québécois dont l'EPUB FR n'est pas sur le disque (donc dont les renvois ne
     seront PAS moissonnés)."""
     return [l["id"] for l in laws
             if (l.get("jurisdiction") or "qc") == "qc"
-            and not _sample_path(l["id"], "fr").exists()]
+            and not _fr_epub_path(l["id"], samples_dir).exists()]
 
 
-def build(db, accepter_corpus_partiel: bool = False) -> dict:
+def build(db, accepter_corpus_partiel: bool = False, samples_dir: Path | None = None) -> dict:
     laws = config.load_all_laws()
 
     # PORTE, AVANT LE PREMIER DELETE. Cf. `CorpusEpubIncomplet` : sans les EPUB, la
     # reconstruction « réussit » en ne recréant presque rien.
-    manquants = epubs_manquants(laws)
+    manquants = epubs_manquants(laws, samples_dir=samples_dir)
     if manquants and not accepter_corpus_partiel:
         attendus = sum(1 for l in laws if (l.get("jurisdiction") or "qc") == "qc")
+        dossier = samples_dir if samples_dir is not None else config.SAMPLES_DIR
         raise CorpusEpubIncomplet(
-            f"{len(manquants)} EPUB FR sur {attendus} absents de {config.SAMPLES_DIR} : "
+            f"{len(manquants)} EPUB FR sur {attendus} absents de {dossier} : "
             f"les renvois de ces textes ne seraient PAS moissonnes, alors que le DELETE "
             f"des relations 'auto' a deja lieu. Poser les EPUB (`ingest --all --download`) "
             f"ou passer --accepter-corpus-partiel en connaissance de cause. "
@@ -228,7 +234,7 @@ def build(db, accepter_corpus_partiel: bool = False) -> dict:
     for l in laws:
         if (l.get("jurisdiction") or "qc") != "qc":
             continue
-        epub = _sample_path(l["id"], "fr")
+        epub = _fr_epub_path(l["id"], samples_dir)
         if not epub.exists():
             continue
         with zipfile.ZipFile(epub) as zf:
@@ -268,12 +274,15 @@ def build(db, accepter_corpus_partiel: bool = False) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Relations dérivées (reglement-de, renvoie-a).")
     ap.add_argument("--target", default="local", choices=["local", "cloud"])
+    ap.add_argument("--persist-to", default=None, help="Répertoire D1 local (--local uniquement).")
+    ap.add_argument("--samples-dir", default=None, help="Répertoire des EPUB (défaut pipeline/samples/).")
     ap.add_argument("--accepter-corpus-partiel", action="store_true",
                     help="reconstruire meme si des EPUB manquent (DETRUIT les renvois des "
                          "textes absents du disque — cf. CorpusEpubIncomplet)")
     args = ap.parse_args(argv)
-    db = make_client(args.target)
-    c = build(db, accepter_corpus_partiel=args.accepter_corpus_partiel)
+    db = make_client(args.target, persist_to=args.persist_to)
+    sdir = Path(args.samples_dir) if args.samples_dir else None
+    c = build(db, accepter_corpus_partiel=args.accepter_corpus_partiel, samples_dir=sdir)
     print(f"[{db.name}] relations 'auto' : {c['reglement_de']} reglement-de "
           f"(parent_law_id sur {c['parents']} lois), {c['renvoie_a']} renvoie-a "
           f"(dont {c['renvoie_a_in_corpus']} au corpus).")

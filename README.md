@@ -186,8 +186,18 @@ de tri, limites D1/Vectorize, échelle de recherche).
 bootstrappe une D1 vierge puis lance **`npm run deploy`** (`scripts/deployer.mjs` :
 migrations D1 `--remote` d'abord, puis déploiement du Worker avec `--var COMMIT:<sha>`),
 suivi d'une vérification vivante de `/health`, `/mcp/server-card` et `/`. En repli local,
-employer **`npm run deploy`** (et jamais `wrangler deploy` seul) ; l'ingestion du corpus
-(`pipeline/`) et le backfill des vecteurs demeurent strictement manuels.
+employer **`npm run deploy`** (et jamais `wrangler deploy` seul).
+
+**Rafraîchissement du corpus en deux étapes :** le workflow
+[`.github/workflows/rafraichir-corpus.yml`](.github/workflows/rafraichir-corpus.yml)
+orchestre [`pipeline/refresh.py`](pipeline/refresh.py) sans écriture non surveillée en
+production : l'étape 1 (`preparer`, en lecture seule sur planification mensuelle ou
+déclenchement manuel) valide les sources en staging, calcule le diff incrémental et publie un
+artefact + commentaire récapitulatif ; l'étape 2 (`appliquer`, sur `workflow_dispatch` manuel
+dans l'environnement GitHub `production` avec `confirmer=APPLIQUER`) bascule uniquement les
+lois modifiées dans D1, lance la synchronisation incrémentale Vectorize
+(`npm run backfill:incremental`, secret `BACKFILL_TOKEN` requis côté GitHub) et bloque tout
+relais sans validation via la porte d'évaluation (`npm run eval:gate`).
 
 **Toute modification doit évaluer son impact sur CINQ surfaces** — outils MCP,
 descriptions, schéma, ce README et la [page publique](https://legislation.poirierlavoie.ca/)

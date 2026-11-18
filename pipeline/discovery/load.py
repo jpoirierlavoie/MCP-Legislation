@@ -78,9 +78,17 @@ def seed_laws(db) -> int:
         # Le raisonnement du commentaire ci-dessus reste juste POUR LE QUÉBEC, où la config
         # porte les dates. Il est exactement faux pour le fédéral, où elle ne les porte pas.
         if consol.get("fr"):
-            sets.append(f"consol_date_fr = {q(consol['fr'])}")
+            d_fr = q(consol["fr"])
+            sets.append(
+                f"consol_date_fr = CASE WHEN consol_date_fr IS NULL OR consol_date_fr < {d_fr} "
+                f"THEN {d_fr} ELSE consol_date_fr END"
+            )
         if consol.get("en"):
-            sets.append(f"consol_date_en = {q(consol['en'])}")
+            d_en = q(consol["en"])
+            sets.append(
+                f"consol_date_en = CASE WHEN consol_date_en IS NULL OR consol_date_en < {d_en} "
+                f"THEN {d_en} ELSE consol_date_en END"
+            )
 
         db.run(f"UPDATE laws SET {', '.join(sets)} WHERE id = {q(l['id'])}")
     return len(laws)
@@ -160,8 +168,9 @@ def load(db, taxonomy: dict, relations: dict) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Chargeur des données de découverte.")
     ap.add_argument("--target", default="local", choices=["local", "cloud"])
+    ap.add_argument("--persist-to", default=None, help="Répertoire D1 local (--local uniquement).")
     args = ap.parse_args(argv)
-    db = make_client(args.target)
+    db = make_client(args.target, persist_to=args.persist_to)
 
     taxonomy = _read("taxonomy.json")
     relations = _read("relations.json")

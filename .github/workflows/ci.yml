@@ -71,6 +71,11 @@ jobs:
       # compte : 24 intitulés doivent rendre 24 clés. Aucun réseau.
       - run: python -m unittest pipeline.tests.test_disposition_number -v
 
+      # Désambiguïsation des chemins de division en doublon (c-73.2-r.6 : deux
+      # « CHAPITRE II » officiels portant tous deux `ga:l_ii`). EPUB synthétiques en
+      # répertoire temporaire, aucun réseau.
+      - run: python -m unittest pipeline.tests.test_duplicate_divisions -v
+
       # Le validateur de la couche de curation (phase 3) : il REFUSE de charger un lien ou
       # un concept dont la cible ne résout pas. `pipeline/discovery/` n'avait aucun test —
       # la porte anti-données-fausses n'était elle-même gardée par rien. Fausse base en
@@ -122,6 +127,11 @@ jobs:
       # (une passe EN ecrasait official_cite, la forme francaise).
       - run: python -m unittest pipeline.tests.test_load_federal -v
 
+      # Rafraichissement incremental (pipeline/refresh.py) : extraction banniere Quebec,
+      # modes witness drift + planchers anti-retrecissement, diff D1, et portes de pre-vol
+      # avant toute ecriture distante. Aucun reseau.
+      - run: python -m unittest pipeline.tests.test_refresh -v
+
       # Reconstructibilité : schema.sql décrit l'ÉTAT INITIAL, les migrations s'appliquent
       # PAR-DESSUS. Sans ce garde, un DROP COLUMN sans garde dans une migration casse le
       # bootstrap d'une base neuve sans que rien ne le signale — c'est arrivé avec 0002,
@@ -133,7 +143,7 @@ jobs:
           T=$(mktemp -d)
           npx wrangler d1 execute legislation --local --persist-to "$T" --file=./schema.sql -y
           npx wrangler d1 migrations apply legislation --local --persist-to "$T"
-          for t in search_log division_links concept_gazetteer article_headnotes; do
+          for t in search_log division_links concept_gazetteer article_headnotes vector_state; do
             npx wrangler d1 execute legislation --local --persist-to "$T" --json \
               --command "SELECT COUNT(*) AS n FROM pragma_table_info('$t')" \
               | grep -q '"n": *[1-9]' || { echo "$t absente après migrations"; exit 1; }

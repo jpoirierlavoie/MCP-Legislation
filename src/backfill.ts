@@ -1,9 +1,17 @@
 // Rattrapage des vecteurs (plan v2, 2.2) — route d'administration HORS MCP.
 //
 // POST /admin/backfill-vectors, active SEULEMENT si le secret BACKFILL_TOKEN est posé et
-// que l'Authorization Bearer concorde. Utilise les BINDINGS (AI + VECTORS) : mêmes chemins
-// de code que la requête de production, aucun scope de jeton supplémentaire. Idempotent :
-// upsert par id stable (art:{law}:{num} / div:{law}:{path}) — relançable sans doublons.
+// que l'Authorization Bearer concorde (comparaison à temps constant sur empreintes SHA-256).
+// Utilise les BINDINGS (AI + VECTORS) : mêmes chemins de code que la requête de production,
+// aucun scope de jeton supplémentaire.
+//
+// Modes :
+//   - "full"        (défaut) : embedde/upsert toute la page et met à jour `vector_state` ;
+//   - "incremental" : n'embedde que les éléments absents de `vector_state` ou dont le SHA-256
+//                     du texte canonique (fil d'Ariane compris) a changé ;
+//   - "seed"        : enregistre les empreintes actuelles dans `vector_state` SANS appeler AI/VECTORS ;
+//   - "prune"       : supprime de Vectorize et de `vector_state` les vecteurs orphelins de la loi ;
+//   - "ping"        : vérifie les liaisons AI + VECTORS et retourne le nombre suivi dans `vector_state`.
 
 import { breadcrumbChains, EMBED_MODEL } from "./lib";
 
@@ -23,10 +31,16 @@ const estTokens = (chars: number) => Math.ceil(chars / 2.0);
 const MAX_CHARS = 6000;
 /** Plafond d'éléments par invocation de la route (borne le temps par requête). */
 const MAX_COUNT = 250;
+/** Taille de lot SQL pour IN (...) et db.batch (D1 plafonne à 100 liaisons par énoncé). */
+const SQL_CHUNK = 90;
+
+export type BackfillMode = "full" | "incremental" | "seed" | "prune" | "ping";
+const MODES_VALIDES = new Set<string>(["full", "incremental", "seed", "prune", "ping"]);
 
 interface BackfillBody {
   kind: "articles" | "divisions";
   law: string;
+  mode?: BackfillMode;
   offset?: number;
   count?: number;
 }
@@ -35,8 +49,34 @@ interface EnvWithSecrets extends Env {
   BACKFILL_TOKEN?: string;
 }
 
+interface BackfillItem {
+  id: string;
+  text: string;
+  contentHash: string;
+  metadata: Record<string, VectorizeVectorMetadataValue>;
+}
+
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+
+async function sha256Bytes(input: string): Promise<Uint8Array> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return new Uint8Array(buf);
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = await sha256Bytes(input);
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Comparaison à temps constant sur empreintes SHA-256 du jeton Bearer. */
+async function verifieJetonBackfill(authHeader: string, secret: string): Promise<boolean> {
+  if (!authHeader.startsWith("Bearer ")) return false;
+  const [a, b] = await Promise.all([sha256Bytes(authHeader), sha256Bytes(`Bearer ${secret}`)]);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ (b[i] ?? 0);
+  return diff === 0;
+}
 
 /**
  * Id Vectorize d'une division : les ids sont plafonnés à 64 OCTETS, or un chemin Irosoft
@@ -45,65 +85,79 @@ const json = (data: unknown, status = 200): Response =>
  * dans metadata.path. Stable -> upserts idempotents.
  */
 async function divVectorId(law: string, path: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${law}|${path}`));
-  const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const hex = await sha256Hex(`${law}|${path}`);
   return `div:${law}:${hex.slice(0, 24)}`;
 }
 
-export async function handleBackfill(request: Request, env: Env): Promise<Response> {
-  try {
-    return await handleBackfillInner(request, env);
-  } catch (e) {
-    return json({ error: `exception: ${(e as Error).message?.slice(0, 300)}` }, 500);
+async function upsertVectorState(
+  db: D1Database,
+  law: string,
+  kind: "articles" | "divisions",
+  items: BackfillItem[],
+): Promise<void> {
+  if (!items.length) return;
+  const stmt = db.prepare(
+    `INSERT INTO vector_state (vector_id, law_id, kind, content_hash, updated_at)
+     VALUES (?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(vector_id) DO UPDATE SET
+       law_id = excluded.law_id,
+       kind = excluded.kind,
+       content_hash = excluded.content_hash,
+       updated_at = excluded.updated_at`,
+  );
+  for (let i = 0; i < items.length; i += SQL_CHUNK) {
+    const chunk = items.slice(i, i + SQL_CHUNK);
+    await db.batch(chunk.map((it) => stmt.bind(it.id, law, kind, it.contentHash)));
   }
 }
 
-async function handleBackfillInner(request: Request, env: Env): Promise<Response> {
-  const secret = (env as EnvWithSecrets).BACKFILL_TOKEN;
-  if (!secret) return new Response("Not found", { status: 404 }); // route inerte sans secret
-  if ((request.headers.get("Authorization") ?? "") !== `Bearer ${secret}`) {
-    return new Response("Non autorisé.", { status: 401 });
-  }
-  if (request.method !== "POST") return new Response("POST attendu.", { status: 405 });
-
-  let body: BackfillBody;
-  try {
-    body = await request.json<BackfillBody>();
-  } catch {
-    return json({ error: "corps JSON invalide" }, 400);
-  }
-  const { kind, law } = body;
-  if (!law || (kind !== "articles" && kind !== "divisions")) {
-    return json({ error: "kind ('articles'|'divisions') et law requis" }, 400);
-  }
-  const offset = Math.max(0, body.offset ?? 0);
-  const count = Math.min(MAX_COUNT, Math.max(1, body.count ?? MAX_COUNT));
-
-  const db = env.DB;
-  const lawRow = await db
-    .prepare("SELECT id, name_fr FROM laws WHERE id = ?")
-    .bind(law)
-    .first<{ id: string; name_fr: string }>();
-  if (!lawRow) return json({ error: `loi inconnue : ${law}` }, 404);
-
-  // --- construire les textes canoniques FR ------------------------------------
-  const items: {
-    id: string;
-    text: string;
-    metadata: Record<string, VectorizeVectorMetadataValue>;
-  }[] = [];
-  let overruns = 0;
-
-  if (kind === "articles") {
+async function readTrackedHashes(
+  db: D1Database,
+  law: string,
+  kind: "articles" | "divisions",
+  ids: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += SQL_CHUNK) {
+    const chunk = ids.slice(i, i + SQL_CHUNK);
     const rows = (
       await db
         .prepare(
-          // Départage par `id` : le rattrapage pagine par LIMIT/OFFSET, or deux articles
-          // peuvent partager une clé de tri (cf. `boundRef` dans src/lib.ts). Sans ordre
-          // total, un lot pouvait sauter un article ou en embarquer deux fois — invisible
-          // depuis l'API, puisque seul le compte `embedded` est rendu.
+          `SELECT vector_id, content_hash FROM vector_state
+           WHERE law_id = ? AND kind = ? AND vector_id IN (${chunk.map(() => "?").join(",")})`,
+        )
+        .bind(law, kind, ...chunk)
+        .all<{ vector_id: string; content_hash: string }>()
+    ).results;
+    for (const r of rows) out.set(r.vector_id, r.content_hash);
+  }
+  return out;
+}
+
+/**
+ * Construit les textes canoniques FR d'une page, avec le fil d'Ariane cuit dans le texte
+ * embeddé et son SHA-256 pour le suivi incrémental.
+ */
+async function chargerPageBackfill(
+  db: D1Database,
+  law: string,
+  lawNameFr: string,
+  kind: "articles" | "divisions",
+  count: number,
+  offset: number,
+): Promise<{ items: BackfillItem[]; overruns: number }> {
+  const items: BackfillItem[] = [];
+  let overruns = 0;
+
+  if (kind === "articles") {
+    // Départage par `id` : le rattrapage pagine par LIMIT/OFFSET, or deux articles peuvent
+    // partager une clé de tri (cf. `boundRef` dans src/lib.ts). Sans ordre total, un lot
+    // pouvait sauter un article ou en embarquer deux fois — invisible depuis l'API.
+    const rows = (
+      await db
+        .prepare(
           `SELECT number, division_path, text FROM articles
-         WHERE law_id = ? AND lang = 'fr' ORDER BY sort_key, id LIMIT ? OFFSET ?`,
+           WHERE law_id = ? AND lang = 'fr' ORDER BY sort_key, id LIMIT ? OFFSET ?`,
         )
         .bind(law, count, offset)
         .all<{ number: string; division_path: string; text: string }>()
@@ -118,7 +172,7 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
       const crumb = chain
         .map((n) => [n.kind, n.number, n.heading].filter(Boolean).join(" "))
         .join(" › ");
-      let text = `${lawRow.name_fr} — ${crumb} — art. ${r.number}. ${r.text}`;
+      let text = `${lawNameFr} — ${crumb} — art. ${r.number}. ${r.text}`;
       if (text.length > MAX_CHARS) {
         text = text.slice(0, MAX_CHARS);
         overruns++;
@@ -127,24 +181,18 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
       items.push({
         id: `art:${law}:${r.number}`,
         text,
+        contentHash: await sha256Hex(text),
         metadata: { law, article: r.number, path: r.division_path, heading, type: "article" },
       });
     }
   } else {
+    // Départage par `id`, même raison que pour les articles : `sort_order` n'est pas garanti
+    // unique sur toute l'histoire d'une base. Sans ordre total, LIMIT/OFFSET devient ambigu.
     const rows = (
       await db
         .prepare(
-          // Départage par `id`, EXACTEMENT pour la raison écrite au-dessus de la requête
-          // des articles — et qui n'avait jamais été appliquée ici. `sort_order` n'est pas
-          // unique : deux divisions d'une même loi peuvent le partager (mesuré le
-          // 2026-09-16 : c-73.2-r.6 en a deux au MÊME chemin). Sans ordre total, la
-          // pagination LIMIT/OFFSET peut sauter une division ou en embarquer deux fois, et
-          // c'est INVISIBLE depuis l'API : seul le compte `embedded` est rendu, et il est
-          // juste dans les deux cas. Corollaire d'honnêteté : tant que ce départage
-          // manquait, on ne pouvait pas affirmer qu'un écart entre upserts annoncés et
-          // vecteurs présents s'expliquait ENTIÈREMENT par des collisions d'identifiants.
           `SELECT path, heading FROM divisions
-         WHERE law_id = ? AND lang = 'fr' ORDER BY sort_order, id LIMIT ? OFFSET ?`,
+           WHERE law_id = ? AND lang = 'fr' ORDER BY sort_order, id LIMIT ? OFFSET ?`,
         )
         .bind(law, count, offset)
         .all<{ path: string; heading: string | null }>()
@@ -159,19 +207,185 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
       const crumb = chain
         .map((n) => [n.kind, n.number, n.heading].filter(Boolean).join(" "))
         .join(" › ");
+      const text = `${lawNameFr} — ${crumb}`.slice(0, MAX_CHARS);
       items.push({
         id: await divVectorId(law, r.path),
-        text: `${lawRow.name_fr} — ${crumb}`.slice(0, MAX_CHARS),
+        text,
+        contentHash: await sha256Hex(text),
         metadata: { law, path: r.path, heading: r.heading ?? "", type: "division" },
       });
     }
   }
+  return { items, overruns };
+}
+
+/** Supprime de Vectorize et de `vector_state` les vecteurs devenus orphelins pour une loi. */
+async function pruneVectors(
+  db: D1Database,
+  vectors: VectorizeIndex,
+  law: string,
+  kind: "articles" | "divisions",
+): Promise<string[]> {
+  const tracked = (
+    await db
+      .prepare("SELECT vector_id FROM vector_state WHERE law_id = ? AND kind = ?")
+      .bind(law, kind)
+      .all<{ vector_id: string }>()
+  ).results;
+  if (!tracked.length) return [];
+
+  const live = new Set<string>();
+  if (kind === "articles") {
+    const rows = (
+      await db
+        .prepare("SELECT number FROM articles WHERE law_id = ? AND lang = 'fr'")
+        .bind(law)
+        .all<{ number: string }>()
+    ).results;
+    for (const r of rows) live.add(`art:${law}:${r.number}`);
+  } else {
+    const rows = (
+      await db
+        .prepare("SELECT path FROM divisions WHERE law_id = ? AND lang = 'fr'")
+        .bind(law)
+        .all<{ path: string }>()
+    ).results;
+    for (const r of rows) live.add(await divVectorId(law, r.path));
+  }
+
+  const orphans = tracked.map((r) => r.vector_id).filter((id) => !live.has(id));
+  for (let i = 0; i < orphans.length; i += SQL_CHUNK) {
+    const chunk = orphans.slice(i, i + SQL_CHUNK);
+    await vectors.deleteByIds(chunk);
+    await db
+      .prepare(`DELETE FROM vector_state WHERE vector_id IN (${chunk.map(() => "?").join(",")})`)
+      .bind(...chunk)
+      .run();
+  }
+  return orphans;
+}
+
+export async function handleBackfill(request: Request, env: Env): Promise<Response> {
+  try {
+    return await handleBackfillInner(request, env);
+  } catch (e) {
+    return json({ error: `exception: ${(e as Error).message?.slice(0, 300)}` }, 500);
+  }
+}
+
+async function handleBackfillInner(request: Request, env: Env): Promise<Response> {
+  const secret = (env as EnvWithSecrets).BACKFILL_TOKEN;
+  if (!secret) return new Response("Not found", { status: 404 }); // route inerte sans secret
+  if (!(await verifieJetonBackfill(request.headers.get("Authorization") ?? "", secret))) {
+    return new Response("Non autorisé.", { status: 401 });
+  }
+  if (request.method !== "POST") return new Response("POST attendu.", { status: 405 });
+
+  let body: BackfillBody;
+  try {
+    body = await request.json<BackfillBody>();
+  } catch {
+    return json({ error: "corps JSON invalide" }, 400);
+  }
+  const { kind, law } = body;
+  if (!law || (kind !== "articles" && kind !== "divisions")) {
+    return json({ error: "kind ('articles'|'divisions') et law requis" }, 400);
+  }
+  if (body.mode !== undefined && !MODES_VALIDES.has(body.mode)) {
+    return json({ error: "mode invalide (full|incremental|seed|prune|ping)" }, 400);
+  }
+  const mode: BackfillMode = body.mode ?? "full";
+
+  const db = env.DB;
+
+  if (mode === "ping") {
+    if (!env.AI || !env.VECTORS) {
+      return json({ error: "liaisons AI/VECTORS absentes" }, 503);
+    }
+    const lawExists = await db
+      .prepare("SELECT id FROM laws WHERE id = ?")
+      .bind(law)
+      .first<{ id: string }>();
+    const row = await db
+      .prepare("SELECT COUNT(*) AS n FROM vector_state WHERE law_id = ? AND kind = ?")
+      .bind(law, kind)
+      .first<{ n: number }>();
+    return json({ ok: true, mode, kind, law, exists: Boolean(lawExists), tracked: row?.n ?? 0 });
+  }
+
+  const lawRow = await db
+    .prepare("SELECT id, name_fr FROM laws WHERE id = ?")
+    .bind(law)
+    .first<{ id: string; name_fr: string }>();
+  if (!lawRow) return json({ error: `loi inconnue : ${law}` }, 404);
+
+  if (mode === "prune") {
+    if (!env.VECTORS) {
+      return json({ error: "liaison VECTORS absente" }, 503);
+    }
+    const orphans = await pruneVectors(db, env.VECTORS, law, kind);
+    return json({
+      kind,
+      law,
+      mode,
+      deleted: orphans.length,
+      deleted_ids: orphans,
+      done: true,
+    });
+  }
+
+  const offset = Math.max(0, body.offset ?? 0);
+  const count = Math.min(MAX_COUNT, Math.max(1, body.count ?? MAX_COUNT));
+  const { items, overruns } = await chargerPageBackfill(
+    db,
+    law,
+    lawRow.name_fr,
+    kind,
+    count,
+    offset,
+  );
+  const done = items.length < count;
+  const next = offset + items.length;
+
+  if (mode === "seed") {
+    await upsertVectorState(db, law, kind, items);
+    return json({
+      kind,
+      law,
+      mode,
+      offset,
+      scanned: items.length,
+      seeded: items.length,
+      embedded: 0,
+      skipped: 0,
+      overruns,
+      done,
+      next,
+    });
+  }
+
+  let toEmbed = items;
+  let skipped = 0;
+  if (mode === "incremental" && items.length > 0) {
+    const existing = await readTrackedHashes(
+      db,
+      law,
+      kind,
+      items.map((it) => it.id),
+    );
+    toEmbed = items.filter((it) => existing.get(it.id) !== it.contentHash);
+    skipped = items.length - toEmbed.length;
+  }
+
+  if (toEmbed.length > 0 && (!env.AI || !env.VECTORS)) {
+    return json({ error: "liaisons AI/VECTORS absentes" }, 503);
+  }
 
   // --- embed (lots bornés en items ET en caractères) puis upsert ---------------
-  const batches: (typeof items)[] = [];
-  let cur: typeof items = [];
+  const batches: BackfillItem[][] = [];
+  let cur: BackfillItem[] = [];
   let curMaxChars = 0;
-  for (const it of items) {
+  for (const it of toEmbed) {
     const nextMax = Math.max(curMaxChars, it.text.length);
     const cost = (cur.length + 1) * estTokens(nextMax); // rembourrage au plus long
     if (cur.length && (cur.length >= EMBED_BATCH || cost > EMBED_TOKEN_BUDGET)) {
@@ -236,16 +450,20 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
         metadata: b.metadata,
       })),
     );
+    await upsertVectorState(db, law, kind, batch);
     embedded += batch.length;
   }
 
   return json({
     kind,
     law,
+    mode,
     offset,
+    scanned: items.length,
     embedded,
+    skipped,
     overruns,
-    done: items.length < count,
-    next: offset + items.length,
+    done,
+    next,
   });
 }

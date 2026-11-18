@@ -54,8 +54,9 @@ def migrate(db) -> tuple[list[str], list[str]]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Migration couche de découverte.")
     ap.add_argument("--target", default="local", choices=["local", "cloud"])
+    ap.add_argument("--persist-to", default=None, help="Répertoire D1 local (--local uniquement).")
     args = ap.parse_args(argv)
-    db = make_client(args.target)
+    db = make_client(args.target, persist_to=args.persist_to)
     applied, skipped = migrate(db)
     print(f"[{db.name}] migration : {len(applied)} instructions appliquées ; "
           f"{len(skipped)} ALTER ignorés (colonnes déjà présentes : {skipped or '—'})")

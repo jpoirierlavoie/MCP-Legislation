@@ -1,0 +1,346 @@
+name: rafraichir-corpus
+
+# Rafraîchissement incrémental et supervisé du corpus en DEUX temps :
+#
+#   1. `preparer` (lecture seule — aucun secret Cloudflare) :
+#      Télécharge les EPUB LégisQuébec et synchronise `justicecanada/laws-lois-xml`,
+#      capture le SHA exact, valide tous les invariants structurels sur une D1 de
+#      recette isolée (`schema.sql` + migrations + découverte + relations), compare à la
+#      production via `MCP_TOKEN_VEILLE`, publie le diff en artefact et commente l'issue
+#      `veille-consolidation` ouverte.
+#
+#   2. `appliquer` (déclenchement manuel explicite `mode=appliquer` + `confirmer=APPLIQUER`
+#      dans l'environnement `production`) :
+#      Exécute les 4 pré-vols Cloudflare, applique les migrations D1 (dont `0005_vector_state`),
+#      exécute `pipeline.refresh --mode apply --target cloud` sur le SHA exact validé par
+#      `preparer` (pré-vol ping, bookmark Time Travel, amorçage `vector_state`, bascule D1
+#      incrémentale, découverte, backfill incrémental Vectorize + purge des orphelins),
+#      puis valide la production via `npm run evals` et `node eval/run.mjs --gate` avant de
+#      clore l'issue de veille.
+on:
+  schedule:
+    - cron: "30 12 1 * *" # 1er du mois à 12:30 UTC (après veille-consolidation) : Stage 1 seul
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Étape à exécuter : 'preparer' (lecture seule) ou 'appliquer' (bascule prod)"
+        required: true
+        default: "preparer"
+        type: choice
+        options:
+          - preparer
+          - appliquer
+      lims_ref:
+        description: "SHA ou référence git pour justicecanada/laws-lois-xml"
+        required: false
+        default: "HEAD"
+        type: string
+      laws:
+        description: "Sous-ensemble d'ids séparés par virgules (vide = corpus complet)"
+        required: false
+        default: ""
+        type: string
+      confirmer:
+        description: "Obligatoire pour mode=appliquer : saisir exactement APPLIQUER"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rafraichir-corpus
+  cancel-in-progress: false
+
+jobs:
+  preparer:
+    name: Stage 1 — Préparer et valider en staging (lecture seule)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      has_changes: ${{ steps.plan.outputs.has_changes }}
+      lims_sha: ${{ steps.plan.outputs.lims_sha }}
+      content_changed_count: ${{ steps.plan.outputs.content_changed_count }}
+      metadata_only_count: ${{ steps.plan.outputs.metadata_only_count }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: Vérifier le garde de confirmation si mode=appliquer
+        env:
+          MODE: ${{ github.event.inputs.mode || 'preparer' }}
+          CONFIRMER: ${{ github.event.inputs.confirmer || '' }}
+        run: |
+          set -euo pipefail
+          if [ "$MODE" = "appliquer" ] && [ "$CONFIRMER" != "APPLIQUER" ]; then
+            echo "::error title=Confirmation requise::Pour mode=appliquer, saisir exactement APPLIQUER dans le champ 'confirmer'."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r pipeline/requirements.txt
+
+      - name: Acquérir, valider en staging et produire le diff vs production
+        id: plan
+        env:
+          PYTHONUTF8: "1"
+          LIMS_REF: ${{ github.event.inputs.lims_ref || 'HEAD' }}
+          LAWS: ${{ github.event.inputs.laws || '' }}
+          MCP_URL: https://legislation.poirierlavoie.ca/mcp
+          MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
+        run: |
+          set -euo pipefail
+          args=(
+            --mode prepare
+            --download
+            --ensure-lims-repo
+            --lims-ref "$LIMS_REF"
+            --compare-mcp
+            --verify-staging
+            --out-dir _tmp_refresh
+          )
+          if [ -n "${LAWS:-}" ]; then
+            args+=(--laws "$LAWS")
+          fi
+          python -m pipeline.refresh "${args[@]}"
+
+      - name: Publier le rapport et le plan en artefacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: refresh-stage1-plan
+          path: |
+            _tmp_refresh/refresh-report.md
+            _tmp_refresh/refresh-plan.json
+          retention-days: 30
+
+      - name: Publier le résumé du diff dans GITHUB_STEP_SUMMARY
+        if: success()
+        run: cat _tmp_refresh/refresh-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commenter l'issue veille-consolidation ouverte (Stage 1)
+        if: success() && (github.event.inputs.mode || 'preparer') != 'appliquer' && steps.plan.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --label veille-consolidation --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$existing" ]; then
+            echo "Aucune issue veille-consolidation ouverte — commentaire sauté."
+            exit 0
+          fi
+          {
+            echo "<!-- rafraichir-corpus-stage1 -->"
+            cat _tmp_refresh/refresh-report.md
+          } > _tmp_refresh/comment.md
+          cid=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${existing}/comments" \
+            --jq '[.[] | select(.body | contains("<!-- rafraichir-corpus-stage1 -->"))][0].id // empty')
+          if [ -n "$cid" ]; then
+            jq -Rs '{body: .}' _tmp_refresh/comment.md \
+              | gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${cid}" -X PATCH --input - >/dev/null
+            echo "Commentaire Stage 1 (#${cid}) actualisé sur l'issue #${existing}."
+          else
+            gh issue comment "$existing" --body-file _tmp_refresh/comment.md
+            echo "Commentaire Stage 1 ajouté sur l'issue #${existing}."
+          fi
+
+  appliquer:
+    name: Stage 2 — Bascule incrémentale D1 + Vectorize + Éval
+    needs: preparer
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.mode == 'appliquer'
+      && inputs.confirmer == 'APPLIQUER'
+      && needs.preparer.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # ── PRÉ-VOLS CLOUDFLARE (lecture seule, alignés sur deploy.yml) ──────────
+      - name: Contrôle 1/4 — CLOUDFLARE_API_TOKEN présent et propre
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::error title=CLOUDFLARE_API_TOKEN absent::Configurer le secret dans l'environnement 'production'."
+            exit 1
+          fi
+          case "$CLOUDFLARE_API_TOKEN" in
+            *[[:space:]]*)
+              echo "::error title=Jeton Cloudflare invalide::Contient une espace ou un saut de ligne."
+              exit 1
+              ;;
+          esac
+
+      - name: Contrôle 2/4 — Jeton Cloudflare actif
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 20 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -o /tmp/verify.json -w '%{http_code}' \
+            https://api.cloudflare.com/client/v4/user/tokens/verify || echo 000)
+          statut=$(jq -r '.result.status // "inconnu"' /tmp/verify.json 2>/dev/null || echo inconnu)
+          if [ "$code" = "200" ] && [ "$statut" != "active" ]; then
+            echo "::error title=Jeton non actif (${statut})::Renouveler CLOUDFLARE_API_TOKEN."
+            exit 1
+          fi
+          if [ "$code" = "401" ] || [ "$code" = "403" ] || [ "$code" = "000" ]; then
+            echo "::error title=Validation Cloudflare échouée (HTTP ${code})::Vérifier CLOUDFLARE_API_TOKEN."
+            exit 1
+          fi
+
+      - name: Contrôle 3/4 — Compte Cloudflare unique
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+            echo "CF_COMPTE=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          code=$(curl -sS --max-time 20 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -o /tmp/comptes.json -w '%{http_code}' \
+            https://api.cloudflare.com/client/v4/accounts || echo 000)
+          if [ "$code" != "200" ]; then
+            echo "::error title=Énumération des comptes impossible (HTTP ${code})::Définir CLOUDFLARE_ACCOUNT_ID."
+            exit 1
+          fi
+          n=$(jq '[.result[]?] | length' /tmp/comptes.json)
+          if [ "$n" -ne 1 ]; then
+            echo "::error title=Comptes visibles attendus = 1, obtenu = ${n}::Définir CLOUDFLARE_ACCOUNT_ID."
+            exit 1
+          fi
+          compte=$(jq -r '.result[0].id' /tmp/comptes.json)
+          echo "::add-mask::$compte"
+          echo "CF_COMPTE=$compte" >> "$GITHUB_ENV"
+
+      - name: Contrôle 4/4 — Correspondance D1 legislation ↔ wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          attendu=$(grep -oE '"database_id"[[:space:]]*:[[:space:]]*"[^"]+"' wrangler.jsonc | head -1 | grep -oE '[0-9a-fA-F-]{36}' || true)
+          code=$(curl -sS --max-time 20 \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -o /tmp/d1.json -w '%{http_code}' \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_COMPTE}/d1/database?name=legislation" || echo 000)
+          if [ "$code" != "200" ]; then
+            echo "::error title=Interrogation D1 impossible (HTTP ${code})::Vérifier les permissions D1."
+            exit 1
+          fi
+          trouve=$(jq -r '[.result[]? | select(.name=="legislation") | .uuid] | .[0] // ""' /tmp/d1.json)
+          if [ -z "$trouve" ] || [ "$trouve" != "$attendu" ]; then
+            echo "::error title=Discordance UUID D1::Attendu=${attendu}, trouvé=${trouve:-absent}."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r pipeline/requirements.txt
+
+      - name: Appliquer les migrations D1 en production (dont 0005_vector_state)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_COMPTE }}
+        run: npx wrangler d1 migrations apply legislation --remote
+
+      - name: Bascule incrémentale D1 + Vectorize (SHA exact validé par Stage 1)
+        env:
+          PYTHONUTF8: "1"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_COMPTE }}
+          BACKFILL_TOKEN: ${{ secrets.BACKFILL_TOKEN }}
+          BACKFILL_URL: ${{ vars.BACKFILL_URL || 'https://legislation.poirierlavoie.ca' }}
+          LIMS_SHA: ${{ needs.preparer.outputs.lims_sha }}
+          LAWS: ${{ github.event.inputs.laws || '' }}
+        run: |
+          set -euo pipefail
+          args=(
+            --mode apply
+            --target cloud
+            --download
+            --out-dir _tmp_refresh
+          )
+          if [ -n "${LIMS_SHA:-}" ]; then
+            args+=(--ensure-lims-repo --lims-ref "$LIMS_SHA")
+          fi
+          if [ -n "${LAWS:-}" ]; then
+            args+=(--laws "$LAWS")
+          fi
+          python -m pipeline.refresh "${args[@]}"
+
+      - name: Contrôles bout-en-bout + porte 21 cas contre la production
+        env:
+          MCP_URL: https://legislation.poirierlavoie.ca/mcp
+          MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
+        run: |
+          set -euo pipefail
+          npm run evals
+          node eval/run.mjs --gate
+
+      - name: Re-vérifier la veille et clore l'issue si corpus complet à jour
+        if: (github.event.inputs.laws || '') == ''
+        id: check
+        env:
+          MCP_URL: https://legislation.poirierlavoie.ca/mcp
+          MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
+        run: node scripts/check-consolidation.mjs
+
+      - name: Clore l'issue veille-consolidation si aucune dérive résiduelle
+        if: (github.event.inputs.laws || '') == '' && steps.check.outputs.drift == 'false' && steps.check.outputs.unreachable == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --label veille-consolidation --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" \
+              --comment "Rafraîchissement incrémental appliqué et vérifié (${GITHUB_RUN_ID}). Veille sans dérive résiduelle — clôture automatique."
+          fi

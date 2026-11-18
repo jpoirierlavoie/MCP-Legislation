@@ -141,6 +141,9 @@ npx.cmd tsc --noEmit
 npx.cmd biome check .
 npm.cmd test
 npx.cmd wrangler deploy --dry-run
+npm.cmd run eval:gate
 ```
 
 **Déploiement continu sur `main` :** Déclenché par `.github/workflows/deploy.yml` (`scripts/deployer.mjs` : migrations D1 puis `wrangler deploy`).
+
+**Rafraîchissement du corpus en deux étapes :** [`.github/workflows/rafraichir-corpus.yml`](.github/workflows/rafraichir-corpus.yml) exécute `pipeline/refresh.py` en mode `prepare` (lecture seule, artefact + diff), puis sur approbation humaine (`workflow_dispatch` `mode=appliquer` + `confirmer=APPLIQUER` dans `environment: production`) applique D1 incrémental, `npm.cmd run backfill:incremental` et `npm.cmd run eval:gate`.

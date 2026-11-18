@@ -11,7 +11,14 @@ from pipeline import config, load, validate
 from pipeline.ingest import _download, _id_base, _law_from_config, _sample_path
 from pipeline.parser import parse_epub
 
-COMBOS = [("ccq", "fr"), ("ccq", "en"), ("cpc", "fr"), ("cpc", "en")]
+COMBOS = [
+    ("ccq", "fr"),
+    ("ccq", "en"),
+    ("cpc", "fr"),
+    ("cpc", "en"),
+    ("c-73.2-r.6", "fr"),
+    ("c-73.2-r.6", "en"),
+]
 _cache: dict[tuple[str, str], tuple] = {}
 
 
@@ -43,7 +50,7 @@ class CorpusTest(unittest.TestCase):
         # FR et EN d'une même loi ont les mêmes numéros d'articles RÉELS (même loi, traduite).
         # Les pseudo-articles de disposition peuvent différer (intitulés propres à la langue).
         from pipeline.validate import is_disposition
-        for law_id in ("ccq", "cpc"):
+        for law_id in ("ccq", "cpc", "c-73.2-r.6"):
             *_, fr = corpus(law_id, "fr")
             *_, en = corpus(law_id, "en")
             real_fr = {n for n in fr if not is_disposition(n)}
@@ -91,6 +98,22 @@ class CorpusTest(unittest.TestCase):
             self.assertTrue(art_ids.isdisjoint(a), f"collision id article sur {law_id}/{lang}")
             div_ids |= d
             art_ids |= a
+
+    def test_c_73_2_r_6_duplicate_chapter_ii(self):
+        for lang, h1, h2 in (
+            ("fr", "COMITÉ DE RÉVISION DES DÉCISIONS DU SYNDIC", "RÈGLES DE FONCTIONNEMENT"),
+            ("en", "SYNDIC DECISION REVIEW COMMITTEE", "OPERATING RULES"),
+        ):
+            with self.subTest(lang=lang):
+                _, divs, _, by_num = corpus("c-73.2-r.6", lang)
+                by_path = {d.path: d for d in divs}
+                self.assertIn("ga:l_ii", by_path)
+                self.assertIn("ga:l_ii__2", by_path)
+                self.assertEqual(by_path["ga:l_ii"].heading, h1)
+                self.assertEqual(by_path["ga:l_ii__2"].heading, h2)
+                self.assertEqual(by_path["ga:l_ii-gb:l_i"].parent_id, by_path["ga:l_ii"].id)
+                self.assertEqual(by_num["6"].division_path, "ga:l_ii-gb:l_i")
+                self.assertEqual(by_num["8"].division_path, "ga:l_ii__2")
 
 
 if __name__ == "__main__":

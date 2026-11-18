@@ -18,7 +18,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from . import config, load, validate
+from . import config, d1_api, load, validate
 from .model import Law
 from .parser import opf_metadata, parse_epub
 
@@ -48,9 +48,11 @@ def _id_base(law_id: str, lang: str) -> int:
 
 
 def _download(url: str, dest: Path) -> Path:
+    if not url.startswith("https://"):
+        raise ValueError(f"Schéma URL non autorisé : {url}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
-    with urllib.request.urlopen(req) as resp, open(dest, "wb") as f:
+    with urllib.request.urlopen(req, timeout=30) as resp, open(dest, "wb") as f:
         f.write(resp.read())
     return dest
 
@@ -69,20 +71,39 @@ def _law_from_config(cfg_law: dict) -> Law:
     )
 
 
-def fetch_consolidation(url: str) -> str | None:
-    """Extrait la date « À jour au JJ mois AAAA » (ISO) de la page HTML de la loi.
-    LégisQuébec l'affiche en français même sur les pages EN. Non fatal : None si échec."""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
-        html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
-    except Exception:
-        return None
+def extrait_consolidation_quebec(html: str) -> str | None:
+    """Extrait la date « À jour au JJ mois AAAA » (ISO) depuis le HTML LégisQuébec.
+
+    Portée bornée aux blocs `class="text-end"` (comme `extractConsolidation` côté JS) ;
+    retourne `None` si la bannière est absente ou illisible.
+    """
     soup = BeautifulSoup(html, "html.parser")
     for d in soup.find_all("div", class_="text-end"):
-        m = re.search(r"jour au\s*(\d{1,2})\s*(?:er)?\s*([A-Za-zÀ-ÿ]+)\s*(\d{4})",
-                      re.sub(r"\s+", " ", d.get_text()), re.I)
+        m = re.search(
+            r"jour au\s*(\d{1,2})\s*(?:er)?\s*([A-Za-zÀ-ÿ]+)\s*(\d{4})",
+            re.sub(r"\s+", " ", d.get_text()),
+            re.I,
+        )
         if m and m.group(2).lower() in _FR_MONTHS:
             return f"{m.group(3)}-{_FR_MONTHS[m.group(2).lower()]:02d}-{int(m.group(1)):02d}"
+    return None
+
+
+def fetch_consolidation(url: str, essais: int = 4) -> str | None:
+    """Télécharge la page LégisQuébec avec reprise réseau bornée et extrait la date « À jour au ».
+    LégisQuébec l'affiche en français même sur les pages EN. Retourne None si injoignable ou illisible."""
+    if not url.startswith("https://"):
+        raise ValueError(f"Schéma URL non autorisé : {url}")
+    for essai in range(essais):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
+            html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+        except Exception:
+            if essai + 1 < essais:
+                time.sleep(3 * (2**essai))
+                continue
+            return None
+        return extrait_consolidation_quebec(html)
     return None
 
 
@@ -126,7 +147,7 @@ def extrait_consolidation_federale(html: str) -> str | None:
     return m.group(1) if m else None
 
 
-def fetch_consolidation_federale(url: str, essais: int = 3) -> str | None:
+def fetch_consolidation_federale(url: str, essais: int = 4) -> str | None:
     """Frère fédéral de `fetch_consolidation` : télécharge, puis délègue l'extraction.
 
     REPRISE BORNÉE, et elle n'affaiblit rien. Une lecture ratée est FATALE ici (cf.
@@ -139,13 +160,15 @@ def fetch_consolidation_federale(url: str, essais: int = 3) -> str | None:
     pas : là-bas, une page injoignable est le SIGNAL que le job doit rapporter, et la
     réessayer le masquerait. Ici, c'est un obstacle à une opération humaine supervisée.
     """
+    if not url.startswith("https://"):
+        raise ValueError(f"Schéma URL non autorisé : {url}")
     for essai in range(essais):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
-            html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace")
+            html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
         except Exception:
             if essai + 1 < essais:
-                time.sleep(2 * (essai + 1))
+                time.sleep(3 * (2**essai))
                 continue
             return None
         date = extrait_consolidation_federale(html)
@@ -190,8 +213,11 @@ def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
     for remote in ([False] if apply_local else []) + ([True] if apply_remote else []):
         flag = "--remote" if remote else "--local"
         print(f"\nApplication des données en D1 {flag} …")
-        cmd = f'npx wrangler d1 execute {DB_NAME} {flag} --file="{sql_path}"' + (" -y" if remote else "")
-        res = subprocess.run(cmd, shell=True, cwd=config.REPO_ROOT)
+        cmd = [
+            d1_api.npx_command(), "wrangler", "d1", "execute", DB_NAME, flag,
+            f"--file={sql_path}", *(["-y"] if remote else []),
+        ]
+        res = subprocess.run(cmd, cwd=config.REPO_ROOT)
         if res.returncode != 0:
             print(f"wrangler a échoué (code {res.returncode}).")
             return res.returncode

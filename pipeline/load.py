@@ -194,7 +194,28 @@ def _rows_sql(table: str, cols: list[str], rows: list[list], budget: int = _STMT
     return out
 
 
-def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: str) -> str:
+def metadata_only_sql(law: Law, lang: str) -> str:
+    """Génère un UPSERT `laws` sans réécrire divisions/articles (changement de date seul)."""
+    law_vals = ", ".join(_q(_valeur(law, c)) for c in _LAW_COLS)
+    updates = ", ".join(
+        f"{c}=excluded.{c}" for c in _LAW_COLS if c not in _COLS_AUTRE_LANGUE(lang)
+    )
+    return (
+        f"INSERT INTO laws ({', '.join(_LAW_COLS)}) VALUES ({law_vals}) "
+        f"ON CONFLICT(id) DO UPDATE SET {updates};\n"
+    )
+
+
+def fts_rebuild_sql() -> str:
+    """Reconstruit l'index FTS5 externe et vérifie sa cohérence (rank=1)."""
+    return (
+        "INSERT INTO articles_fts(articles_fts) VALUES('rebuild');\n"
+        "INSERT INTO articles_fts(articles_fts, rank) VALUES('integrity-check', 1);\n"
+    )
+
+
+def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: str,
+           *, rebuild_fts: bool = True) -> str:
     div_rows = [[_valeur(d, c) for c in _DIV_COLS] for d in divisions]
     art_rows = [[_valeur(a, c) for c in _ART_COLS] for a in articles]
     law_vals = ", ".join(_q(_valeur(law, c)) for c in _LAW_COLS)
@@ -247,7 +268,10 @@ def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: s
         "DROP TABLE _stg_divisions;",
         "DROP TABLE _stg_articles;",
         "DROP TABLE _stg_article_numbers;",
-        "-- FTS5 à contenu externe : reconstruire l'index depuis articles",
-        "INSERT INTO articles_fts(articles_fts) VALUES('rebuild');",
     ]
+    if rebuild_fts:
+        stmts += [
+            "-- FTS5 à contenu externe : reconstruire l'index depuis articles",
+            "INSERT INTO articles_fts(articles_fts) VALUES('rebuild');",
+        ]
     return "\n".join(stmts) + "\n"

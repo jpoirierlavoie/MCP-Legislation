@@ -155,9 +155,10 @@ Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` ex
 
 Fichiers clés : `src/tools.ts` (outils MCP), `src/lib.ts` (requêtes D1, échelle de
 recherche, fusion RRF), `src/relevance.ts` (TOUTES les constantes de calibration : poids
-S1–S4, RRF_K, SEMANTIC_MIN_SCORE…), `src/backfill.ts` (route admin vecteurs), `src/site.ts` (page publique servie à `/` — ses
+S1–S4, RRF_K, SEMANTIC_MIN_SCORE…), `src/backfill.ts` (route admin vecteurs incrémentale
+`full|incremental|seed|prune|ping` avec table `vector_state`), `src/site.ts` (page publique servie à `/` — ses
 décomptes sont LUS en D1, jamais recopiés ; elle ne contient JAMAIS le jeton et n'appelle
-jamais `/mcp`), `pipeline/ingest.py` (orchestrateur),
+jamais `/mcp`), `pipeline/ingest.py` (orchestrateur), `pipeline/refresh.py` (orchestrateur incrémental en deux étapes : `prepare` lecture seule + `apply` transactionnel par loi),
 `pipeline/discovery/` (recon/recon_lims/migrate/load/relations/curation/verify — SEPT
 modules ; `recon_lims.py` recense le XML fédéral, `curation.py` charge la couche phase 3 v2
 et refuse toute cible non résolue, gardé en CI par `test_curation`).
@@ -173,15 +174,18 @@ npx wrangler dev --var MCP_TOKEN:a --var MCP_TOKEN_VEILLE:b   # dev local (D1 lo
 npx tsc --noEmit                                   # type-check (toujours avant commit)
 npm run evals                                      # contrôles bout-en-bout (le harnais imprime son total ; MCP_URL=… pour cibler)
 npm run eval                                       # harnais d'éval : 21 cas, recall@10/MRR (production)
+npm run eval:gate                                  # porte d'éval bloquante contre la référence (scripts/rafraichir-corpus)
 node eval/run.mjs --refresh-paths                  # revalide eval/cases.resolved.json et SORT — diff à VIDER avant de mesurer
 node scripts/journal.mjs [--local|--jours N|--tout] # dépouille search_log (lecture seule) : replis et reformulations
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # 144 tests
-npm test                                           # vitest, DEUX projets : 17 fichiers, 202 contrôles (sans réseau, en CI)
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # suite Python complète
+npm test                                           # vitest, DEUX projets (sans réseau, en CI)
 #   ^ « workerd » (test/**/*.test.ts, via wrangler.test.jsonc) et « node » (tests/**, scripts/**) :
 #     garde anti-dérive doc (R10), JS client de la page, détecteur de veille, plages, chemins…
 #     NE PLUS lancer ces fichiers avec `node --test` : ils sont passés à vitest le 2026-09-16
 #     et le lanceur de Node y répond « pass 0, fail 1 » sans rien dire du pourquoi.
 PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.ingest --law X --lang fr --apply-local
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.refresh --mode prepare --download --compare-mcp --verify-staging
+npm run backfill:incremental                       # synchronisation incrémentale + élagage Vectorize (BACKFILL_TOKEN requis)
 npx wrangler d1 migrations apply legislation --local|--remote   # bookmark Time Travel AVANT --remote
 npm run deploy                                     # migrations D1 d'abord PUIS wrangler deploy --var COMMIT:<sha> (scripts/deployer.mjs)
 ```
@@ -534,36 +538,29 @@ entre autres). C'est mesuré, et c'est ce constat qui a fait créer une base de 
 colonne pondérée dans `articles_fts`, donc `DROP` + `CREATE VIRTUAL TABLE` (en-tête de
 `migrations/0003_curation.sql`, §3). C'est la prochaine fois que cette procédure servira.
 
-**⏸️ DÉCISION REPORTÉE — `c-73.2-r.6`, deux divisions au même chemin (2026-09-16).**
-Diagnostic COMPLET, correctif NON fait, et c'est délibéré. Les identifiants Irosoft sont
-propres à CHAQUE DOCUMENT de l'EPUB, pas à l'EPUB entier : `page3.xhtml` et `page4.xhtml`
-portent tous deux un `ga:l_ii`. Irosoft répète l'en-tête du chapitre en tête de la page de
-continuation et y place le titre de la SECTION là où va celui du chapitre — d'où, à la
-lecture page par page, deux « CHAPITRE II » au même chemin :
+**✅ RÉSOLU (2026-11-17) — `c-73.2-r.6`, deux divisions au même chemin.**
+Une vérification directe de la consolidation HTML pleine page sur LégisQuébec (D. 297-2010,
+FR et EN) a établi que les deux « CHAPITRE II » / « CHAPTER II » consécutifs figurent dans
+le règlement officiel lui-même — ce n'est pas un artefact de page de continuation Irosoft :
 
     page3 : ga:l_ii « CHAPITRE II — COMITÉ DE RÉVISION DES DÉCISIONS DU SYNDIC
-                      — SECTION I COMPOSITION — art. 6…»
-    page4 : ga:l_ii « CHAPITRE II — RÈGLES DE FONCTIONNEMENT — art. 8…»
+                      — SECTION I COMPOSITION — art. 6–7 »
+    page4 : ga:l_ii « CHAPITRE II — RÈGLES DE FONCTIONNEMENT — art. 8–13 »
 
-La structure RÉELLE est un seul Chapitre II à deux sections. Conséquence servie
-aujourd'hui : `get_division('ga:l_ii')` rend l'un des deux au hasard, et son sous-arbre
-mélange les articles des deux. **UNE seule loi sur 97** (les deux langues), mesuré.
+Un balayage complet des 158 EPUB de LégisQuébec (2026-11-17) a confirmé que `c-73.2-r.6`
+(FR et EN) est le seul texte du corpus à porter un identifiant de division en doublon.
 
-POURQUOI ON N'A PAS CORRIGÉ. Le correctif toucherait la boucle qui assemble les chemins
-(`parser.py`, la boucle du spine) — donc les 79 lois québécoises — pour réparer deux
-divisions dans une. L'asymétrie de risque est mauvaise. Et « réparer » recouvre DEUX choses
-différentes : *désambiguïser* (deux chapitres distincts et adressables — mécanique et sûr,
-mais la structure reste fausse au regard du règlement) ou *fusionner* (« Règles de
-fonctionnement » devient la Section II — c'est la vérité juridique, mais il faut inférer
-qu'une page continue la précédente, règle qu'on refuse de généraliser depuis UN exemple).
-La seconde est la bonne ; elle exige un balayage des 79 EPUB pour vérifier qu'aucune autre
-loi ne serait fusionnée à tort.
-
-CE QUI REND L'ATTENTE SÛRE : la garde d'unicité de `validate.py` (ajoutée le même jour)
-REFUSE désormais cette loi — `✗ chemins de division uniques: ga:l_ii ×2` → bascule refusée.
-La donnée en production garde le défaut, mais plus rien ne peut le réintroduire en silence,
-et la loi ne peut plus être réingérée tant que le parseur n'est pas corrigé. À reprendre
-comme chantier propre, pas en appendice d'un autre.
+SOLUTION RETENUE : désambiguïsation des chemins en doublon par suffixe `__<k>` (`ga:l_ii__2`,
+avec propagation du préfixe désambiguïsé aux descendants DOM) dans `pipeline/parser.py`,
+verrouillée hors ligne par `pipeline/tests/test_duplicate_divisions.py`, `test_paths.py` et
+`tests/paths.test.mjs`. Fusionner le second chapitre en une « SECTION II » synthétique
+aurait violé R4 en altérant les intitulés officiels ; le suffixe `__` préserve les intitulés
+verbatim, évite le `_` simple déjà utilisé par les divisions décimales (`gd:l_ii_2`), reste
+un seul segment pour `SEG_SPLIT`, isole les sous-arbres sous `subtreeClause` et corrige
+l'écrasement silencieux du `parent_id` de `ga:l_ii-gb:l_i` dans `load.prepare` tout en
+levant le blocage de `validate.py`. Note : D1 et Vectorize en production conservent les
+lignes antérieures au correctif pour `c-73.2-r.6` jusqu'à la prochaine passe `ingest` +
+`backfill-vectors`.
 
 **Reconstruire une base à partir de rien** (nouvel environnement, D1 de CI, dev local
 vierge). `schema.sql` décrit l'ÉTAT INITIAL et les migrations s'appliquent PAR-DESSUS :
@@ -593,12 +590,24 @@ comptes de `subjects`/`subject_map`/`law_relations` et résolution de chaque
 `division_path` ; (8) mettre à jour les contrôles épinglés (« 78 lois »…) ;
 (9) éval avant/après.
 
-**Rafraîchissement semestriel** : `ingest --all --download --refresh-dates` (76 combos),
-rechargement découverte, re-backfill vecteurs complet, éval. **Entièrement manuel et
-sous surveillance** : le cron de `wrangler.jsonc` n'exécute RIEN (aucun handler
-`scheduled`), et aucun workflow GitHub n'écrit plus en base — l'ancien `refresh.yml` a
-été retiré parce qu'il ne rechargeait que les articles (ni découverte ni vecteurs),
-laissant les embeddings sur l'ancien texte donc du droit périmé rendu en silence.
+**Rafraîchissement automatisé à porte humaine (deux étapes) :**
+[`.github/workflows/rafraichir-corpus.yml`](.github/workflows/rafraichir-corpus.yml) +
+[`pipeline/refresh.py`](pipeline/refresh.py) remplacent l'ancien rafraîchissement tout-ou-rien :
+le cron de `wrangler.jsonc` reste inactif (aucun handler `scheduled`) et aucune planification
+automatique n'écrit en production.
+- **Étape 1 (`preparer`, lecture seule)** : télécharge et parse les EPUB/XML LIMS en staging local,
+  compare contre l'état servi en production (`compare-mcp`), vérifie l'intégrité des divisions/chemins
+  et publie un artefact JSON + commentaire récapitulatif sans toucher D1 ni Vectorize.
+- **Étape 2 (`appliquer`, sur `workflow_dispatch` `mode=appliquer` + `confirmer=APPLIQUER` dans
+  `environment: production`)** : crée un signet Time Travel D1, charge uniquement les lois modifiées
+  via `refresh.py` (mode `apply`, avec reconstruction FTS5 bornée si du contenu change), recharge la
+  couche découverte (`pipeline/discovery/load.py`), exécute `npm run backfill:incremental` (synchronisation
+  incrémentale Vectorize via `vector_state` + élagage des vecteurs orphelins) et bloque sur la porte
+  d'évaluation (`npm run eval:gate`).
+- **Configuration requise une seule fois (`environment: production`) :** enregistrer
+  `BACKFILL_TOKEN` côté GitHub (`gh secret set BACKFILL_TOKEN --env production -R jpoirierlavoie/MCP-Legislation < backfill.token`)
+  ; si la règle WAF Cloudflare du domaine personnalisé bloque les rafales sur `/admin/backfill-vectors`,
+  ajouter une exception ciblée sur ce chemin authentifié plutôt que de basculer `workers_dev`.
 
 **Veille de consolidation** (`.github/workflows/veille-consolidation.yml` +
 `scripts/check-consolidation.mjs`) : job **en LECTURE SEULE**, mensuel, qui compare la

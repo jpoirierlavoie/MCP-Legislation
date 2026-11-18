@@ -34,6 +34,9 @@ TABLE = [
     # Québec : un trait d'union DANS la valeur d'un segment
     ("gc:l_dix-septieme", 1),
     ("ga:l_x-gc:l_dix-septieme", 2),
+    # Québec : désambiguïsation de chemins de division en doublon (c-73.2-r.6)
+    ("ga:l_ii__2", 1),
+    ("ga:l_ii__2-gb:l_i", 2),
     # Québec : pseudo-divisions en slug, 118 mesurées en production
     ("disposition-preliminaire", 1),
     ("annexe-a", 1),
@@ -53,6 +56,7 @@ class TestDecoupage(unittest.TestCase):
         self.assertEqual(truncate("fh1:3-fh2:5-fh3:1", 2), "fh1:3-fh2:5")
         self.assertEqual(truncate("fs:2-fh1:1", 1), "fs:2")
         self.assertEqual(truncate("ga:l_x-gc:l_dix-septieme", 1), "ga:l_x")
+        self.assertEqual(truncate("ga:l_ii__2-gb:l_i", 1), "ga:l_ii__2")
         # Les défauts mesurés de l'ancien découpage par tiret : il rendait `annexe` — un
         # chemin qui EXISTE, donc une AUTRE division — et `repeal`, qui n'existe pas.
         self.assertEqual(truncate("annexe-a", 1), "annexe-a")
@@ -71,6 +75,8 @@ class TestDecoupage(unittest.TestCase):
         self.assertIsNone(parent_path("fh1:3"))
         self.assertIsNone(parent_path("fs:2"))
         self.assertIsNone(parent_path("ga:l_cinquieme"))
+        self.assertIsNone(parent_path("ga:l_ii__2"))
+        self.assertEqual(parent_path("ga:l_ii__2-gb:l_i"), "ga:l_ii__2")
         # Les deux pièges : un slug et une valeur à trait d'union n'ont PAS de parent.
         self.assertIsNone(parent_path("annexe-a"))
         self.assertIsNone(parent_path("disposition-preliminaire"))

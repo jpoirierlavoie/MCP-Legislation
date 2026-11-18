@@ -40,12 +40,12 @@ def numeros_effectifs(a: Article) -> list[str]:
 # Invariants attendus, par (law_id, lang). FR et EN d'une même loi partagent les mêmes
 # décomptes (même loi, traduite) — seul le texte diffère.
 _CCQ = {
-    "articles_real": 3523,          # articles se: (hors dispositions)
+    "articles_real": 3524,          # articles se: (hors dispositions)
     "int_min": 1, "int_max": 3168,  # entiers complets 1..3168
-    "decimals": 355,                # 351 à un niveau + 4 à deux niveaux
-    "divisions": 800,
+    "decimals": 356,                # 352 à un niveau + 4 à deux niveaux (dont 1603.1, 2023, c. 23, a. 3)
+    "divisions": 801,
     "div_by_kind": {"livre": 10, "titre": 45, "chapitre": 160, "section": 270,
-                     "sous-section": 213, "niveau6": 86, "niveau7": 13, "niveau8": 3},
+                     "sous-section": 214, "niveau6": 86, "niveau7": 13, "niveau8": 3},
     "repealed_articles": 68,
     # 4 divisions abrogées : 2 sections + 1 chapitre (phase 0, niveaux ga-gd) + 1 sous-section
     # « § 8 » (ge:l_8, Livre 5) que le scan ga-gd de la phase 0 n'avait pas comptée.
@@ -73,6 +73,7 @@ class Report:
     ok: bool = True
     lines: list[str] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    witness_deltas: list[str] = field(default_factory=list)
 
     def check(self, label: str, got, expected=None):
         if expected is None:
@@ -84,7 +85,8 @@ class Report:
 
 
 def validate(law_id: str, lang: str, divisions: list[Division], articles: list[Article],
-             jurisdiction: str = "qc", numeros_refuses: list[str] | None = None) -> Report:
+             jurisdiction: str = "qc", numeros_refuses: list[str] | None = None,
+             allow_witness_drift: bool = False) -> Report:
     """Invariants du corpus. `jurisdiction` est PASSÉE, jamais devinée du préfixe d'id.
 
     Renifler « ca- » au début d'un identifiant serait exactement la chirurgie de chaîne
@@ -129,15 +131,34 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
     exp = EXPECTED.get((law_id, lang))
     r.lines.append(f"Invariants {law_id}/{lang} :")
     if exp:
-        r.check("articles se:", len(real), exp["articles_real"])
-        r.check("entiers min/max", (r.stats["int_min"], r.stats["int_max"]), (exp["int_min"], exp["int_max"]))
-        r.check("entiers complets (nb)", len(ints), exp["int_max"] - exp["int_min"] + 1)
-        r.check("décimaux", len(decimals), exp["decimals"])
-        r.check("divisions", len(div_no_disp), exp["divisions"])
-        r.check("divisions par type", by_kind, exp["div_by_kind"])
-        r.check("articles abrogés", r.stats["repealed_articles"], exp["repealed_articles"])
-        r.check("divisions abrogées", r.stats["repealed_divisions"], exp["repealed_divisions"])
-        r.check("dispositions (pseudo-articles)", len(disp), exp["dispositions"])
+        def check_witness(label: str, got, expected):
+            if got == expected or not allow_witness_drift:
+                r.check(label, got, expected)
+            else:
+                r.witness_deltas.append(f"{law_id}/{lang} — {label}: {got} (témoin figé {expected})")
+                r.lines.append(f"  ⚠ {label}: {got}  (témoin figé {expected})")
+
+        if allow_witness_drift:
+            # Planchers anti-rétrécissement catastrophique : même en mode dérive de témoin,
+            # une chute anormale d'articles ou de divisions arrête l'ingestion.
+            if r.stats["int_min"] != exp["int_min"]:
+                r.check("plancher entier min", r.stats["int_min"], exp["int_min"])
+            if (r.stats["int_max"] or 0) < exp["int_max"] - 5:
+                r.check("plancher entier max", r.stats["int_max"], f">= {exp['int_max'] - 5}")
+            if len(real) < exp["articles_real"] - 20:
+                r.check("plancher articles se:", len(real), f">= {exp['articles_real'] - 20}")
+            if len(div_no_disp) < exp["divisions"] - 10:
+                r.check("plancher divisions", len(div_no_disp), f">= {exp['divisions'] - 10}")
+
+        check_witness("articles se:", len(real), exp["articles_real"])
+        check_witness("entiers min/max", (r.stats["int_min"], r.stats["int_max"]), (exp["int_min"], exp["int_max"]))
+        check_witness("entiers complets (nb)", len(ints), exp["int_max"] - exp["int_min"] + 1)
+        check_witness("décimaux", len(decimals), exp["decimals"])
+        check_witness("divisions", len(div_no_disp), exp["divisions"])
+        check_witness("divisions par type", by_kind, exp["div_by_kind"])
+        check_witness("articles abrogés", r.stats["repealed_articles"], exp["repealed_articles"])
+        check_witness("divisions abrogées", r.stats["repealed_divisions"], exp["repealed_divisions"])
+        check_witness("dispositions (pseudo-articles)", len(disp), exp["dispositions"])
     else:
         r.check("articles se:", len(real))
         r.check("entiers min/max", (r.stats["int_min"], r.stats["int_max"]))
