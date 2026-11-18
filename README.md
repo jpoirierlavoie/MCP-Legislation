@@ -10,34 +10,31 @@ articles) et recherche hybride lexicale + sémantique.
 **Page publique :** <https://legislation.poirierlavoie.ca/> — outils, aides au repérage,
 corpus et matières, en français et en anglais, avec les décomptes lus en base.
 
-**Point d'accès MCP :** `https://legislation.poirierlavoie.ca/mcp` (HTTP streamable) —
-**instance privée, un jeton par client** : une requête sans jeton valide reçoit 404.
+**Point d'accès MCP :** `https://legislation.poirierlavoie.ca/mcp` (jeton direct, refus `404`)
+et `https://legislation.poirierlavoie.ca/mcp/oauth` (OAuth 2.1 PKCE S256 via
+<https://acces.poirierlavoie.ca>) — **accès réservé aux membres en règle du Barreau du Québec, un jeton individuel par titulaire**.
 
 Source des données : les EPUB officiels de [LégisQuébec](https://www.legisquebec.gouv.qc.ca)
-(Éditeur officiel du Québec). Le texte des articles est restitué **verbatim** — le serveur
+(Éditeur officiel du Québec) et les fichiers XML du ministère de la Justice du Canada. Le texte des articles est restitué **verbatim** — le serveur
 n'altère jamais le contenu officiel.
 
 ## Accès
 
-Ce serveur est une **instance privée**. L'endpoint MCP n'est ouvert qu'aux clients
-autorisés, et **chacun reçoit son propre jeton, révocable seul** : renouveler ou révoquer
-l'un ne perturbe aucun autre. Une requête sans jeton valide reçoit 404 (jamais 401 — un
-401 annoncerait un serveur MCP et déclencherait la découverte OAuth des clients, ce qui a
-déjà coincé un connecteur de façon irréversible).
+Ce serveur est réservé aux membres en règle du Barreau du Québec. Chaque titulaire approuvé dispose de ses propres jetons individuels dans la base d'identité partagée (`mcp-identite`), révocables séparément depuis l'espace libre-service <https://acces.poirierlavoie.ca/moi> : renouveler ou révoquer l'un ne perturbe aucun autre confrère. Sur `/mcp`, une requête sans jeton valide reçoit `404` sans corps (jamais `401` — un `401` déclencherait une découverte OAuth non sollicitée sur les clients à jeton direct). Les hôtes compatibles OAuth 2.1 utilisent le sous-chemin dédié `/mcp/oauth`.
 
-Pour en demander l'accès : <jason@poirierlavoie.ca>. Le code source est public et le
+Pour demander un accès : <https://acces.poirierlavoie.ca/demande> (ou <jason@poirierlavoie.ca>). Le code source est public et le
 corpus reproductible — pipeline d'ingestion, taxonomie et données de configuration sont
 tous versionnés ici.
 
 ### Se connecter
 
-Le jeton se présente au choix du client ; les trois formes sont équivalentes côté serveur,
-et le slash final est toléré partout.
+Deux montages coexistent selon le client :
 
-| Client | Forme | À écrire |
+| Client | Montage | À écrire |
 |---|---|---|
-| Connecteur claude.ai | paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
-| Backend applicatif, Claude Code, Antigravity, Gemini CLI, CI | en-tête | `https://legislation.poirierlavoie.ca/mcp` + `Authorization: Bearer <jeton>` |
+| Claude Desktop, claude.ai, ChatGPT / Codex (OAuth 2.1 PKCE S256) | OAuth 2.1 | `https://legislation.poirierlavoie.ca/mcp/oauth` (métadonnées RFC 9728 sur `GET /.well-known/oauth-protected-resource/mcp/oauth`) |
+| Claude Code, Google Antigravity, Gemini CLI, CI | Jeton direct par en-tête | `https://legislation.poirierlavoie.ca/mcp` + `Authorization: Bearer <jeton>` |
+| Connecteur claude.ai (mode jeton direct transitoire) | Paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
 
 - **Google Antigravity** (`plugin.json`, `mcp_config.json`, `assets/logo.svg` à la racine) :
   installer via `agy plugin install https://github.com/jpoirierlavoie/MCP-Legislation.git`
@@ -68,10 +65,11 @@ qu'une session complète y passe en `curl`.
 
 Le transport est **HTTP streamable sans état** (`POST /mcp`, sans en-tête `mcp-session-id` ni ouverture de session côté serveur). Les requêtes `GET /mcp` et `DELETE /mcp` (y compris authentifiées) sont rejetées en `405` ; ce serveur n'émet aucune notification serveur→client.
 
-Deux refus à ne pas confondre :
+Trois réponses de garde à connaître :
 
-- **429** — cadence trop élevée (limiteur par IP, dans le Worker). Réessayer plus tard.
-- **404** — jeton absent, faux ou révoqué (aucun corps retourné pour ne pas exposer le point d'accès à une découverte OAuth non sollicitée).
+- **429** — cadence par minute trop élevée (limiteur pré-auth par IP ou post-auth par titulaire). Réessayer après `Retry-After`.
+- **404** (sur `/mcp`) ou **401** RFC 9728 (sur `/mcp/oauth`) — jeton absent, inconnu, hors portée, expiré ou révoqué.
+- **200 `isError: true` `[QUOTA_EPUISE]`** — plafond journalier UTC du titulaire atteint sur la classe d'appel (`local` ou `semantique`).
 
 ## Le corpus
 
@@ -139,7 +137,10 @@ résultats** :
 2. **Sémantique** (embeddings multilingues) — fusionné au lexical par RRF ; il fait le
    pont de vocabulaire (*« congédiement »* trouve *« délai de congé »*) et de langue
    (une requête en anglais trouve le texte français). Les résultats issus du seul chemin
-   sémantique sont marqués *« (repérage sémantique) »*.
+   sémantique sont marqués *« (repérage sémantique) »*. Chaque titulaire peut désactiver
+   ce volet (`hybride_permis = 0` sur <https://acces.poirierlavoie.ca/moi>) : `search_text`
+   s'exécute alors en mode lexical FTS5 seul (sans appel à `Workers AI` ni à `Vectorize`,
+   comptabilisé en classe `local`) et le mentionne dans la réponse.
 
 Chaque résultat est auto-explicatif : `C.p.c. — Livre V, Titre IV : LES DEMANDES
 INTÉRESSANT LE DROIT INTERNATIONAL PRIVÉ › art. 490 [ga:l_v-gb:l_iv-gc:l_i]` + extrait.
@@ -212,5 +213,5 @@ Trajectoire mesurée du repérage : recall@10 **40 % → 88 % → 98 %** (`docs/
 
 ## Sécurité, confidentialité et licence
 
-- **Sécurité, vie privée et secret professionnel :** Consulter [`SECURITY.md`](SECURITY.md) pour signaler de manière privée et coordonnée toute vulnérabilité ou question de confidentialité / secret professionnel à Jason Poirier Lavoie (`jason@poirierlavoie.ca`), sans ouvrir d'issue publique ni joindre de renseignements confidentiels de clients.
-- **Licence :** Le logiciel, les schémas, le pipeline et la documentation originale sont régis par la licence **Creative Commons Attribution - Pas d'Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International (`CC-BY-NC-SA-4.0`)** (Partie A de [`LICENSE`](LICENSE)). Les textes législatifs servis demeurent soumis aux régimes de l'Éditeur officiel du Québec (LégisQuébec) et de la Licence du gouvernement ouvert – Canada (Justice Canada) (Partie B de [`LICENSE`](LICENSE)).
+- **Sécurité, vie privée et secret professionnel :** Aucun texte de requête ni argument d'outil n'est journalisé à l'exécution (journaux d'invocation Cloudflare désactivés, zéro écriture dans `search_log`, télémétrie strictement bornée à `compteur_jour` et `evenement_technique` sans contenu dans `DB_IDENTITE`). Consulter [`SECURITY.md`](SECURITY.md) pour signaler de manière privée et coordonnée toute vulnérabilité ou question de confidentialité / secret professionnel à Jason Poirier Lavoie (`jason@poirierlavoie.ca`), sans ouvrir d'issue publique ni joindre de renseignements confidentiels de clients.
+- **Licence :** Le logiciel, les schémas, le pipeline et la documentation originale sont régis par la licence **Creative Commons Attribution - Pas d'Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International (`CC-BY-NC-SA-4.0`)**, assortie d'une **Autorisation complémentaire de pratique professionnelle du droit** pour les membres en règle du Barreau du Québec (Partie A de [`LICENSE`](LICENSE)). Les textes législatifs servis demeurent soumis aux régimes de l'Éditeur officiel du Québec (LégisQuébec) et de la Licence du gouvernement ouvert – Canada (Justice Canada) (Partie B de [`LICENSE`](LICENSE)).

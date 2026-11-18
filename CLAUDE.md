@@ -1,724 +1,132 @@
-# CLAUDE.md — Lois du Québec et du Canada (serveur MCP)
+# mcp-legislation — Lois du Québec et du Canada (serveur MCP)
 
-Serveur MCP **en production** servant le texte officiel de 97 lois et règlements — 79 du
-Québec et 18 fédéraux — (FR + EN) : `https://legislation.poirierlavoie.ca/mcp`. Propriétaire : Jason Poirier Lavoie
-(avocat). Lecture seule pour les usagers ; les données viennent des EPUB officiels de
-LégisQuébec et des XML du ministère de la Justice du Canada (Licence du gouvernement
-ouvert – Canada ; la version officielle fédérale est celle publiée par le ministre,
-art. 31 de la Loi sur la révision et la codification des textes législatifs). **C'est un outil juridique : un résultat faux rendu en silence est le pire
-défaut possible — refuser vaut toujours mieux que deviner.**
+Directives de développement, contrat de vérité et invariants anti-dérive pour **`mcp-legislation`** (`https://legislation.poirierlavoie.ca/mcp` et `/mcp/oauth`), gouvernant à l'identique Claude et Google Antigravity / Gemini CLI (`CLAUDE.md` et `GEMINI.md` doivent rester identiques octet pour octet et sous **24 000 octets** UTF-8 LF sans BOM ; `gemini-extension.json` déclare `"contextFileName": []` afin de ne jamais injecter ces consignes dans les sessions des usagers finaux).
+
+Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; les données proviennent des EPUB officiels de LégisQuébec et des XML du ministère de la Justice du Canada (Licence du gouvernement ouvert – Canada ; version officielle fédérale publiée par le ministre, art. 31 de la *Loi sur la révision et la codification des textes législatifs*). **C'est un outil juridique : un résultat faux rendu en silence est le pire défaut possible — refuser vaut toujours mieux que deviner.**
+
+---
 
 ## ⛔ OBLIGATION PRÉALABLE À TOUTE MODIFICATION (aucune exception)
 
-**Avant de terminer QUELLE QUE SOIT une tâche touchant ce dépôt, exécuter une évaluation
-d'impact explicite sur les CINQ surfaces locales (dont `README.md` et la page publique HTML
-`GET /`) ainsi que sur les dépôts liés (`Inter-dépôts`), et inclure les mises à jour requises
-DANS LE MÊME COMMIT.** Ce n'est pas une bonne pratique, c'est une condition de fin de tâche :
-une tâche qui laisse une surface ou un dépôt lié en retard n'est pas terminée, elle est en dette.
-
-**Le coût en tokens n'est JAMAIS une raison de sauter cette évaluation** — consigne
-explicite de Jason. Lire les surfaces concernées, comparer, et rendre compte coûte moins cher
-qu'une seule ligne fausse servie à un modèle dans un outil juridique.
+**Avant de terminer QUELLE QUE SOIT une tâche touchant ce dépôt, exécuter une évaluation d'impact explicite sur les CINQ surfaces locales (dont `README.md` et la page publique HTML `GET /`) ainsi que sur les dépôts liés (`Inter-dépôts`), et inclure les mises à jour requises DANS LE MÊME COMMIT.** Ce n'est pas une bonne pratique, c'est une condition de fin de tâche. **Le coût en tokens n'est JAMAIS une raison de sauter cette évaluation** — le coût en tokens n'exempte de rien.
 
 | # | Surface | Où | Ce qui la fait bouger |
 |---|---|---|---|
 | 1 | **Outils MCP** | `src/tools.ts`, `src/schemas.ts`, `src/routeur.ts` | nom, ajout/retrait (R2), paramètres, comportement, message d'erreur servi |
-| 2 | **Descriptions** | `src/tools.ts` (`description`, `title`), `src/serveur.ts`, `catalogue.json` | toute reformulation ; R3 borne le delta et exige de consigner le coût en tokens |
+| 2 | **Descriptions** | `src/tools.ts` (`description`, `title`), `src/serveur.ts`, `catalogue.json` | toute reformulation ; R3 borne le delta à ≤ 2 phrases et exige de consigner le coût en tokens |
 | 3 | **Schéma** | `schema.sql`, `schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
-| 4 | **README.md** et manifestes | racine (`README.md`, `SECURITY.md`, `LICENSE` `CC-BY-NC-SA-4.0`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `GEMINI.md`, `/mcp/server-card`) | tout ce qui change ce que le dépôt *annonce* faire, sa licence, sa politique de sécurité/confidentialité ou sa connectivité client |
-| 5 | **Page publique** (HTML `GET /`) | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | tout ce qui change la page publique HTML rendue à `GET /` (textes bilingues FR/EN, décomptes D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil) |
-| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (manifestes, `skills/`, scripts), `MCP-Socle` (`#v0.7.0`), `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, style CSS de page publique `GET /`, sécurité/confidentialité ou licence affectant le cadre global |
+| 4 | **README.md** et manifestes | `README.md`, `SECURITY.md`, `LICENSE` (`CC-BY-NC-SA-4.0`), `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `CLAUDE.md`, `GEMINI.md`, `/mcp/server-card` | tout ce qui change ce que le dépôt annonce faire, sa licence, sa confidentialité ou sa connectivité |
+| 5 | **Page publique** (HTML `GET /`) | `catalogue.json` + `src/site.ts` (`tests/page-client.test.mjs`, `tests/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil |
+| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (manifestes, `skills/`, `verifier.py`, `verifier_tout.py`), `MCP-Socle` (`v0.8.0`), `MCP-Acces`, `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, quotas, page publique `GET /`, confidentialité ou licence |
 
-**Procédure, à exécuter et à RAPPORTER — pas à supposer :**
+**Procédure obligatoire :**
+1. Énoncer explicitement l'impact vérifié sur chacune des 6 surfaces (« non touchée » vérifié et motivé, jamais passé sous silence).
+2. Exécuter `npx tsc --noEmit`, `npx biome check .`, `npm run audit` et `npm test` (les deux projets vitest `workerd` et `node`, jamais `node --test`).
+3. Si une surface servie bouge : vérifier `wrangler dev` + `npm run evals` (et `npm run eval` si le repérage change — aucune régression sur les 21 cas).
+4. `docs/` est une **archive datée par défaut** (ne fait pas foi sur l'état courant), à l'exception des références techniques citées par le code (`docs/phase0-structure-epub.md`, `docs/phase0-structure-lims.md`, `docs/archive/PLAN.md`, `docs/archive/plan-couche-decouverte.md`).
 
-1. Pour chacune des cinq surfaces locales — dont explicitement **`README.md`** et la **page publique HTML (`GET /`)** — ainsi que pour la sixième surface **Inter-dépôts (`Cross-repository`)** : dire si elle est touchée, et pourquoi (« non touchée » est une réponse valable uniquement si elle est vérifiée et ÉNONCÉE, jamais passée sous silence).
-2. `npm test` — la suite vitest, hors réseau, dont la garde de parité
-   (`tests/catalogue.test.mjs`). Elle attrape les ruptures structurelles ; elle n'attrape
-   PAS un sens qui a changé. **Ne PAS employer `node --test`** : depuis le passage à vitest
-   le 2026-09-16, ce lanceur rend « pass 0, fail 1 » sur un fichier intact — cette consigne
-   l'a elle-même prescrit jusqu'au 2026-09-17, et un agent qui l'aurait suivie serait parti
-   réparer un catalogue sain, ou aurait appris à sauter l'étape.
-3. Si une surface bouge : `npx tsc --noEmit`, puis `npm run evals` contre la cible.
-4. Si le schéma bouge : migration numérotée + bookmark Time Travel AVANT `--remote`
-   (invariant 6), et vérifier que `structuredContent` n'a pas rétréci en silence
-   (corollaire structuré de R4, décision 001).
+---
 
-**Pourquoi cette obligation existe.** La dérive n'est pas hypothétique ici, elle est
-documentée : `resolve_reference` a servi aux modèles « Voir les 38 textes
-disponibles » pendant que le corpus en comptait 79 ; le README annonçait 3 tarifs sur 4,
-~46 000 articles sur 49 255, 57 contrôles sur 62, et publiait une configuration de
-connexion qui renvoyait 404 ; `docs/ARCHITECTURE-NOTES.md` est resté à 38 lois / 28 matières.
-**Aucun test n'a échoué dans aucun de ces cas.** C'est exactement le mode de défaut que ce
-dépôt refuse : faux, servi, silencieux.
-
-Détail des mécanismes et de ce qu'ils n'attrapent pas : **R10**, plus bas.
-
-**`docs/` est une ARCHIVE PAR DÉFAUT — il n'est PAS une sixième surface.** Tout document
-qui s'y trouve porte une date et **ne fait jamais foi sur l'état courant** : ce sont des
-instantanés, des rapports de phase, des plans exécutés. L'état vivant est D1, les JSON
-versionnés, `CLAUDE.md`, `README.md` et la page publique — rien d'autre.
-C'est délibérément une politique et non une discipline de plus : un document daté ne dérive
-pas, il vieillit. `docs/ARCHITECTURE-NOTES.md` a traversé QUATRE agrandissements du corpus
-en se déclarant « état réel » sans qu'aucun test n'échoue, précisément parce qu'il
-prétendait au présent. Corollaire de rédaction : dans `docs/`, écrire au passé et dater ;
-ne jamais y recopier un décompte vivant en le présentant comme actuel.
-
-**EN REVANCHE, UNE SIXIÈME SURFACE EXISTE — et elle vit HORS de ce dépôt.** Elle a CHANGÉ de
-forme le 2026-09-02, et le piège est là : le clavardage interne de Pallas Athéna, qui offrait
-les dix outils à son modèle depuis `athena/chat/worker_tools.py` **engendré** depuis
-`tools/list` par `athena/scripts/sync_worker_tools.py`, a été supprimé EN ENTIER (commit
-`ef85473`, 87 fichiers) quand le cabinet est passé à un compte Claude for Work sous DPA.
-**Ce générateur n'existe plus. Ne pas le chercher, ne pas tenter de le relancer** — la
-consigne qui figurait ici jusqu'au 2026-09-16 prescrivait un remède injouable.
-Le couplage, lui, a SURVÉCU en changeant de support : il vit désormais dans le greffon
-Antigravity et les compétences de **`droit-civil-quebecois`** (notamment `recherche-juridique`,
-`redaction-juridique`, `administration-litige` et `deontologie-et-pratique`), qui nomment les outils
-`legislation_*` **à la main**. Rien ne les engendre automatiquement, donc rien ne peut les réparer
-seul : après tout ajout, retrait ou renommage d'outil, les corriger À LA MAIN dans le greffon.
-Sinon l'échec n'apparaît qu'en pleine recherche juridique, sous la forme d'un outil qui « n'existe pas ».
-Les CINQ surfaces ci-dessus restent le contrat INTRA-dépôt ; celle-ci est un couplage
-inter-dépôts, non gardé — et depuis le 2026-09-02, non engendré non plus.
-
-## Architecture et intégration dans le cadre global
-
-### Le cadre global à trois couches (`droit-civil-quebecois`)
+## 1. Architecture et cadre global (`droit-civil-quebecois`)
 
 ```
              ┌────────────────────────────────────────────────────────┐
-             │       droit-civil-quebecois (Plugin Cadre)        │
-             │   5 compétences : recherche-juridique, analyse-juridique │
-             │  redaction-juridique, administration-litige, déonto  │
+             │      droit-civil-quebecois (Plugin Cadre v2.0.2)       │
+             │  5 routeurs SKILL.md · 17 feuilles · 2 scripts stdlib  │
              └──────┬───────────────────────┬──────────────────┬──────┘
                     │                       │                  │
-   (serveur `lois`, 10 outils)     (serveur `juris`, 10 outils) (12 outils sur 5 familles :
-                    │                       │            `calcul`, `greffe`, `registre`,
-                    ▼                       ▼            `adresse`, `terminologie`)
+        (serveur `lois`, 10 outils)  (serveur `juris`, 10)  (serveur `outils`, 12)
+                    │                       │                  │
+                    ▼                       ▼                  ▼
          ┌─────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
          │   MCP-Legislation   │ │  MCP-Jurisprudence  │ │        MCP-Outils        │
-         │  (Worker Cloudflare │ │ (Worker Cloudflare  │ │    (Worker Cloudflare    │
-         │  D1 + Vectorize +   │ │  D1 cache CanLII    │ │   public, zéro secret,   │
-         │    Workers AI)      │ │  authentifié Bearer │ │  3 D1 lecture seule, Zod)│
+         │  D1 `legislation` + │ │  D1 `canlii` + BYOK │ │   Worker public, D1 RO   │
+         │  `DB_IDENTITE` + AI │ │   `DB_IDENTITE`     │ │       zéro secret        │
          └──────────┬──────────┘ └──────────┬──────────┘ └──────────────────────────┘
-                    │                       │
                     └───────────┬───────────┘
-                                ▼ (dépendance de dev `#v0.7.0`, zéro runtime dep)
-                 ┌─────────────────────────────┐
-                 │          MCP-Socle          │
-                 │  Transport JSON-RPC 2.0     │
-                 │  Streamable HTTP sans état  │
-                 │  Auth SHA-256 temps constant│
-                 │  Zéro concept juridique     │
-                 └─────────────────────────────┘
+                                ▼ (`@poirierlavoie/mcp-socle` v0.8.0, zéro runtime dep)
+                 ┌──────────────────────────────────────────┐
+                 │  MCP-Socle + MCP-Acces (`mcp-identite`)  │
+                 │  Jetons individuels, OAuth 2.1 PKCE S256 │
+                 │  Quotas UTC, zéro journal de requêtes    │
+                 └──────────────────────────────────────────┘
 ```
 
-### Intégration avec le plugin et les compétences (`droit-civil-quebecois`)
-- **`skills/recherche-juridique`** : Consomme les 10 outils de `lois` comme source primaire de droit textuel. Suit le pattern d'utilisation en deux temps : Découverte (`find_relevant`, `list_laws`, `list_subjects`, `related_laws`), puis Extraction (`get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`). Nomme également les 10 outils de `juris`, `greffe_parse_number`, `palais_list`, `palais_get` et `interets_1619` (notamment dans `references/methode-sources.md`, `livrables.md`, `preliminaires.md`, `sources-doctrinales.md`), et mobilise les besoins d'aptitude `TEXTE`, `CALCUL`, `GREFFE`, `INSCRIPTION`. Transmet les lois et articles découverts au citateur de `MCP-Jurisprudence` (`citator` avec `rel="legislation"`).
-- **`skills/redaction-juridique`** : Utilise explicitement `get_article` (dont `lang="en"` pour extraire la terminologie officielle anglaise des concepts juridiques québécois du C.c.Q. et du C.p.c. et purger la contamination provenant de la common law), `search_text`, `calendrier_deadlines` et `interets_1619`, sous les besoins d'aptitude `CALCUL` et `GREFFE`.
-- **`skills/administration-litige`** : Consomme `calendrier_deadlines` et `calendrier_holidays` (avec repli local `scripts/calcul_delai.py`) sous les besoins `CALCUL`, `INSCRIPTION`, `TEXTE`. N'appelle aucun outil de `lois` directement (délègue la recherche législative et la prescription à `recherche-juridique`).
-- **`skills/analyse-juridique`** : Ne nomme AUCUN outil MCP directement. Exprime des besoins d'aptitude abstraits `GREFFE`, `TEXTE` et `INSCRIPTION`, en déléguant la recherche juridique et la vérification de citations à `recherche-juridique` et les délais à `administration-litige`.
-- **`skills/deontologie-et-pratique`** : Ne nomme AUCUN outil MCP directement ; délègue le droit substantiel et procédural hors déontologie à `recherche-juridique` et les délais à `administration-litige`.
-- **Configuration** : Câblé dans `.mcp.json` et `gemini-extension.json` sous `lois` (`https://legislation.poirierlavoie.ca/mcp`) avec `Authorization: Bearer ${MCP_LEGISLATION_SECRET}`.
+### Trois morceaux internes
+1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle` `0.8.0`) + 10 outils courts (`list_laws`, `list_subjects`, `related_laws`, `find_relevant`, `get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`), D1 `DB` (`legislation`) + D1 `DB_IDENTITE` (`mcp-identite`), Workers AI (`bge-m3`) + Vectorize (`legislation-articles`). Zéro `dependencies` d'exécution.
+2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours `PYTHONUTF8=1`) — Ingère les EPUB LégisQuébec et XML LIMS Justice Canada par staging → validation → bascule (`pipeline/ingest.py`, `pipeline/refresh.py`).
+3. **Données versionnées** — `laws.config.json`, `pipeline/expected/served.json`, `catalogue.json`, `taxonomy.json`, `relations.json`, `schema.sql` + `schema-decouverte.sql` + `migrations/`. Aucun décompte vivant n'est recopié en prose (R10).
 
-### Surfaces de synchronisation du plugin cadre (`droit-civil-quebecois`)
-Toute évolution des outils, schémas, noms ou transport de `MCP-Legislation` exige la mise à jour synchronisée des surfaces du plugin cadre :
-1. **Manifestes clients** : `.mcp.json`, `mcp_config.json`, `gemini-extension.json`, `.claude-plugin/plugin.json`, `plugin.json`.
-2. **Définitions manuelles des compétences (`skills/`)** : notamment `skills/recherche-juridique`, `skills/redaction-juridique`, `skills/administration-litige`.
-3. **Scripts de synchronisation et de contrôle** :
-   - `scripts/regenerer_cache_mcp.py --apply`
-   - `scripts/synchroniser_plugin_gemini.py --apply`
-   - `python verifier.py`
-   - `python verifier_tout.py --mode mock` / `python verifier_tout.py --mode live`
+---
 
-### Dépendances croisées et limites de responsabilité
-- **Dépendance envers `MCP-Socle`** : Consomme `@poirierlavoie/mcp-socle#v0.7.0` en `devDependencies`. Les requêtes sur `/mcp` sont servies directement et sans état par `servirRequeteMcp` via `src/routeur.ts`. Zéro dépendance d'exécution (`dependencies: {}`).
-- **Jumeau de `MCP-Jurisprudence`** : Partage la même identité visuelle et typographique sur sa page publique `GET /` (police Georgia, variables CSS `--f`, `--m`, `--b`, `--a`, `--bg`, `--card`). Législation porte le droit textuel consolidé ; Jurisprudence porte les décisions et métadonnées CanLII.
-- **Complémentarité avec `MCP-Outils`** : Législation fournit le texte verbatim officiel ; `MCP-Outils` exécute les calculs arithmétiques, gère la table des palais et greffes et expose les instantanés de registres, adresses RQA et terminologie bilingue.
+## 2. Contrôle d'accès Phase 3, confidentialité et quotas (`SPEC-SOCLE-COMMUN.md`)
 
-### Contrats d'entrée/sortie et sécurité
-- **Corpus officiel verbatim** : Texte consolidé en lecture seule des lois et règlements du Québec (via EPUB LégisQuébec) et du Canada (via XML LIMS de Justice Canada conditionné par le drapeau `FEDERAL_CORPUS`). Conformément à la règle R10, aucun décompte vivant n'est figé en dur dans la documentation : les décomptes vivants dérivent exclusivement de `laws.config.json`, de `pipeline/expected/served.json` et de la base D1.
-- **Sortie double standardisée** : Prose descriptive dans `content[0].text`, et données plates dans `structuredContent`. Aucun `outputSchema` publié dans `tools/list` pour préserver le budget de jetons de contexte.
-- **Refus HTTP 404 sans corps** : Tout appel non authentifié sur `/mcp` est rejeté en HTTP 404 (sans corps) pour éviter la découverte automatique OAuth des clients d'IA.
-- **Fiche publique SEP-2127** : `GET /mcp/server-card` servie sans secret (`Access-Control-Allow-Origin: *`).
+1. **Double montage (`/mcp` et `/mcp/oauth`) et coupe-circuit (`MCP_ENABLED`) :**
+   - `MCP_ENABLED !== "true"` coupe `/mcp*`, `/.well-known/oauth-protected-resource/mcp/oauth` et `/health` en `404`, tout en laissant `GET /` ouvert (`200`, `G22`).
+   - `/mcp` (`PORTE` dans `src/auth.ts`) accepte en parallèle les jetons individuels `DB_IDENTITE` (`portee` `'legislation'` ou `'les_deux'`, titulaire `actif` ou `limite`) et les secrets partagés transitoires de Phase 3a (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`), sous `Authorization: Bearer <jeton>`, `?key=<jeton>` ou `/mcp/<jeton>` (slash final toléré). Tout refus sur `/mcp` renvoie **uniformément `404` sans corps ni `WWW-Authenticate`** (`S8`, `G7`, `G23`). `/mcp/server-card` et `/mcp/oauth` sont interceptés avant `/mcp/<jeton>`.
+   - `/mcp/oauth` (`PORTE_OAUTH`) accepte **uniquement** `Authorization: Bearer <jeton>` (aucun `?key=`, aucun segment `/mcp/oauth/<x>`, aucun secret partagé de Worker). Tout refus renvoie `401` RFC 9728 pointant vers `GET /.well-known/oauth-protected-resource/mcp/oauth` (`authorization_servers: ["https://acces.poirierlavoie.ca"]`), tandis que la racine `GET /.well-known/oauth-protected-resource` reste en `404`.
+   - Le contrôle de méthode `POST` (`405`) s'exécute **après** l'authentification sur `/mcp` comme sur `/mcp/oauth` (`G23`).
+2. **Débit à deux niveaux et quotas journaliers (`G32`, `G34`) :**
+   - Pré-auth par IP (`RL_PRE_AUTH_IP` `1011` 600/min, `RL_ECHEC_IP` `1012` 20/min, `RL_ECHECS_GLOBAL` `1013` 300/min) + `QuarantaineIpEchecs` contournée par tout jeton valide déjà reconnu afin de protéger les IP partagées de cabinets ou de clients infonuagiques.
+   - Post-auth par `titulaire_id` (`RL_TITULAIRE` `1014` 300/min en état `actif`, `RL_TITULAIRE_LIMITE` `1015` 20/min en état `limite`), puis quotas journaliers UTC dans `DB_IDENTITE.compteur_jour` vérifiés sur le nom d'outil du corps JSON-RPC (`local`: 1 500/j `actif`, 150/j `limite` ; `semantique`: 150/j `actif`, 15/j `limite` -> HTTP `200` `isError: true` `[QUOTA_EPUISE]`).
+3. **Opt-out `hybride_permis` (`S19`) :**
+   - Si `principal.type === "titulaire"` et `!principal.hybridePermis`, `search_text` s'exécute uniquement en recherche lexicale FTS5 locale (sans jamais appeler `env.AI` ni `env.VECTORS`, facturé en classe `local`) et l'énonce explicitement dans la prose servie ainsi que via `hybride_desactive: true` dans `structuredContent`.
+4. **Zéro journalisation de contenu et observabilité désactivée (`S13`, `S14`, `G9`, `G37`) :**
+   - Aucune écriture d'exécution dans `search_log` (`logSearch` retiré de `src/` ; `0001_search_log.sql` conservé uniquement pour la chaîne historique de migrations D1).
+   - `wrangler.jsonc` impose `"observability": { "enabled": false, "logs": { "enabled": false, "invocation_logs": false } }`.
+   - Seuls `compteur_jour` et `evenement_technique` (sans `query` ni argument d'outil, horodatés au jour / à la minute UTC et purgés à 90 j) sont enregistrés via `ctx.waitUntil` dans `DB_IDENTITE`.
 
-### Architecture interne (3 morceaux)
+---
 
-1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle`) + 10 outils
-   `legislation_*`, D1 (`legislation`), Workers AI (bge-m3) + Vectorize (`legislation-articles`) pour la
-   recherche hybride. Config : `wrangler.jsonc` (PAS .toml).
-2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours
-   `PYTHONUTF8=1`) — télécharge/parse les EPUB Irosoft, charge D1 par
-   staging → validation → bascule. Ne JAMAIS écrire directement en production.
-3. **Données versionnées** — `laws.config.json` (79 lois), `catalogue.json` (doc publique
-   des outils et des aides au repérage, bilingue — R10), `taxonomy.json` (44 matières
-   bilingues), `relations.json` (relations curées), `schema.sql` + `schema-decouverte.sql`
-   + `migrations/` (wrangler d1 migrations).
+## 3. Règles de conception actives (R2–R10)
 
-Fichiers clés : `src/tools.ts` (outils MCP), `src/lib.ts` (requêtes D1, échelle de
-recherche, fusion RRF), `src/relevance.ts` (TOUTES les constantes de calibration : poids
-S1–S4, RRF_K, SEMANTIC_MIN_SCORE…), `src/backfill.ts` (route admin vecteurs incrémentale
-`full|incremental|seed|prune|ping` avec table `vector_state`), `src/site.ts` (page publique servie à `/` — ses
-décomptes sont LUS en D1, jamais recopiés ; elle ne contient JAMAIS le jeton et n'appelle
-jamais `/mcp`), `pipeline/ingest.py` (orchestrateur), `pipeline/refresh.py` (orchestrateur incrémental en deux étapes : `prepare` lecture seule + `apply` transactionnel par loi),
-`pipeline/discovery/` (recon/recon_lims/migrate/load/relations/curation/verify — SEPT
-modules ; `recon_lims.py` recense le XML fédéral, `curation.py` charge la couche phase 3 v2
-et refuse toute cible non résolue, gardé en CI par `test_curation`).
-Un seul « backfill » subsiste, celui des VECTEURS (`src/backfill.ts` + `scripts/backfill-vectors.mjs`) :
-l'homonyme Python remplissait `name_norm`/`heading_norm` avant que l'invariant n° 3 ne les
-fasse calculer au chargement, il est supprimé.
+- **R2** : Aucun nouvel outil MCP sans approbation explicite (enrichir les 10 existants).
+- **R3** : Delta de description d'outil ≤ 2 phrases ; consigner le delta de tokens.
+- **R4** : Ne jamais altérer le texte officiel ni son rendu ; toute aide éditoriale est visiblement étiquetée non officielle (`GARDE_FOU` imposé mot pour mot sur `find_relevant`). **Corollaire structuré (décision 001) :** toute étiquette qui borne un résultat voyage dans `structuredContent` comme champ obligatoire, jamais en prose seule (`outputSchema` reste absent de `tools/list`).
+- **R7** : *Fail open* toujours annoncé explicitement (étiquettes d'élargissement, relaxation et repérage sémantique).
+- **R8** : Chemins risqués derrière variables d'env (`RELAX_SEARCH`, `HYBRID_SEARCH`, `FEDERAL_CORPUS`) — rollback = flip de variable, sans `wrangler rollback` (bloqué par la suppression Durable Object `v2: QclawMCP`).
+- **R9** : Réponse de recherche ~≤ 800 tokens en régime normal.
+- **R10** : Une vérité, cinq surfaces locales + inter-dépôts (`tests/catalogue.test.mjs`) ; aucun fait vivant (lois, matières, articles, seuils de calibration) écrit à la main en prose.
 
-## Commandes
+---
 
-```bash
-npx wrangler dev --var MCP_TOKEN:a --var MCP_TOKEN_VEILLE:b   # dev local (D1 local ; PAS Vectorize)
-#   ^ les --var sont REQUIS depuis le défaut fermé (2026-08-27) : sans secret, /mcp refuse TOUT
-npx tsc --noEmit                                   # type-check (toujours avant commit)
-npm run evals                                      # contrôles bout-en-bout (le harnais imprime son total ; MCP_URL=… pour cibler)
-npm run eval                                       # harnais d'éval : 21 cas, recall@10/MRR (production)
-npm run eval:gate                                  # porte d'éval bloquante contre la référence (scripts/rafraichir-corpus)
-node eval/run.mjs --refresh-paths                  # revalide eval/cases.resolved.json et SORT — diff à VIDER avant de mesurer
-node scripts/journal.mjs [--local|--jours N|--tout] # dépouille search_log (lecture seule) : replis et reformulations
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q   # suite Python complète
-npm test                                           # vitest, DEUX projets (sans réseau, en CI)
-#   ^ « workerd » (test/**/*.test.ts, via wrangler.test.jsonc) et « node » (tests/**, scripts/**) :
-#     garde anti-dérive doc (R10), JS client de la page, détecteur de veille, plages, chemins…
-#     NE PLUS lancer ces fichiers avec `node --test` : ils sont passés à vitest le 2026-09-16
-#     et le lanceur de Node y répond « pass 0, fail 1 » sans rien dire du pourquoi.
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.ingest --law X --lang fr --apply-local
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.refresh --mode prepare --download --compare-mcp --verify-staging
-npm run backfill:incremental                       # synchronisation incrémentale + élagage Vectorize (BACKFILL_TOKEN requis)
-npx wrangler d1 migrations apply legislation --local|--remote   # bookmark Time Travel AVANT --remote
-npm run deploy                                     # migrations D1 d'abord PUIS wrangler deploy --var COMMIT:<sha> (scripts/deployer.mjs)
+## 4. Les 18 invariants critiques (chacun a déjà cassé quelque chose)
+
+1. **Ordre porteur de `laws.config.json`** : `_id_base()` dérive les plages d'ID de la position de chaque loi. Réordonner écrase les articles d'autres lois en silence. Toujours ajouter **en fin de liste** (`pipeline/tests/test_config.py`).
+2. **Miroir exact `sortKeyOf()` (`src/lib.ts`) ↔ `sort_key()` (`pipeline/model.py`)** : Indexe `articles.sort_key` (`test/ranges.test.mjs`). Les bornes de plage sont lues en base (`boundKey`).
+3. **Chargement monolingue sans écrasement** : L'UPSERT de `laws` préserve l'autre langue (`name_<autre>`, `consol_date_<autre>`, `official_cite_en`) ; `name_norm` et `heading_norm` sont calculés au chargement.
+4. **Chemins Irosoft propres à la langue** (`ga:l_cinquieme` FR / `ga:l_five` EN) : Toute traversée inter-langues passe par le pont des numéros d'articles (`translateDivisionPath` / `translatePaths`).
+5. **Aucun `LIKE`/`GLOB` sur `divisions.path`** : `_` est un joker `LIKE` et D1 plafonne la complexité des motifs ; employer l'intervalle lexicographique `[path+'-', path+'.')` (`subtreeClause`).
+6. **Plafond D1 ≤ 100 Ko UTF-8 et export/migrations** : Lots SQL plafonnés en octets UTF-8 ; lignes géantes via `INSERT` court + `UPDATE … ||` (`pipeline/load.py`). `wrangler d1 export` global échoue sur `articles_fts` (employer Time Travel avant `--remote`, ou `--table <t> --no-schema` en gérant les lignes > 100 Ko et `divisions.parent_id > id`). Toute migration destructive (`DROP`) se répète d'abord sur une D1 distante jetable provisionnée avec `schema.sql` + `migrations/` + `schema-decouverte.sql`.
+7. **Échelle de recherche et plancher `RELAX_MIN_LOO_TOTAL = 2`** : Ordre calibré : exact → élargissement corpus → leave-one-out (arrêt seulement si `total >= Math.min(2, limit)`) → OU+bm25, puis RRF avec Vectorize, puis sémantique seul sous `SEMANTIC_MIN_SCORE = 0,40` (`test/repere-echelle.test.ts`).
+8. **Vectorize** : Identifiants ≤ 64 octets (chemins hachés SHA-256/24 hex) ; index de métadonnées créés avant insertion ; scission récursive des lots d'embeddings sur erreur `3030`.
+9. **WAF de zone** : Bloque les rafales de `POST` de backfill sur le domaine personnalisé (`workers_dev: true` temporaire seulement pendant un backfill supervisé).
+10. **Sessions MCP** : Une session par lot dans `eval/mcp-client.mjs` ; transport serveur 100 % sans état.
+11. **Windows / Git Bash** : Les heredocs bash mangent un niveau de `\` ; toujours passer par un fichier script écrit proprement.
+12. **Calibration continue (`specificityFactor`, `coverageFactor`)** : Aucun seuil discontinu dépendant du nombre d'entités au corpus ni de la longueur de la requête dans `src/relevance.ts`.
+13. **`description` de matière (`taxonomy.json`) = surface d'appariement S1** : Zéro négation ni mention contrastive (« distincte de… »), uniquement le vocabulaire devant matcher.
+14. **Préfixe de mot borné (`MAX_SUFFIX = 4`)** : Couvre la flexion française sans laisser un préfixe court (« fin ») capter « financier ».
+15. **Plafond de diversité par matière (`MAX_PER_SUBJECT = 3`)** : Limite les candidats issus du seul signal S1 afin qu'une matière dense n'évince pas les codes.
+16. **Vérité terrain (`eval/cases.json`) ⛔** : Ne jamais modifier `eval/cases.json` ni le contenu éditorial (`taxonomy.json`, `curation/`) sans décision explicite de Jason (`--refresh-paths` revalide uniquement le cache dérivé `eval/cases.resolved.json`).
+17. **Corpus fédéral (`pipeline/parser_lims.py`)** : 16 lois + 2 règlements depuis `justicecanada/laws-lois-xml` (Code criminel, LIR et lois constitutionnelles exclus). Descendre explicitement `Body` puis `Schedule` — **jamais** `.//Section` (qui ingérerait `RelatedOrNotInForce` / `AmendedText`). `consol_date_*` provient obligatoirement du `<p id="assentedDate">` de la page Justice Canada (jamais de `lims:current-date` ni de `LastConsolidationDate`).
+18. **Libellé (`label`) de matière = motif de justification servi** : Vérifier l'étendue réelle de la division rattachée (`louage` général vs `louage résidentiel`, gardé par `tests/taxonomie.test.mjs`).
+
+---
+
+## 5. Secrets, sécurité et commandes de vérification
+
+- **Interdiction absolue** de lire, afficher, copier ou commiter : `cf.token`, `mcp.token`, `mcp-veille.token`, `backfill.token`, `*.token`, `mcp.url`, `.dev.vars`, `.env*`, `~/.gemini/config/*`.
+- **Interdiction absolue** d'exécuter `wrangler d1 delete` ou `wrangler deploy` seul (employer `npm run deploy` / `scripts/deployer.mjs`).
+- **`src/site.ts`** : Mise en forme Biome avec `complexity.noUselessStringRaw` désarmé intentionnellement sur `BOOT`/`JS` ; en dev local, vider `.wrangler/state/v3/cache` (jamais `d1`) pour observer un changement de page mis en cache sous `CACHE_KEY`.
+- **Veille mensuelle (`scripts/check-consolidation.mjs`)** : Lecture seule avec deux miroirs bornés (LégisQuébec + Justice Canada) et seuil de joignabilité évalué **par publieur** (`agregeParSeau`).
+
+```powershell
+npx.cmd wrangler types
+node scripts/wrangler-test-config.mjs --ecrire
+npx.cmd tsc --noEmit
+npx.cmd biome check .
+npm.cmd run audit
+npm.cmd test
+npx.cmd wrangler deploy --dry-run
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m unittest discover -s pipeline/tests -q
 ```
-
-## Secrets et jetons
-
-- `cf.token` (racine, gitignoré) : jeton API Cloudflare. **Ne JAMAIS l'afficher, le lire
-  en contexte, ni le supprimer** (consigne de Jason). Chargement inline uniquement :
-  `export CLOUDFLARE_API_TOKEN=$(tr -d ' \t\r\n' < cf.token)`.
-- Ne jamais lire, afficher ou copier non plus `~/.gemini/config/mcp_config.json` ni `~/.gemini/config/config.json`.
-- `backfill.token` (racine, gitignoré) : Bearer de la route `/admin/backfill-vectors`.
-- `mcp.token` (racine, gitignoré) : jeton du **connecteur claude.ai** (`src/auth.ts`).
-  Miroir du secret Worker `MCP_TOKEN` (`wrangler secret put MCP_TOKEN`) et du secret
-  GitHub du même nom (veille CI). Les clients Node le résolvent tout seuls
-  (`eval/mcp-client.mjs` : `MCP_TOKEN` puis `mcp.token`) — rien à exporter à la main.
-  N'ouvre QUE la lecture MCP : aucun droit sur le compte Cloudflare ni sur la base.
-  **Rotation = poser le nouveau secret, puis mettre à jour les 3 copies** (fichier local,
-  secret GitHub, URL du connecteur claude.ai — forme `…/mcp?key=<jeton>`).
-  À savoir : `?key=` voyage dans l'URL, donc dans le journal de requêtes de
-  l'observabilité — traiter `MCP_TOKEN` comme **déjà vu** par le pipeline de logs du
-  compte. Un jeton employé uniquement en `Authorization: Bearer` n'y apparaît jamais.
-- `mcp-veille.token` (racine, gitignoré) : jeton de la **veille de consolidation en CI**,
-  miroir du secret Worker `MCP_TOKEN_VEILLE` et du secret GitHub du même nom. Droits
-  IDENTIQUES au premier — il n'ouvre aucun outil de plus ; il n'existe QUE pour que les
-  deux clients se révoquent SÉPARÉMENT (même modèle que le connecteur jumeau
-  `jurisprudence`, §19 de sa spec). **DEUX porteurs seulement** (secret GitHub, fichier
-  local) — **et `MCP_TOKEN` n'est plus, lui non plus, un secret GitHub** : il en avait
-  TROIS (fichier local, secret GitHub, URL du connecteur) et n'était donc plus révocable
-  seul, ce que le découpage existait précisément pour éviter. **Ne jamais réutiliser la
-  valeur de `MCP_TOKEN`** : deux secrets de même valeur ne sont plus révocables
-  séparément, ce qui annule tout l'objet du découpage. Révocation =
-  `wrangler secret delete MCP_TOKEN_VEILLE`, une commande, sans effet sur le connecteur
-  claude.ai — au prix de la surveillance mensuelle jusqu'au remplacement.
-  **Précédent, 2026-09-16** : `MCP_TOKEN_ATHENA` occupait cette place et a été retiré. Le
-  clavardage de Pallas Athéna, son unique destinataire, avait été supprimé le 2026-09-02
-  (passage à un compte Claude for Work sous DPA) : c'était un identifiant de production
-  actif pour un appelant qui n'existait plus. Retenir la leçon plutôt que la date : un
-  jeton survit à son client sans que rien ne le signale.
-- Commits **signés** (gpgsign actif), footer `Co-Authored-By: Claude <noreply@anthropic.com>`
-  adapté au modèle courant. Un commit par sous-tâche ; arrêt pour revue humaine à chaque
-  fin de phase.
-
-## Invariants critiques (chacun a déjà cassé quelque chose)
-
-1. **L'ORDRE de `laws.config.json` est porteur** : `_id_base()` dérive les plages d'id de
-   la POSITION de chaque loi. Réordonner = toutes les clés primaires se décalent et la
-   prochaine ingestion écrase les articles d'autres lois, en silence. **On AJOUTE en fin
-   de liste, jamais ailleurs** (épinglé par `pipeline/tests/test_config.py`).
-2. **`sortKeyOf()` (src/lib.ts) et `sort_key()` (pipeline/model.py) sont des MIROIRS** de
-   la même colonne. Une divergence d'échelle vide silencieusement le mode plage de
-   `get_articles` (déjà arrivé : 36 lois sur 38 muettes). Les bornes de plage sont LUES
-   en base (`boundKey`) précisément pour amortir ce risque.
-3. **Un chargement monolingue ne touche pas l'autre langue** : l'UPSERT de `laws` exclut
-   `name_<autre>` / `consol_date_<autre>` (une passe FR écrasait le titre anglais).
-   `name_norm`/`heading_norm` sont calculés AU CHARGEMENT (une réingestion les remettait
-   à NULL et aveuglait les signaux S2/S3).
-4. **Les chemins Irosoft sont PROPRES À LA LANGUE** (`ga:l_cinquieme` FR / `ga:l_five` EN).
-   Tout chemin traversant les langues passe par le pont des numéros d'articles
-   (`translateDivisionPath`/`translatePaths`). Ne jamais supposer un chemin « canonique ».
-5. **Pas de LIKE/GLOB sur les chemins** : `_` est un joker LIKE, et D1 plafonne la
-   complexité des motifs (« pattern too complex » sur les chemins profonds du C.c.Q.).
-   Sous-arbres = intervalle lexicographique `[path+'-', path+'.')` (`subtreeClause`).
-6. **D1 refuse toute instruction > 100 Ko** : lots SQL plafonnés en OCTETS UTF-8
-   (pas en caractères), lignes surdimensionnées via INSERT + `UPDATE …||` par morceaux
-   (`pipeline/load.py`). `wrangler d1 export` SANS argument est BLOQUÉ par la table virtuelle
-   `articles_fts` → sauvegarde = **Time Travel** (bookmark consigné avant migration).
-   **Nuance mesurée le 2026-09-16** : `d1 export --table <t> --no-schema` PASSE, table par
-   table — c'est ce qui a permis de copier la base vers `legislation` sans réingérer
-   (74 Mo pour la seule table `articles`). Deux pièges alors, tous deux rencontrés :
-   l'export émet UN `INSERT` par ligne, donc une ligne >100 Ko produit une instruction que D1
-   refuse (une seule dans le corpus, 148 297 octets) ; et il sort en ordre d'`id` CROISSANT,
-   or `divisions.parent_id` se référence elle-même et deux lignes ont un parent d'id PLUS
-   GRAND — le `PRAGMA defer_foreign_keys` de l'export ne couvrant qu'UNE transaction et
-   wrangler découpant en lots, l'import échoue en clé étrangère. Remède dans les deux cas :
-   `INSERT` court puis `UPDATE … ||` / `UPDATE … SET parent_id` en fin de fichier.
-   Migration destructive : voir « Répéter une migration DESTRUCTIVE », plus bas.
-7. **Échelle de recherche (ordre tranché par l'éval, ne pas réordonner sans re-mesurer)** :
-   exact → élargissement corpus → leave-one-out → OU+bm25, PUIS fusion RRF avec les
-   vecteurs ; le sémantique SEUL est l'ultime barreau, sous plancher
-   `SEMANTIC_MIN_SCORE=0,40` **calibré par mesure** (réel EN→FR 0,525 ; charabia 0,303).
-   Tout chemin de repli est ÉTIQUETÉ dans la réponse et journalisé (`search_log`).
-   **Un barreau n'arrête la descente que s'il REND ASSEZ** (`RELAX_MIN_LOO_TOTAL`, posé le
-   2026-09-17) : l'arrêt au premier barreau non vide était le défaut, pas la règle. Mesuré —
-   « vice caché garantie qualité » rendait UN résultat par leave-one-out (p-40.1 art. 53.1,
-   sur les automobiles) et masquait le OU, qui met C.c.Q. 1726 en tête.
-   **La valeur est 2, et le piège est de la croire réglable vers le haut** : le cas fondateur
-   de l'art. 490 C.p.c. rend 8 résultats SUR LE CORPUS mais seulement **2** restreint au
-   C.p.c. — un plancher à 3 le faisait donc basculer au OU (cpc 490 restait en tête, mais sa
-   liste de 2 articles devenait 579). Le RENDEMENT D'UN BARREAU DÉPEND DE LA PORTÉE : mesurer
-   un cas sans `law` ne dit rien du même cas avec `law`. Pour lire le rendement réel d'un
-   leave-one-out sans instrumenter le serveur, abaisser `limit` à 1 — le `Math.min` du
-   plancher le laisse alors passer, et `total` livre son compte.
-   Les deux cas sont épinglés ENSEMBLE (`test/repere-echelle.test.ts` hors ligne,
-   `tests/evals.mjs` contre le serveur) : c'est le couple qui prouve que le plancher est bien
-   placé, jamais l'un seul.
-8. **Vectorize** : ids ≤ 64 octets (chemins de divisions hachés SHA-256/24hex) ; index de
-   métadonnées créés AVANT toute insertion (pas rétroactifs) ; fenêtre bge-m3 consommée
-   en lot × PLUS LONG texte (rembourrage) → l'embed du backfill se scinde récursivement
-   sur l'erreur 3030, ne jamais revenir à une estimation fixe.
-9. **Le WAF de la zone bloque les rafales de POST** non-navigateur sur le domaine
-   personnalisé. Backfill de vecteurs : activer temporairement `workers_dev: true`,
-   passer par `legislation.jpoirierlavoie.workers.dev`, refermer ensuite.
-10. **Une session MCP par lot de vérifications** (`eval/mcp-client.mjs`).
-    L'Inspector CLI sert aux contrôles ponctuels seulement.
-11. **Environnement Windows/Git Bash : les heredocs bash retirent un niveau de `\`**.
-    Tout patch contenant des barres obliques inverses passe par un FICHIER script
-    (outil Write) puis exécution — jamais par heredoc.
-12. **Toute calibration doit dégrader EN DOUCEUR quand le corpus grandit** : un seuil
-    (« ≤ N entités → bonus, sinon rien ») a une position qui dépend de la taille du
-    corpus. En passant de 47 à 78 lois, « récusation » a franchi le seuil de spécificité
-    et le bon chapitre du C.p.c. a disparu du top 8 — sans erreur. Les pondérations sont
-    désormais continues (`specificityFactor`). Se méfier de tout `<=` sur un décompte
-    d'entités dans `src/relevance.ts`. **Second exemplaire, 2026-09-17** : `coverageFactor`
-    pèse la part de la requête qu'un candidat explique. Il est continu pour la même raison —
-    un seuil aurait une position dépendant de la LONGUEUR de la requête, ce qui est pire
-    encore qu'une dépendance à la taille du corpus, car l'usager la fait varier à chaque
-    question.
-13. **Une `description` de matière est une SURFACE D'APPARIEMENT, pas de la prose.** S1
-    apparie des tokens et ignore la négation : écrire « distincte de la procédure civile »
-    dans la matière *Procédure pénale* lui a fait capter « appel civil » et évincer le
-    C.p.c. Jamais de mention contrastive ni de « à ne pas confondre avec » dans une
-    description ; n'y mettre que le vocabulaire que l'on VEUT voir matcher.
-14. **L'appariement par préfixe de mot est BORNÉ (`MAX_SUFFIX = 4`)** : sans plafond de
-    suffixe, un token de 3 lettres avale un mot de 9 — « fin » captait « financier » et
-    noyait « clause non-concurrence fin d'emploi » sous tout le secteur financier. Le
-    plafond couvre la flexion française (-s, -es, -aux, -ment, -tion) ; l'élargir revient
-    à rouvrir cette classe de faux positifs.
-15. **Une matière est UNE preuve, pas N candidats** (`MAX_PER_SUBJECT = 3`) : S1 injecte
-    un candidat par entité mappée, tous au même score. *Bâtiment et construction* (7 lois)
-    remplissait le top 8 à elle seule et en chassait le C.c.Q. Le plafond de diversité ne
-    s'applique QU'aux candidats sans autre signal (S2/S3/S4). Toute matière dépassant
-    ~5 entités mappées est un candidat à ce défaut : le vérifier à l'éval, pas au jugé.
-16. **`eval/cases.json` est la vérité terrain de Jason** (⛔) : proposer les évolutions,
-    ne jamais modifier de son propre chef. Idem tout contenu éditorial juridique
-    (taxonomie, gazetteer, headnotes — drapeau `validated`, phase 3 v2).
-17. **Le corpus FÉDÉRAL a son PROPRE parseur, et ses propres pièges** (18 textes sur 97,
-    XML LIMS de Justice Canada, `pipeline/parser_lims.py` — rien à voir avec l'EPUB Irosoft).
-    **JAMAIS `root.iter('Section')` ni `findall('.//Section')`** : mesuré sur le Code
-    criminel, 294 blocs `RelatedOrNotInForce` et 270 `AmendedText` contiennent des `Section`
-    portant les MÊMES NUMÉROS que le corps — du droit parallèle NON EN VIGUEUR. Une
-    ingestion naïve produirait des doublons de numéros dont l'un est inapplicable : faux,
-    servi, silencieux. Le parseur descend explicitement `Body` puis chaque `Schedule`, et
-    REFUSE tout enfant direct de `Body` jamais observé (il lève plutôt que de deviner).
-    **TROIS dates, dont une piège.** `laws.consol_date_*` vient de la **PAGE** de Justice
-    Canada (`fetch_consolidation_federale`, bloc `<p id="assentedDate">`), PAS du XML, et
-    l'échec de lecture est FATAL — un repli mettrait deux sémantiques dans la même colonne.
-    `lims:current-date` SOUS-DÉCLARE la fraîcheur (mesuré : *Loi sur le droit d'auteur*
-    annoncée à jour au 2025-07-24 dans le XML quand la page donne 2026-07-21, près d'un an).
-    `LastConsolidationDate` du lookup ne doit JAMAIS servir : uniforme sur toutes les
-    entrées, c'est la date de l'INSTANTANÉ et non celle de la loi. Seul
-    `laws.last_amended` ← `lims:lastAmendedDate` vient bien du XML.
-    **`LIMS_REF` vaut `HEAD` par défaut** : employer un SHA pour toute ingestion que l'on
-    veut pouvoir rejouer à l'identique — sinon on réingère du droit différent sans le savoir.
-    **Réserve consignée le 2026-09-17** : la spec exigeait d'exclure les `Schedule`
-    `@spanlanguages="yes"` (88 des 92 annexes de DORS/98-106, formulaires bilingues où le
-    fichier français porte du texte anglais) de `articles_fts` et de Vectorize. Ce n'est PAS
-    implémenté — et le risque ne s'est pas matérialisé, parce que le contenu de ces annexes
-    n'a jamais été ingéré en articles : 14 articles seulement sous `fs:%` en FR, tous du
-    Tarif A en français authentique, et les sondes « whereas », « hereby », « sworn » rendent
-    ZÉRO. À rouvrir SI l'on ingère un jour ces annexes plus profondément.
-    **PORTÉE DU CORPUS FÉDÉRAL — décisions arrêtées, à ne pas rouvrir** (rapatriées le
-    2026-09-17 de `SPEC-corpus-federal.md` §0-§1 avant son archivage ; elles n'existaient
-    nulle part ailleurs, et sans elles la question « pourquoi pas le Code criminel ? » se
-    rouvre à chaque extension) : **une seule base, un seul serveur, les dix outils
-    existants** — aucun serveur « Législation du Canada » séparé, et R2 tient. **16 lois
-    fédérales + 2 règlements**, et **le Code criminel est EXCLU** — attention, il apparaît
-    aussi plus haut dans cet invariant comme TERRAIN DE MESURE d'un piège de parseur : c'est
-    un texte qu'on a mesuré, pas un texte qu'on sert. Également **hors portée** : la *Loi de
-    l'impôt sur le revenu*, les lois constitutionnelles (publiées hors `fra/lois`), les
-    3 894 autres règlements, les lois annuelles, le point-in-time historique.
-    **Canal d'acquisition** : le dépôt Git `justicecanada/laws-lois-xml`, en clone partiel
-    (`--filter=blob:none`) hors de l'arbre du dépôt. **Ne PAS parser le HTML de
-    `lois.justice.gc.ca`, ne PAS employer les ZIP du portail de données ouvertes** — seule
-    la page sert, et uniquement pour la DATE (voir les trois dates ci-dessus).
-18. **Le LIBELLÉ d'une matière est un MOTIF SERVI, pas une étiquette de rangement.**
-    `find_relevant` rend « matière : <libellé> » comme la preuve de son rapprochement : un
-    libellé plus étroit que la division rattachée produit un motif FAUX, servi à un modèle,
-    sans qu'aucune erreur ne survienne. Mesuré le 2026-09-17 : le chapitre « DU LOUAGE » du
-    C.c.Q. (art. 1851 à 1978) portait la matière **« Louage résidentiel »**, et elle seule —
-    or ses Sections I à III sont le régime général du BAIL COMMERCIAL, et l'art. 1851 dit
-    lui-même « le louage, aussi appelé bail ». Vérifié : 1851, 1863 et 1883 — définition,
-    recours en résiliation, résiliation pour défaut de paiement — sont TOUS hors de la
-    Section IV, la seule qui soit propre au logement. Corrigé par une matière `louage`
-    distincte ; gardé par `tests/taxonomie.test.mjs`, qui refuse qu'une même matière couvre
-    le chapitre ET la section du logement, et qu'un libellé résidentiel coiffe le chapitre.
-    Corollaire : avant de rattacher une division, lire jusqu'où elle VA, pas son titre.
-    (Invariant 13 régit la `description`, surface d'appariement ; celui-ci régit le `label`,
-    surface de JUSTIFICATION. Les deux dérivent séparément.)
-
-## Règles de conception actives (héritées du plan v2, toujours en vigueur)
-
-- **R2** : AUCUN nouvel outil MCP sans approbation explicite (enrichir les 10 existants).
-- **R3** : delta de description d'outil ≤ 2 phrases ; consigner le delta de tokens.
-- **R4** : ne jamais altérer le texte officiel ni son rendu ; toute aide éditoriale est
-  visiblement étiquetée non officielle. **Corollaire structuré (décision 001, 2026-07-23) :
-  toute étiquette qui BORNE un résultat voyage DANS `structuredContent` comme champ
-  obligatoire, jamais en prose seule** — un client peut jeter la prose et garder l'objet
-  typé, et l'étiquette tomberait sans qu'aucun test n'échoue. Déjà le cas pour `fallback`
-  (R7) ; s'impose à la phase 3 v2 (headnotes, drapeau `validated`) avant toute mise en
-  service. `outputSchema` reste ABSENT à dessein (coût récurrent de tools/list + un schéma
-  qui dérive des gabarits est un contrat menti) ; ne le revisiter que pour un consommateur
-  nommé qui VALIDE.
-- **R10 — UNE VÉRITÉ, CINQ SURFACES (dérive de documentation).** Mise en œuvre de
-  l'**obligation préalable** en tête de ce fichier : outils, descriptions, schéma,
-  `README.md`, page publique. Un outil ou une aide au repérage vit dans `src/tools.ts` (ce
-  que le modèle reçoit), `catalogue.json` (ce que le public lit) et `README.md` (ce que le
-  dépôt annonce) ; tout changement de nom, de titre, de sémantique, de signal, de barreau de
-  repli ou de constante de calibration se répercute sur TOUTES les surfaces concernées, dans
-  le même commit. **Le coût en tokens n'exempte de rien.**
-  **Aucun fait vivant écrit à la main** : un décompte (lois, matières, articles, contrôles)
-  se CALCULE (D1, JSON versionné) ou s'IMPORTE (`WEIGHTS`, `SEMANTIC_MIN_SCORE`) — jamais
-  recopié dans de la prose. Un fait *historique daté* reste licite AVEC sa date
-  (« mesuré à 38 lois : 36 en avaient », « recall@10 40 % → 88 % → 98 % »).
-  **Preuve que la consigne seule ne suffit pas** : `resolve_reference` a servi aux
-  modèles « Voir les 38 textes disponibles » alors que le corpus en comptait 79 ; le README
-  annonçait 3 tarifs sur 4 ; `docs/ARCHITECTURE-NOTES.md` est resté à 38 lois / 28 matières.
-  Tout cela sans qu'aucun test n'échoue. Garde : `tests/catalogue.test.mjs` (hors réseau,
-  en CI) — parité outils ↔ catalogue dans les deux sens, bilinguisme réel, interdiction des
-  titres en dur et des valeurs de calibration recopiées, décomptes du README épinglés sur
-  les JSON versionnés. **Ce que RIEN n'attrape** : une description reformulée dont la prose
-  de page devient fausse sans qu'aucune clé ne bouge — seule la relecture humaine le voit.
-  R3 et R9 ne s'appliquent PAS à `catalogue.json` (il n'entre dans aucune réponse MCP) ;
-  R4 si (aide éditoriale, visiblement non officielle). L'invariant 13 non plus : la prose de
-  page n'est pas une surface d'appariement, contrairement aux descriptions de `taxonomy.json`.
-- **R7** : fail open, toujours DIT (étiquettes d'élargissement/relaxation/sémantique).
-- **R8** : chemins risqués derrière variables d'env (`RELAX_SEARCH`, `HYBRID_SEARCH`) —
-  rollback = flip de variable, pas revert.
-- **R9** : réponse de recherche ~≤ 800 tokens en régime normal.
-- La description garde-fou de `find_relevant` est IMPOSÉE mot pour mot (const `GARDE_FOU`).
-
-## Procédures sûres
-
-**Modifier le Worker** : coder → `tsc` → `npm test` → `wrangler dev` + contrôles locaux →
-`npm run evals` → pousser sur `main` (déploiement continu via `.github/workflows/deploy.yml`
-dans l'environnement `production`, ou repli local via `npm run deploy` /
-`scripts/deployer.mjs` qui exécute les migrations D1 avant `wrangler deploy --var COMMIT:<sha>`) →
-re-vérifier en production (`/health` annonce désormais le `commit` déployé ; `.github/workflows/verifier-deploiement.yml`
-vérifie chaque jour qu'aucun écart ne subsiste) → `npm run eval` si le comportement de recherche
-a changé — **porte : aucune régression sur les 21 cas**. Ne jamais appeler `npx wrangler deploy`
-seul, ni déclencher `pipeline/` automatiquement en CI ; toute migration destructive reste répétée
-sur une D1 distante jetable avec bookmark Time Travel avant fusion sur `main`.
-
-**Contrôle d'accès de `/mcp`** (`src/auth.ts` + `@poirierlavoie/mcp-socle`) : **DEUX jetons** (`MCP_TOKEN` pour le
-connecteur claude.ai, `MCP_TOKEN_VEILLE` pour la veille de consolidation en CI), aux droits
-IDENTIQUES, chacun accepté sous les TROIS mêmes formes. Tableau LITTÉRAL (`NOMS_SECRETS` dans `src/auth.ts`),
-pas de convention de nom balayée sur `env` : un nom mal orthographié se poserait sans
-erreur et n'ouvrirait rien. Appariement SHA-256 à temps constant SANS COURT-CIRCUIT (`ouvrir` dans le socle) et **on ne journalise
-ni ne renvoie jamais lequel a servi** — les deux refus sont le même 404. `search_log` reste
-ANONYME par décision : il n'existe aucune attribution par appelant, ni en base ni en log.
-**La forme du connecteur claude.ai est `?key=<jeton>`** — mesurée, pas supposée : le
-segment de chemin `/mcp/<jeton>` a ÉCHOUÉ en pratique (« Impossible de joindre ») alors
-qu'une session complète y passe en curl, tandis que `?key=` a fonctionné du premier coup.
-`Authorization: Bearer` reste la forme des clients maîtrisés (Claude Code, évals, veille CI) ;
-le segment de chemin est conservé, testé, mais n'est la forme de personne aujourd'hui.
-
-Deux constats de production à ne pas réapprendre à la dure (2026-07-23) :
-- **Le slash final DOIT être toléré.** `/mcp/<jeton>/` renvoyait 404 et ce 404 poussait le
-  connecteur vers la découverte OAuth, qui échouait sur l'enregistrement dynamique
-  (« Impossible de s'inscrire auprès du service de connexion »). Pour un client MCP un refus
-  n'est JAMAIS neutre : il est lu comme « ce serveur demande une authentification ».
-- **Le connecteur émet des `GET /mcp` SANS aucun porteur** (constaté au `wrangler tail` :
-  les POST portent `?key=`, les GET arrivent nus). Ces GET — le flux SSE serveur→client,
-  optionnel dans le transport streamable sans état — sont donc refusés en 404 (405 avec porteur) et le connecteur
-  retombe en POST seul, sans perte pour les 10 outils (aucune notification serveur→client).
-  Ne pas « réparer » ça en ouvrant les GET : ce serait un trou.
-
-Trois points à ne pas défaire :
-(1) la vérification s'exécute dans `fetch` avant tout traitement applicatif (D1, Workers AI) —
-un appel non autorisé ne coûte presque rien ; (2) un refus répond **404, jamais 401** —
-un 401 annonce un serveur MCP et déclenche la découverte OAuth des clients ; (3) **l'endpoint
-est FERMÉ PAR DÉFAUT** (2026-08-27, aligné sur le jumeau) — aucun secret configuré ⇒ tout
-est refusé en 404 (`NOMS_SECRETS` dans `src/auth.ts`). **Supprimer les secrets `MCP_TOKEN*`
-ne rouvre JAMAIS `/mcp`** : une liste de secrets vide rejette toutes les requêtes. En cas de
-désynchronisation de jeton, le rétablissement consiste à poser ou remplacer un secret valide
-(`npx wrangler secret put MCP_TOKEN`) puis à aligner le porteur du client (`Authorization: Bearer <jeton>`
-ou `…/mcp?key=<jeton>`). Ne **pas** tenter non plus `npx wrangler rollback` au travers de la
-migration Durable Object `v2` (`deleted_classes: ["QclawMCP"]` dans `wrangler.jsonc`) : Cloudflare
-refuse tout retour arrière franchissant une suppression de classe DO ; tout correctif de niveau
-code passe par un **redéploiement avant** compatible avec `v2` (`npm run deploy` ou fusion sur `main`).
-Corollaire local : `wrangler dev` exige `--var MCP_TOKEN:… --var MCP_TOKEN_VEILLE:…`.
-Ordre de rotation :
-**pour une rotation réellement sans coupure**, ajouter temporairement un créneau de transition dans
-`NOMS_SECRETS` (déployer puis `npx wrangler secret put <CRÉNEAU_TRANSITOIRE>`), basculer le connecteur
-sur ce porteur transitoire et vérifier qu'il répond `200`, remplacer ensuite `MCP_TOKEN`
-(`npx wrangler secret put MCP_TOKEN`), rebasculer le connecteur sur le nouveau `MCP_TOKEN` (vérifier `200`),
-puis retirer le créneau transitoire ; **sans créneau transitoire (interruption contrôlée)**, effectuer la
-rotation à froid sans émettre aucun appel client entre `npx wrangler secret put MCP_TOKEN` et la mise à
-jour immédiate de l'URL/en-tête du connecteur, car tout appel intermédiaire avec l'ancien jeton recevrait un `404`.
-
-**Pourquoi éviter toute fenêtre de 404 (incident historique du 2026-07-25, avant le défaut fermé)** :
-exposer un connecteur `claude.ai` à un 404 sur `/mcp` a déclenché une découverte OAuth suivie
-d'un enregistrement dynamique avorté, laissant le connecteur coincé côté client. À l'époque où
-l'endpoint était encore ouvert sans secret, supprimer `MCP_TOKEN` l'avait rouvert ; **depuis le
-passage au défaut fermé (2026-08-27) et le retrait de `QclawMCP` (`v2`), cette ancienne recette est
-inopérante** : supprimer tous les `MCP_TOKEN*` maintient le 404 intégral, et `wrangler rollback`
-ne peut pas franchir la migration `v2`. En cas de connecteur `claude.ai` coincé aujourd'hui,
-vérifier qu'au moins un secret de `NOMS_SECRETS` est actif (`npx wrangler secret list`), poser au
-besoin un secret connu (`npx wrangler secret put MCP_TOKEN`), recréer le connecteur client avec le
-porteur exact et, si un changement de code est requis, pousser un commit correctif vers l'avant.
-
-**Un 404 de ce serveur est AMBIGU pour un client à état** : le transport rend lui aussi 404
-sur une session qu'il ne détient plus. Le client de Pallas Athéna purge sa session sur 404,
-donc un jeton révoqué s'y présente comme un battement de session — visible (refus en
-français à chaque tour), jamais silencieux, mais mal diagnostiqué. Trancher au curl.
-
-*(2026-11-13)* Ajout de la compatibilité et découvrabilité **Google Antigravity** (`plugin.json`,
-`mcp_config.json`, `assets/logo.svg`), **Gemini CLI** (`gemini-extension.json` avec
-`"contextFileName": []`), **Gemini web** (`https://gemini.google.com` et
-`https://aistudio.google.com` admises par défaut dans CORS avec `Mcp-Method`, `Mcp-Name`,
-`Mcp-Session-Id` et `Last-Event-ID` en pré-vol `2026-07-28`), fiche publique SEP-2127
-(`GET /mcp/server-card` dérivée de `src/serveur.ts` et soumise à `MCP_ENABLED`), et
-`GEMINI.md` (< 24 000 octets, synthèse d'espace de travail renvoyant à `CLAUDE.md`). Parité
-des versions, descriptions, manifestes et taille de `GEMINI.md` verrouillée par
-`tests/catalogue.test.mjs`, et routes/CORS/SEP-2127 vérifiés dans `test/routeur.test.ts`.
-*(2026-11-14)* Ajout du déploiement continu automatisé via `.github/workflows/deploy.yml`
-(`environment: production`, `scripts/deployer.mjs`, provenance du commit exposée par `GET /health`
-et `wrangler.jsonc` `COMMIT`) ainsi que la sentinelle quotidienne sans secret
-`.github/workflows/verifier-deploiement.yml` sur `legislation.poirierlavoie.ca`.
-
-**Répéter une migration DESTRUCTIVE avant de la jouer en production.** Une migration qui
-`DROP` quoi que ce soit — au premier chef `articles_fts`, table virtuelle à CONTENU EXTERNE —
-se répète d'abord sur une base D1 **distante** jetable. **Un vert local ne prouve rien** :
-miniflare accepte du DDL que le D1 distant REFUSE (il filtre des fonctions, `sqlite_version()`
-entre autres). C'est mesuré, et c'est ce constat qui a fait créer une base de recette le
-2026-09-11 avant d'appliquer 0004 sur 49 255 articles.
-
-1. **L'approvisionner par `schema.sql` + TOUTES les migrations + `schema-decouverte.sql`.**
-   Sans le troisième, ce N'EST PAS un miroir et son vert est FAUX. Mesuré le 2026-09-16 sur
-   la recette de 2026-09-11 : son `laws` portait **12 colonnes au lieu de 17** (`fonction`,
-   `forum`, `scope_fr`, `parent_law_id`, `name_norm` manquaient — ce sont des ALTER de
-   `schema-decouverte.sql`). La répétition avait donc tourné sur une table amputée, et son
-   `rebuild` + `integrity-check` sur ZÉRO ligne quand la production en avait 49 255.
-2. **Comparer la recette à la production AVANT de conclure** : `pragma_table_info` table par
-   table, pas le texte de `sqlite_master` (qui porte les commentaires du schéma et diverge
-   sans conséquence). C'est le seul contrôle qui aurait vu l'amputation ci-dessus.
-3. **La supprimer DANS LA MÊME SESSION.** Créer coûte une seconde ; c'est l'oubli du ménage
-   qui laisse des orphelins. Celle de 2026-09-11 a servi 46 secondes, survécu cinq jours et
-   n'a été supprimée que le 2026-09-16 ; son second but déclaré (« la phase 4 en aura
-   besoin ») n'a jamais eu lieu.
-4. **La supprimer PAR UUID, et JAMAIS depuis un agent.** `wrangler d1 delete` affiche
-   « About to delete… » puis appelle `confirm2("Ok to proceed?")` SANS options
-   (`cli.js:238608`) ; `confirm2` pose `fallbackValue = true` et le renvoie hors contexte
-   interactif (`cli.js:129876`), « interactif » valant `stdin.isTTY && stdout.isTTY`
-   (`cli.js:36753`). Un agent, un `| tee`, une redirection : **la confirmation s'auto-répond
-   OUI** — constaté en vrai le 2026-09-16. L'UUID supprime en plus le risque de frappe : un
-   nom de recette n'est qu'à quelques caractères du nom de production, et `d1 delete DB`
-   résout le binding depuis `wrangler.jsonc`, donc vise la PRODUCTION.
-
-**Prochain déclencheur, déjà écrit dans le dépôt** : indexer une headnote suppose une SECONDE
-colonne pondérée dans `articles_fts`, donc `DROP` + `CREATE VIRTUAL TABLE` (en-tête de
-`migrations/0003_curation.sql`, §3). C'est la prochaine fois que cette procédure servira.
-
-**✅ RÉSOLU (2026-11-17) — `c-73.2-r.6`, deux divisions au même chemin.**
-Une vérification directe de la consolidation HTML pleine page sur LégisQuébec (D. 297-2010,
-FR et EN) a établi que les deux « CHAPITRE II » / « CHAPTER II » consécutifs figurent dans
-le règlement officiel lui-même — ce n'est pas un artefact de page de continuation Irosoft :
-
-    page3 : ga:l_ii « CHAPITRE II — COMITÉ DE RÉVISION DES DÉCISIONS DU SYNDIC
-                      — SECTION I COMPOSITION — art. 6–7 »
-    page4 : ga:l_ii « CHAPITRE II — RÈGLES DE FONCTIONNEMENT — art. 8–13 »
-
-Un balayage complet des 158 EPUB de LégisQuébec (2026-11-17) a confirmé que `c-73.2-r.6`
-(FR et EN) est le seul texte du corpus à porter un identifiant de division en doublon.
-
-SOLUTION RETENUE : désambiguïsation des chemins en doublon par suffixe `__<k>` (`ga:l_ii__2`,
-avec propagation du préfixe désambiguïsé aux descendants DOM) dans `pipeline/parser.py`,
-verrouillée hors ligne par `pipeline/tests/test_duplicate_divisions.py`, `test_paths.py` et
-`tests/paths.test.mjs`. Fusionner le second chapitre en une « SECTION II » synthétique
-aurait violé R4 en altérant les intitulés officiels ; le suffixe `__` préserve les intitulés
-verbatim, évite le `_` simple déjà utilisé par les divisions décimales (`gd:l_ii_2`), reste
-un seul segment pour `SEG_SPLIT`, isole les sous-arbres sous `subtreeClause` et corrige
-l'écrasement silencieux du `parent_id` de `ga:l_ii-gb:l_i` dans `load.prepare` tout en
-levant le blocage de `validate.py`. Note : D1 et Vectorize en production conservent les
-lignes antérieures au correctif pour `c-73.2-r.6` jusqu'à la prochaine passe `ingest` +
-`backfill-vectors`.
-
-**Reconstruire une base à partir de rien** (nouvel environnement, D1 de CI, dev local
-vierge). `schema.sql` décrit l'ÉTAT INITIAL et les migrations s'appliquent PAR-DESSUS :
-c'est pourquoi il porte encore `articles.consol_date` (retirée par 0002) et PAS
-`search_log` (créée par 0001). Ne jamais éditer `schema.sql` comme s'il décrivait l'état
-COURANT : SQLite n'a pas de « DROP COLUMN IF EXISTS », donc une colonne retirée des DEUX
-côtés rend la migration injouable sur une base neuve (arrivé avec 0002, vu à l'audit).
-
-```bash
-npx wrangler d1 execute legislation --local --file=./schema.sql   # 1. état initial
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.migrate --target local
-npx wrangler d1 migrations apply legislation --local              # 3. 0001, 0002, …
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.ingest --all --apply-local
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.load --target local
-```
-
-Épinglé en CI (étapes 1 et 3, sur une base jetable) : c'est le SEUL contrôle qui parte du
-vide — le harnais d'éval ne teste que contre une base déjà peuplée.
-
-**Ajouter une loi** : (1) ajouter EN FIN de `laws.config.json` (+ `ORDRE_ATTENDU` du
-test) ; (2) dry-run de reconnaissance (`pipeline/discovery/recon.py`) — arrêt revue si
-balisage inconnu ; (3) `ingest --law X` local puis remote (staging→bascule, invariants de
-scan) ; (4) `discovery/load.py` + `relations.py` (les deux cibles) ; (5) passe éditoriale
-de Jason sur `taxonomy.json` (sans mappage, la loi est invisible au signal S1) ;
-(6) backfill vecteurs (procédure §6 du rapport phase 2) ; (7) `discovery/verify.py` —
-comptes de `subjects`/`subject_map`/`law_relations` et résolution de chaque
-`division_path` ; (8) mettre à jour les contrôles épinglés (« 78 lois »…) ;
-(9) éval avant/après.
-
-**Rafraîchissement automatisé à porte humaine (deux étapes) :**
-[`.github/workflows/rafraichir-corpus.yml`](.github/workflows/rafraichir-corpus.yml) +
-[`pipeline/refresh.py`](pipeline/refresh.py) remplacent l'ancien rafraîchissement tout-ou-rien :
-le cron de `wrangler.jsonc` reste inactif (aucun handler `scheduled`) et aucune planification
-automatique n'écrit en production.
-- **Étape 1 (`preparer`, lecture seule)** : télécharge et parse les EPUB/XML LIMS en staging local,
-  compare contre l'état servi en production (`compare-mcp`), vérifie l'intégrité des divisions/chemins
-  et publie un artefact JSON + commentaire récapitulatif sans toucher D1 ni Vectorize.
-- **Étape 2 (`appliquer`, sur `workflow_dispatch` `mode=appliquer` + `confirmer=APPLIQUER` dans
-  `environment: production`)** : crée un signet Time Travel D1, charge uniquement les lois modifiées
-  via `refresh.py` (mode `apply`, avec reconstruction FTS5 bornée si du contenu change), recharge la
-  couche découverte (`pipeline/discovery/load.py`), exécute `npm run backfill:incremental` (synchronisation
-  incrémentale Vectorize via `vector_state` + élagage des vecteurs orphelins) et bloque sur la porte
-  d'évaluation (`npm run eval:gate`).
-- **Configuration requise une seule fois (`environment: production`) :** enregistrer
-  `BACKFILL_TOKEN` côté GitHub (`gh secret set BACKFILL_TOKEN --env production -R jpoirierlavoie/MCP-Legislation < backfill.token`)
-  ; si la règle WAF Cloudflare du domaine personnalisé bloque les rafales sur `/admin/backfill-vectors`,
-  ajouter une exception ciblée sur ce chemin authentifié plutôt que de basculer `workers_dev`.
-
-**Veille de consolidation** (`.github/workflows/veille-consolidation.yml` +
-`scripts/check-consolidation.mjs`) : job **en LECTURE SEULE**, mensuel, qui compare la
-date « À jour au » de chaque loi **sur son publieur officiel** à `consol_date_*` en D1
-(lue via `list_laws` sur l'endpoint MCP — jeton de LECTURE `MCP_TOKEN` en secret
-GitHub, toujours AUCUN secret Cloudflare) et ouvre/actualise une
-issue étiquetée `veille-consolidation` quand un rafraîchissement est dû (issue close
-automatiquement à la résolution). Il DÉTECTE, il ne bascule jamais.
-**DEUX publieurs, donc DEUX miroirs**, chacun fidèle à sa moitié Python et borné à sa
-bannière : `extractConsolidation` ↔ `fetch_consolidation` (LégisQuébec, blocs `text-end`) ;
-`extractConsolidationFederale` ↔ `extrait_consolidation_federale` (Justice Canada, le seul
-`<p id="assentedDate">`). Ce second bloc porte **deux** dates — « à jour » et « dernière
-modification » — donc borner la portée ne suffit pas : c'est l'ancrage sur la phrase qui
-les distingue, et un test compare les deux regex **lues en source**.
-Une page atteinte mais illisible est un signal ACTIONNABLE (le miroir a peut-être cassé),
-jamais un null confondu avec une panne réseau — verrouillé par
-`scripts/check-consolidation.test.mjs` (26 contrôles, en CI). Deux signaux SÉPARÉS
-depuis le 2026-07-23 : `drift` (dérive corpus) et `unreachable` (blocage réseau) —
-le titre de l'issue dit lequel a parlé ET **quel publieur** a bloqué (sortie
-`sources_bloquees`), et elle ne clôt que si les DEUX sont éteints
-(une page injoignable est une loi NON VÉRIFIÉE, pas une loi à jour).
-**Le seuil de joignabilité s'applique PAR PUBLIEUR** (`agregeParSeau`, 2026-09-14) :
-agrégé, un blocage TOTAL du fédéral pesait 36/194 = 18,6 %, donc sous les 25 %, donc le job
-passait vert pendant que 18 textes sur 97 n'étaient vérifiés par rien. Défauts trouvés par
-revue adversariale (2026-07-21 et 2026-09-14) et corrigés avant le commit.
-
-## ⏸️ AVANT D'OUVRIR AU PUBLIC — deux décisions qui restent à Jason
-
-Le contrat servi a été corrigé le 2026-09-17 (portée, noms d'outils, sélection fermée,
-avertissement, refus de `get_articles`, fuite du message moteur) et gardé par
-`tests/contrat-public.test.mjs`. **Deux points ne se corrigent PAS en code** :
-
-1. **LE JOURNAL CONSERVE LES REQUÊTES EN CLAIR, SANS DURÉE.** `search_log` enregistre le
-   texte libre de chaque recherche (`src/lib.ts`, `logSearch`) et **aucune purge n'existe**
-   dans le dépôt. Aujourd'hui ce sont les recherches de Jason. Publiquement, ce seront celles
-   d'inconnus — et une requête juridique est souvent intime (« congédiement représailles
-   dénonciation »). Le journal est ANONYME quant à l'auteur, par décision, et c'est ce qui
-   rend la situation tenable ; le TEXTE, lui, demeure. À trancher : une durée de conservation.
-   Purge manuelle, à la durée choisie :
-   `npx wrangler d1 execute legislation --remote --command "DELETE FROM search_log WHERE ts < datetime('now','-90 days')"`
-   Ce journal sert le dépouillement de `scripts/journal.mjs` (replis, reformulations), donc le
-   vider entièrement coûte la capacité de mesurer le repérage : c'est un arbitrage, pas un
-   nettoyage.
-2. **LA FORME `?key=` EXPOSE LE JETON AU JOURNAL DE REQUÊTES** du compte Cloudflare. C'est
-   assumé pour UN connecteur maîtrisé ; si l'authentification publique reprend cette forme,
-   **tout jeton distribué doit être traité comme déjà vu**. `Authorization: Bearer` n'a pas ce
-   défaut — c'est la forme à privilégier pour des porteurs publics.
-
-## Éléments retirés et trace conservée
-
-L'ancienne implémentation `McpAgent` (`QclawMCP`, `@modelcontextprotocol/sdk`, `agents`,
-`wrangler.transit.jsonc` / Worker `legislation-transit`, `scripts/capturer-tools-list.mjs`,
-et le drapeau `SOCLE`) a été intégralement retirée : le serveur repose exclusivement sur le
-routeur sans état `@poirierlavoie/mcp-socle` et `fixtures/tools-list.reference.json`
-reste conservée comme référence contractuelle des schémas (`src/schemas.ts`,
-`test/schemas-engendres.test.ts`, `test/routeur.test.ts`).
-
-## Où trouver quoi
-
-- **Sondes FTS5** (tokenizer `unicode61`, `remove_diacritics` ACTIF, AUCUN stemming
-  français, `bm25`/`snippet`/`highlight`/`fts5vocab` disponibles) et **cas fondateur de
-  l'art. 490 C.p.c.** — dans `src/lib.ts`, au-dessus de `toFtsQuery`. Mesurés en production
-  le 2026-07-20 ; ce sont des faits sur la PLATEFORME, donc ils ne vieillissent pas quand le
-  corpus grandit. Ils vivent dans le code parce qu'on en a besoin en touchant à la requête.
-- `docs/ARCHITECTURE-NOTES.md` — **relevé daté du 2026-07-20**, ne fait PAS foi sur l'état
-  courant ; réduit le 2026-07-30 à ce qu'il est seul à porter : les volumes de la base à
-  38 lois et les écarts entre le plan Discovery v2 et la réalité, qui expliquent pourquoi
-  les invariants 4, 6 et 10 existent.
-- `docs/reports/phase-{0,1,2}.md` — mesures, décisions, coûts réels de Discovery v2, et les
-  **bookmarks Time Travel** consignés avant chaque migration.
-- `docs/phase0-structure-epub.md` — format EPUB Irosoft. **Référence vivante du parseur
-  québécois** : citée par `pipeline/__init__.py`, `parser.py` et `validate.py`, dont les
-  valeurs témoins en viennent.
-- `docs/phase0-structure-lims.md` — format XML LIMS de Justice Canada. **Référence vivante du
-  parseur fédéral**, et le dire ici n'est pas décoratif : `parser_lims.py` renvoie l'humain
-  vers ses §5 et §6 dans DEUX messages d'ARRÊT, et il est cité par `recon_lims.py`,
-  `test_lims_tags.py`, `test_parser_lims.py`, `src/lib.ts` et `src/paths.ts`.
-  **⚠️ `docs/` est une archive PAR DÉFAUT — ces deux-là sont l'exception, avec
-  `docs/archive/PLAN.md` et `docs/archive/plan-couche-decouverte.md` que le code cite aussi
-  par numéro de §.** Corrigé le 2026-09-17 : cette section affirmait que le document EPUB
-  était « le seul que du code appelle », ce qui était devenu faux à l'arrivée du corpus
-  fédéral. Un agent lisant la politique d'archive PLUS cette phrase aurait conclu que le
-  document LIMS était jetable — et le supprimer casse les messages d'arrêt du parseur.
-- `docs/archive/` — plans exécutés (la **phase 3 v2 — curation ⛔ — y reste à faire** :
-  `qclaw-discovery-v2-implementation-plan.md`). Les vidages de reconnaissance en ont été
-  retirés le 2026-07-30 : sorties reproductibles de `recon.py`, pas des décisions.
-- `eval/baselines/*.json` — trajectoire mesurée : recall@10 40 % → 88 % → 98 %.
-- `eval/cases.resolved.json` — cache des `division_path` de la vérité terrain, DÉRIVÉ
-  (régénérable), pas ⛔ contrairement à `cases.json`. Il ne portait aucune revalidation :
-  une clé périmée faisait chuter FR-couv **sans un mot**, et un ancien chemin PRÉFIXE du
-  nouveau faisait au contraire SUR-estimer la couverture. `--refresh-paths` le revalide et
-  sort sans mesurer — régénérer et mesurer d'un même geste invaliderait la comparaison aux
-  baselines. Seule une réingestion du C.c.Q. ou du C.p.c. peut l'invalider.
-- `docs/propositions-journal-2026-07-30.md` — premier dépouillement de `search_log` :
-  cas d'éval et entrées de gazetteer **proposés** (⛔, rien d'appliqué).
-- `docs/propositions-taxonomie-federale-2026-09-11.md` — rattachement taxonomique des
-  18 textes fédéraux. **APPLIQUÉ**, contrairement à son jumeau ci-dessus : mesuré en base le
-  2026-09-17, `subject_map` porte 18 rattachements sur 14 matières pour les `ca-*`, et
-  `taxonomy.json` les déclare sous sa clé `mappings`. Le document ne propose donc plus rien ;
-  il explique POURQUOI ces rattachements-là, ce qu'aucune surface vivante ne porte.
-
-## Mise en forme (Biome, depuis le 2026-09-16)
-
-`npx biome check .` — 100 colonnes, guillemets doubles, virgules finales, points-virgules.
-Même configuration que le connecteur jumeau, à **une** règle près.
-
-**`complexity.noUselessStringRaw` est DÉSARMÉE, et il faut savoir pourquoi.** Biome
-signale les deux `String.raw` de `src/site.ts` (`BOOT` et `JS`) comme inutiles, puisque
-les blocs ne contiennent aujourd'hui aucune séquence d'échappement. C'est exact et c'est
-hors sujet : le commentaire au-dessus de `JS` dit que `String.raw` est là **par
-prudence**, parce que les antislashs d'un gabarit non balisé seraient mangés le jour où
-l'on y écrira une expression régulière — en silence. Suivre Biome retirerait une garantie
-pour gagner deux caractères, et casserait au passage `tests/page-client.test.mjs`, qui
-extrait ces deux blocs **par leur nom** dans le texte source.

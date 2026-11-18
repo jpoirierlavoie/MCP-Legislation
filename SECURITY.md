@@ -1,9 +1,9 @@
 # Security, Privacy & Professional Secrecy Policy / Politique de sécurité, confidentialité et secret professionnel
 
-> **Français :** Ce dépôt héberge le connecteur MCP **Législation du Québec et du Canada** (`https://legislation.poirierlavoie.ca/mcp`), un Worker Cloudflare en lecture seule servant le texte officiel consolidé des lois et règlements via D1, Vectorize et Workers AI.
+> **Français :** Ce dépôt héberge le connecteur MCP **Législation du Québec et du Canada** (`https://legislation.poirierlavoie.ca/mcp` et `https://legislation.poirierlavoie.ca/mcp/oauth`), un Worker Cloudflare en lecture seule servant le texte officiel consolidé des lois et règlements via D1, Vectorize et Workers AI.
 > Pour signaler une **vulnérabilité de sécurité** OU un **enjeu de vie privée, de confidentialité ou de secret professionnel / privilège** (`art. 9` *Charte des droits et libertés de la personne*, `art. 131` *Loi sur le Barreau*), **n'ouvrez jamais d'issue publique sur GitHub**. Écrivez directement au mainteneur :
 > **Jason Poirier Lavoie, avocat (Québec)** — `jason@poirierlavoie.ca` (accusé de réception sous **72 heures**, divulgation coordonnée).
-> **Ne transmettez jamais** de documents clients privilégiés, de noms de parties ou faits confidentiels réels, ni de jetons/secrets actifs (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`, `BACKFILL_TOKEN`, `CLOUDFLARE_API_TOKEN`) dans un premier signalement ; utilisez des requêtes fictives.
+> **Ne transmettez jamais** de documents clients privilégiés, de noms de parties ou faits confidentiels réels, ni de jetons/secrets actifs dans un premier signalement ; utilisez des requêtes fictives.
 >
 > **English:** To report a **security vulnerability** OR a **privacy, confidentiality, or solicitor-client privilege / secrecy issue** affecting this connector, **do not open a public GitHub issue**. Email the maintainer privately:
 > **Jason Poirier Lavoie, Lawyer (Québec)** — `jason@poirierlavoie.ca` (acknowledgement within **72 hours**, coordinated disclosure).
@@ -14,7 +14,7 @@
 ## Portée
 
 Dans la portée :
-- Le Worker déployé sur `legislation.poirierlavoie.ca` (`POST /mcp`, `GET /`, `GET /mcp/server-card`, `GET /health`, `/admin/backfill-vectors`) ;
+- Le Worker déployé sur `legislation.poirierlavoie.ca` (`POST /mcp`, `POST /mcp/oauth`, `GET /.well-known/oauth-protected-resource/mcp/oauth`, `GET /`, `GET /mcp/server-card`, `GET /health`, `/admin/backfill-vectors`) ;
 - Le code source dans `src/`, les migrations/schémas D1, le pipeline Python (`pipeline/`) et les manifestes clients (`plugin.json`, `mcp_config.json`, `gemini-extension.json`).
 
 Hors portée :
@@ -25,39 +25,38 @@ Hors portée :
 
 ## Données traitées, vie privée et secret professionnel
 
-Ce serveur ne sert que des **textes législatifs et réglementaires publics** en lecture seule et n'héberge aucun dossier client. Deux points importants relatifs à la confidentialité et à la rétention sont toutefois exposés en toute transparence :
+Ce serveur ne sert que des **textes législatifs et réglementaires publics** en lecture seule et n'héberge aucun dossier client :
 
-1. **Journalisation des requêtes de recherche (`search_log` dans D1)** :
-   - La fonction `logSearch` n'enregistre en D1 que les métadonnées opérationnelles (`tool`, `law`, `lang`, `result_count`, `fallback`) et inscrit systématiquement le marqueur fixe `"[REDACTED]"` dans la colonne `query` — aucun texte libre de requête n'est persisté en base.
-   - Chaque écriture déclenche en lot une purge glissante des entrées âgées de plus de **90 jours** (`ts < datetime('now', '-90 days')`).
-   - Par prudence déontologique (transit HTTPS et calcul d'enchâssement sémantique en mémoire), les appelants et les compétences doivent néanmoins **formuler des requêtes juridiques abstraites** et **ne jamais insérer de noms de clients ni de faits identifiants confidentiels** dans le paramètre `query`.
-   - En cas d'incident de confidentialité ou de demande d'effacement immédiat de métadonnées, écrire à `jason@poirierlavoie.ca` (purge manuelle possible en D1 par horodatage).
-2. **Porteur d'authentification dans l'URL (`?key=` vs `Authorization: Bearer`)** :
-   - Trois formes équivalentes sont acceptées (`/mcp` + `Authorization: Bearer <jeton>`, `?key=<jeton>`, et `/mcp/<jeton>`).
-   - Le paramètre `?key=` répond aux contraintes du formulaire de connecteur `claude.ai`, mais expose le jeton dans les journaux de requêtes HTTP d'arête Cloudflare ; pour tout client ou script qui le supporte (`Claude Code`, `Antigravity`, `Gemini CLI`, CI), employer systématiquement `Authorization: Bearer`.
+1. **Zéro journalisation de contenu de requête (`S13`, `S14`, `G9`, `G37`)** :
+   - Aucune écriture dans `search_log` n'a lieu à l'exécution ; aucun texte de requête (`query`), référence législative ou argument d'outil n'est persisté ni émis dans `console.*`.
+   - Les journaux d'invocation Cloudflare sont explicitement désactivés dans `wrangler.jsonc` (`observability.enabled = false`, `observability.logs.invocation_logs = false`).
+   - Seuls des compteurs journaliers agrégés par titulaire (`compteur_jour`) et des événements techniques strictement dépourvus de contenu de requête (`evenement_technique`, horodatés à la minute et purgés automatiquement à 90 jours) sont enregistrés en arrière-plan dans `DB_IDENTITE`.
+   - Par prudence déontologique (transit HTTPS et calcul d'enchâssement en mémoire lorsque le mode hybride est actif), les appelants doivent toujours **formuler des requêtes juridiques abstraites** sans noms de clients ni faits identifiants.
+2. **Désactivation libre-service du volet vectoriel (`hybride_permis`, `S19`)** :
+   - Chaque titulaire peut désactiver le repérage sémantique (`hybride_permis = 0`) dans `https://acces.poirierlavoie.ca/moi` : `search_text` s'exécute alors exclusivement en mode lexical FTS5 local sur D1, sans jamais invoquer `Workers AI` ni `Vectorize`.
+3. **Deux montages d'authentification étanches (`/mcp` et `/mcp/oauth`)** :
+   - `/mcp` accepte les jetons individuels de titulaires (`DB_IDENTITE`, portée `legislation` ou `les_deux`) ainsi que les secrets transitoires de phase 3a (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`), et oppose un `404` vide uniforme sans `WWW-Authenticate` à tout refus. Privilégier `Authorization: Bearer <jeton>` dès que le client le permet (`?key=` reste toléré sur `/mcp` pour compatibilité transitoire).
+   - `/mcp/oauth` accepte exclusivement l'en-tête `Authorization: Bearer <jeton>` (aucun `?key=`, aucun segment de chemin) et répond `401` RFC 9728 pointant vers `https://acces.poirierlavoie.ca`.
 
 ---
 
 ## Contrôles de sécurité en production
 
-- **Fermé par défaut :** `MCP_ENABLED` doit valoir explicitement `"true"` et au moins un secret figurant dans `NOMS_SECRETS` (`MCP_TOKEN`, `MCP_TOKEN_VEILLE` dans `src/auth.ts`) doit être configuré ; sinon toutes les routes `/mcp*` et `/health` répondent `404`.
-- **Refus silencieux `404` (pas de `401`) :** Toute requête non authentifiée sur `/mcp*` reçoit `404` sans corps afin d'éviter la découverte OAuth non sollicitée des clients MCP et de ne pas révéler l'existence du point d'accès. Le contrôle d'authentification s'exécute avant le contrôle de méthode HTTP et avant tout traitement applicatif.
-- **Comparaison cryptographique et protocole (`@poirierlavoie/mcp-socle`) :** Appariement SHA-256 à temps constant (`crypto.subtle.timingSafeEqual`), corps limité à `65 536` octets, décodage UTF-8 fatal, validation stricte des en-têtes MCP `2026-07-28`, sûreté prototype par `Object.hasOwn`.
-- **Défense DNS rebinding et CORS :** Toute origine navigateur non reconnue (hors `claude.ai`, `claude.com`, `gemini.google.com`, `aistudio.google.com` et `ALLOWED_ORIGINS`) est refusée en `403` sans en-têtes CORS avant l'authentification.
-- **Limitation de débit :** Binding `RATE_LIMITER` (300 requêtes / minute par `CF-Connecting-IP`, sans jamais employer le jeton comme clé). Échoue ouvert pour protéger la disponibilité en cas d'indisponibilité du compteur.
-- **Page publique (`GET /`) et fiche SEP-2127 (`GET /mcp/server-card`) :**
-  - `GET /` survit à `MCP_ENABLED=false`, n'émet aucun en-tête CORS (évite l'oracle cross-origine), porte une CSP `default-src 'none'` sans dépendance tierce, et les tests (`tests/catalogue.test.mjs`) interdisent toute fuite de jeton dans `src/site.ts` et `catalogue.json`.
-  - `GET /mcp/server-card` expose uniquement les métadonnées publiques sans secret (soumise à `MCP_ENABLED`).
+- **Fermé par défaut (`MCP_ENABLED !== "true"`) :** Coupe `/mcp*`, `/.well-known/oauth-protected-resource/mcp/oauth` et `/health` en `404`, tout en laissant `GET /` accessible (`200`).
+- **Comparaison cryptographique et protocole (`@poirierlavoie/mcp-socle` `0.8.0`) :** Appariement SHA-256 à temps constant (`crypto.subtle.timingSafeEqual`), corps limité à `65 536` octets, décodage UTF-8 fatal, validation stricte des en-têtes MCP `2026-07-28`, contrôle de méthode HTTP `POST` exécuté **après** l'authentification (`G23`).
+- **Défense DNS rebinding et CORS :** Toute origine navigateur non reconnue est refusée en `403` sans en-têtes CORS avant l'authentification ; `OPTIONS` pré-vol répond `204` sans être limité en débit.
+- **Limitation de débit à deux niveaux et quotas (`G32`, `G34`) :** Pré-authentification par IP (`RL_PRE_AUTH_IP` 600/min, `RL_ECHEC_IP` 20/min, `RL_ECHECS_GLOBAL` 300/min + quarantaine IP en mémoire contournée par tout jeton valide déjà reconnu afin de protéger les IP partagées de cabinets/infonuagiques), puis post-authentification par `titulaire_id` (`RL_TITULAIRE` 300/min en régime `actif`, `RL_TITULAIRE_LIMITE` 20/min en régime `limite`) et quotas journaliers UTC (`local`, `semantique`) vérifiés sur le nom d'outil du corps JSON-RPC.
 
 ---
 
 ## Reproduction hors ligne de la suite de tests
 
-La suite de tests complète (`tests/` et `test/`, 344 tests) tourne hors ligne sans accès Cloudflare ni secret de production :
+La suite de tests complète tourne hors ligne sans accès Cloudflare ni secret de production :
 
 ```powershell
 npm.cmd ci
 npx.cmd tsc --noEmit
 npm.cmd run lint
+npm.cmd run audit
 npm.cmd test
 ```

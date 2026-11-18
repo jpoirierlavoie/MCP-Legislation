@@ -24,7 +24,6 @@ import {
   listLaws,
   listSubjects,
   loadRelevanceData,
-  logSearch,
   nearestArticles,
   paginate,
   parseCitation,
@@ -162,9 +161,20 @@ export type Gestionnaire = (args: never) => Promise<ToolResult>;
 /** Les gestionnaires par nom d'outil. Consommé par le routeur du socle. */
 export type Registre = Record<string, Gestionnaire>;
 
-/** Construit les gestionnaires des dix outils `legislation_*` pour le routeur du socle. */
-export function construireOutils(env: Env): Registre {
+/** Indique si le moteur vectoriel hybride est configuré et actif sur l'instance. */
+export function estHybrideConfigure(env: Env): boolean {
+  const flags = env as unknown as { HYBRID_SEARCH?: string };
+  const brut = (flags.HYBRID_SEARCH ?? "").trim().toLowerCase();
+  return (brut === "1" || brut === "true") && Boolean(env.AI && env.VECTORS);
+}
+
+/** Construit les gestionnaires des dix outils publiés pour le routeur du socle. */
+export function construireOutils(
+  env: Env,
+  options?: { hybridePermis?: boolean; surExecutionSemantique?: () => void },
+): Registre {
   const db = env.DB;
+  const hybridePermis = options?.hybridePermis ?? true;
   const outils: Registre = {};
 
   // 1) list_laws ---------------------------------------------------------
@@ -446,12 +456,6 @@ export function construireOutils(env: Env): Registre {
     }
     const data = await loadRelevanceData(db, tokens, lang as Lang, env);
     const cands = rank({ tokens, ...data }, page.limit);
-    await logSearch(db, {
-      tool: "find_relevant",
-      query,
-      lang,
-      result_count: cands.length,
-    });
     if (cands.length === 0) {
       return err(
         `Aucun rapprochement trouvé (termes retenus : ${tokens.join(", ")}). ` +
@@ -767,11 +771,20 @@ export function construireOutils(env: Env): Registre {
       // Recherche corpus : sur-échantillonner (3×) pour pouvoir plafonner à 6 résultats
       // par loi sans se retrouver avec la seule loi dominante au classement bm25.
       const fetchPage = law ? page : { limit: Math.min(45, page.limit * 3), offset: page.offset };
-      // RELAX_SEARCH / HYBRID_SEARCH (R8) : chemins débrayables sans redéploiement
+      // RELAX_SEARCH / HYBRID_SEARCH (R8) + préférence du titulaire `hybride_permis` (S19)
       const flags = env as unknown as { RELAX_SEARCH?: string; HYBRID_SEARCH?: string };
+      const vectorActif = hybridePermis && estHybrideConfigure(env);
+      const aiObserve: Ai | undefined = vectorActif
+        ? ({
+            run: async (...params: Parameters<Ai["run"]>) => {
+              options?.surExecutionSemantique?.();
+              return await env.AI.run(...params);
+            },
+          } as Ai)
+        : undefined;
       res = await searchText(db, query, lang as Lang, law, fetchPage, {
         relax: flags.RELAX_SEARCH !== "0",
-        vector: flags.HYBRID_SEARCH === "1" ? { ai: env.AI, index: env.VECTORS } : undefined,
+        vector: vectorActif && aiObserve ? { ai: aiObserve, index: env.VECTORS } : undefined,
         // FEDERAL_CORPUS : sans ce passage, la recherche plein texte servait des
         // résultats fédéraux pendant que `list_laws` annonçait 79 lois — mesuré.
         env,
@@ -789,11 +802,10 @@ export function construireOutils(env: Env): Registre {
         res = { ...res, hits: picked };
       }
     } catch {
-      await logSearch(db, { tool: "search_text", query, law, lang, result_count: 0 });
       // L'exception n'est PAS liée, et c'est le correctif : on renvoyait `e.message`, qui
       // vient de SQLite/FTS5 et publiait au premier venu la syntaxe du moteur
       // (« fts5: syntax error near … »). Sans intérêt pour l'appelant, et c'est de
-      // l'intérieur donné à voir une fois l'endpoint public. L'échec reste journalisé.
+      // l'intérieur donné à voir une fois l'endpoint public.
       return err(
         "Recherche invalide : la requête contient des caractères que le moteur de recherche " +
           "réserve (guillemets, parenthèses, astérisque, NEAR/AND/OR). Réessayer avec des " +
@@ -806,14 +818,11 @@ export function construireOutils(env: Env): Registre {
         : typeof res.fallback === "object"
           ? `loo:${res.fallback.loo}`
           : res.fallback;
-    await logSearch(db, {
-      tool: "search_text",
-      query,
-      law,
-      lang,
-      result_count: res.hits.length,
-      fallback: fallbackLog,
-    });
+    const noteHybrideDesactive = !hybridePermis
+      ? lang === "en"
+        ? "Note: hybrid vector search is disabled per account preference (lexical FTS5 search only)."
+        : "Note : la recherche vectorielle hybride est désactivée selon la préférence du compte (recherche lexicale FTS5 uniquement)."
+      : "";
     // « Aucun résultat » DOIT dire dans quoi on a cherché. Sans ça, un modèle public lit
     // l'absence comme « aucune règle n'existe » et la relaie comme une réponse — une absence
     // présentée comme un fait. Deux causes dominent et se disent en une phrase : le corpus
@@ -825,7 +834,8 @@ export function construireOutils(env: Env): Registre {
           "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
           "LEXICAL (pas de familles de mots — « congédiement » ne trouve pas « congédier »). " +
           "Essayer d'autres mots exacts du texte, ou find_relevant pour partir du " +
-          "problème plutôt que des mots.",
+          "problème plutôt que des mots." +
+          (noteHybrideDesactive ? ` ${noteHybrideDesactive}` : ""),
       );
 
     // 1.3 : fils d'Ariane (résultats auto-explicatifs) + regroupement par loi.
@@ -919,7 +929,8 @@ export function construireOutils(env: Env): Registre {
     // vecteurs » : un article trouvé par les DEUX voies garde son SearchHit lexical et n'est
     // jamais marqué `semantic`, bien que la fusion RRF ait déplacé son rang.
     const nSem = res.hits.filter((h) => h.semantic).length;
-    return ok(`${header}\n${body}${structures}${elsewhere}`, {
+    const suffixeHybride = noteHybrideDesactive ? `\n\n${noteHybrideDesactive}` : "";
+    return ok(`${header}\n${body}${structures}${elsewhere}${suffixeHybride}`, {
       query,
       lang,
       law: law ?? null,
@@ -928,6 +939,7 @@ export function construireOutils(env: Env): Registre {
       /** Taille de la page réellement rendue, toutes sources confondues. */
       returned: res.hits.length,
       sources: { lexical: res.hits.length - nSem, semantique: nSem },
+      ...(hybridePermis ? {} : { hybride_desactive: true }),
       fallback: fallbackLog,
       elsewhere: res.elsewhere
         ? { total: res.elsewhere.total, results: res.elsewhere.hits.map(enrich) }

@@ -176,6 +176,9 @@ jobs:
       - name: Mise en forme et lint
         run: npx biome check .
 
+      - name: Audit des dépendances
+        run: npm run audit
+
       - name: Tests (Node + workerd)
         run: npm test
 

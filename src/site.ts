@@ -506,17 +506,17 @@ function acces(): string {
   ${h2("acces")}
   ${biP(
     [
-      `Ce serveur est une instance privée. L'endpoint MCP n'est ouvert qu'aux clients autorisés (par paramètre d'authentification ou en-tête d'autorisation) : chacun reçoit son propre jeton, révocable séparément, et une requête qui n'en porte pas de valide n'obtient rien — pas même la confirmation que l'endpoint existe. Pour en demander l'accès, écrire à ${CONTACT}.`,
-      "Une fiche publique de découverte MCP (SEP-2127) sans secret est exposée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut les manifestes pour Google Antigravity (plugin.json, mcp_config.json) et Gemini CLI (gemini-extension.json).",
-      "Le code source est public (licence CC BY-NC-SA 4.0) et le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés.",
+      `Ce serveur est réservé aux membres en règle du Barreau du Québec. Deux portes d'accès coexistent : le montage à jeton individuel direct https://legislation.poirierlavoie.ca/mcp (qui répond 404 sans corps à tout appel non authentifié afin de prévenir toute découverte OAuth non sollicitée) et le montage OAuth 2.1 https://legislation.poirierlavoie.ca/mcp/oauth (PKCE S256 via https://acces.poirierlavoie.ca). Les demandes d'accès et la gestion libre-service des jetons, de la préférence de recherche hybride et de la révocation s'effectuent sur https://acces.poirierlavoie.ca/demande et https://acces.poirierlavoie.ca/moi (ou en écrivant à ${CONTACT}).`,
+      "Aucun texte de requête ni argument d'outil n'est journalisé (journaux d'invocation Cloudflare désactivés, zéro écriture dans search_log). Une fiche publique de découverte MCP (SEP-2127) sans secret est exposée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut les manifestes pour Google Antigravity (plugin.json, mcp_config.json) et Gemini CLI (gemini-extension.json).",
+      "Le code source est public sous licence CC BY-NC-SA 4.0 assortie d'une autorisation complémentaire de pratique professionnelle du droit pour les membres en règle du Barreau du Québec (voir LICENSE). Le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés.",
     ],
     [
-      `This server is a private instance. The MCP endpoint is open to authorized clients only (by authentication parameter or authorization header): each one gets its own token, revocable on its own, and a request that does not carry a valid one gets nothing — not even confirmation that the endpoint exists. To request access, write to ${CONTACT}.`,
-      "A public MCP Server Card (SEP-2127) without secrets is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository ships manifests for Google Antigravity (plugin.json, mcp_config.json) and Gemini CLI (gemini-extension.json).",
-      "The source code is public (CC BY-NC-SA 4.0 licence) and the corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
+      `This server is reserved for members in good standing of the Barreau du Québec. Two access mounts coexist: the direct per-holder token mount https://legislation.poirierlavoie.ca/mcp (which returns an empty 404 to any unauthenticated call so unsolicited OAuth discovery is never triggered) and the OAuth 2.1 mount https://legislation.poirierlavoie.ca/mcp/oauth (PKCE S256 via https://acces.poirierlavoie.ca). Access requests and self-service token, hybrid-search preference, and revocation management are available at https://acces.poirierlavoie.ca/demande and https://acces.poirierlavoie.ca/moi (or by writing to ${CONTACT}).`,
+      "No query text or tool argument is ever logged (Cloudflare invocation logs disabled, zero runtime writes to search_log). A public MCP Server Card (SEP-2127) without secrets is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository ships manifests for Google Antigravity (plugin.json, mcp_config.json) and Gemini CLI (gemini-extension.json).",
+      "The source code is public under the CC BY-NC-SA 4.0 licence with a Companion Professional Legal Practice Grant for members in good standing of the Barreau du Québec (see LICENSE). The corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
     ],
   )}
-  <p><a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
+  <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">acces.poirierlavoie.ca</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
 </section>`;
 }
 

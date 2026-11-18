@@ -4,7 +4,6 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import reference from "../fixtures/tools-list.reference.json";
-import { logSearch, minimiserRequeteJournal } from "../src/lib";
 import { PUBLIC_DESCRIPTION, SERVER_INFO, VERSIONS } from "../src/serveur";
 
 const URL_MCP = "https://legislation.test/mcp";
@@ -555,57 +554,27 @@ describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
   });
 });
 
-describe("minimisation et purge du journal search_log", () => {
-  it("préserve les requêtes juridiques abstraites et masque les identifiants sensibles", () => {
-    expect(minimiserRequeteJournal("  vice caché art. 1726 C.c.Q.  ")).toBe(
-      "vice caché art. 1726 C.c.Q.",
-    );
-    expect(minimiserRequeteJournal("art. 535.1 C.p.c. 2024 QCCS 1234")).toBe(
-      "art. 535.1 C.p.c. 2024 QCCS 1234",
-    );
-
-    const sensible = minimiserRequeteJournal(
-      "dossier 500-17-123456-241 client@exemple.ca tel (514) 555-0199 NAS 123-456-789 NEQ 1162345678",
-    );
-    expect(sensible).toBe("dossier [DOSSIER] [COURRIEL] tel [TEL] NAS [ID] NEQ [ID]");
-
-    const longue = minimiserRequeteJournal("résiliation bail ".repeat(20));
-    expect(longue.length).toBeLessThanOrEqual(160);
-    expect(longue.endsWith("…")).toBe(true);
-  });
-
-  it("enregistre le marqueur fixe [REDACTED] sans persister e.query et purge les entrées > 90 jours", async () => {
+describe("zéro écriture dans search_log à l'exécution (S13, S14, G9)", () => {
+  it("find_relevant et search_text n'insèrent jamais aucune ligne dans search_log, même sur requête sensible", async () => {
     const db = (env as unknown as { DB: D1Database }).DB;
-    const oldMarker = "ancienne-requete-expiree-test";
-    const freshSecret = "secret-client-confidentiel-test";
-    await db
-      .prepare("INSERT INTO search_log (ts, tool, query, result_count) VALUES (?, ?, ?, ?)")
-      .bind("2020-01-01 00:00:00", "search_text", oldMarker, 0)
-      .run();
+    await db.prepare("DELETE FROM search_log").run();
 
-    await logSearch(db, {
-      tool: "search_text",
-      query: freshSecret,
-      lang: "fr",
-      result_count: 1,
+    const requeteSensible =
+      "dossier 500-17-123456-241 client@exemple.ca vice caché art. 1726 C.c.Q.";
+
+    const r1 = await heritee("tools/call", {
+      name: "find_relevant",
+      arguments: { query: requeteSensible },
     });
+    expect(r1.status).toBe(200);
 
-    const { results: expired } = await db
-      .prepare("SELECT query FROM search_log WHERE query = ?")
-      .bind(oldMarker)
-      .all<{ query: string }>();
-    expect(expired).toHaveLength(0);
+    const r2 = await heritee("tools/call", {
+      name: "search_text",
+      arguments: { query: requeteSensible },
+    });
+    expect(r2.status).toBe(200);
 
-    const { results: leaked } = await db
-      .prepare("SELECT query FROM search_log WHERE query = ?")
-      .bind(freshSecret)
-      .all<{ query: string }>();
-    expect(leaked).toHaveLength(0);
-
-    const { results: saved } = await db
-      .prepare("SELECT query FROM search_log WHERE query = ?")
-      .bind("[REDACTED]")
-      .all<{ query: string }>();
-    expect(saved).toHaveLength(1);
+    const compte = await db.prepare("SELECT COUNT(*) AS n FROM search_log").first<{ n: number }>();
+    expect(compte?.n).toBe(0);
   });
 });

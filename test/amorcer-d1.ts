@@ -22,9 +22,11 @@
  */
 
 import { applyD1Migrations, env } from "cloudflare:test";
+import { construireSchemaIdentiteD1 } from "@poirierlavoie/mcp-socle";
 
 interface EnvTest {
   DB: D1Database;
+  DB_IDENTITE: D1Database;
   TEST_SCHEMA: string;
   TEST_DECOUVERTE: string;
   // Le type des migrations est fourni par le greffon ; on ne le renomme pas ici.
@@ -53,3 +55,4 @@ function enonces(sql: string): string {
 await e.DB.exec(enonces(e.TEST_SCHEMA));
 await e.DB.exec(enonces(e.TEST_DECOUVERTE));
 await applyD1Migrations(e.DB, e.TEST_MIGRATIONS);
+await e.DB_IDENTITE.exec(enonces(construireSchemaIdentiteD1(["legislation", "jurisprudence"])));
