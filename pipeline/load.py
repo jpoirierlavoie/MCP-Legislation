@@ -214,6 +214,11 @@ def fts_rebuild_sql() -> str:
     )
 
 
+def fts_integrity_check_sql() -> str:
+    """Vérifie la cohérence de l'index FTS5 à contenu externe contre `articles` (rank=1)."""
+    return "INSERT INTO articles_fts(articles_fts, rank) VALUES('integrity-check', 1);\n"
+
+
 def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: str,
            *, rebuild_fts: bool = True) -> str:
     div_rows = [[_valeur(d, c) for c in _DIV_COLS] for d in divisions]
@@ -249,6 +254,15 @@ def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: s
         # ligne d'alias survivante désignerait un article supprimé. Sans cette purge,
         # une réingestion rendrait le MAUVAIS article en silence.
         f"DELETE FROM article_numbers WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
+    ]
+    if rebuild_fts:
+        stmts += [
+            "-- FTS5 à contenu externe : retirer les anciennes entrées de (law_id, lang) avant suppression",
+            "INSERT INTO articles_fts(articles_fts, rowid, text, marginal_note, law_id, lang, number) "
+            "SELECT 'delete', id, text, marginal_note, law_id, lang, number FROM articles "
+            f"WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
+        ]
+    stmts += [
         f"DELETE FROM articles  WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
         f"DELETE FROM divisions WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
         # UPSERT : met à jour les colonnes de base sans écraser fonction/forum/name_norm/
@@ -264,14 +278,18 @@ def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: s
                     if c not in _COLS_AUTRE_LANGUE(lang)) + ";",
         "INSERT INTO divisions SELECT * FROM _stg_divisions;",
         "INSERT INTO articles  SELECT * FROM _stg_articles;",
+    ]
+    if rebuild_fts:
+        stmts += [
+            "-- FTS5 à contenu externe : indexer les nouvelles entrées de (law_id, lang)",
+            "INSERT INTO articles_fts(rowid, text, marginal_note, law_id, lang, number) "
+            "SELECT id, text, marginal_note, law_id, lang, number FROM articles "
+            f"WHERE law_id = {_q(law.id)} AND lang = {_q(lang)};",
+        ]
+    stmts += [
         "INSERT INTO article_numbers SELECT * FROM _stg_article_numbers;",
         "DROP TABLE _stg_divisions;",
         "DROP TABLE _stg_articles;",
         "DROP TABLE _stg_article_numbers;",
     ]
-    if rebuild_fts:
-        stmts += [
-            "-- FTS5 à contenu externe : reconstruire l'index depuis articles",
-            "INSERT INTO articles_fts(articles_fts) VALUES('rebuild');",
-        ]
     return "\n".join(stmts) + "\n"

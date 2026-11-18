@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 import zipfile
 from pathlib import Path
 from unittest import TestCase, main, mock
 
-from pipeline import load, validate
+from pipeline import config, d1_api, load, validate
 from pipeline.discovery import relations as d_relations
 from pipeline.ingest import extrait_consolidation_quebec
 from pipeline.model import Article, Division, Law
@@ -170,6 +171,97 @@ class TestLoadIncrementalSql(TestCase):
         fts_sql = load.fts_rebuild_sql()
         self.assertIn("VALUES('rebuild')", fts_sql)
         self.assertIn("VALUES('integrity-check', 1)", fts_sql)
+        self.assertEqual(
+            load.fts_integrity_check_sql(),
+            "INSERT INTO articles_fts(articles_fts, rank) VALUES('integrity-check', 1);\n",
+        )
+
+    def test_to_sql_fts_incremental_et_index_fk_sqlite(self):
+        """Vérifie en SQLite réel la suppression/réindexation FTS5 incrémentale et les index FK 0006."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            conn.execute("PRAGMA foreign_keys = ON;")
+            conn.executescript(
+                """
+                CREATE TABLE laws (
+                  id TEXT PRIMARY KEY, name_fr TEXT NOT NULL, name_en TEXT NOT NULL,
+                  official_cite TEXT NOT NULL, consol_date_fr TEXT, consol_date_en TEXT,
+                  fonction TEXT, forum TEXT, scope_fr TEXT, parent_law_id TEXT, name_norm TEXT,
+                  official_cite_en TEXT, chapter TEXT, jurisdiction TEXT NOT NULL DEFAULT 'qc',
+                  in_force INTEGER NOT NULL DEFAULT 1, last_amended TEXT,
+                  unit TEXT NOT NULL DEFAULT 'article'
+                );
+                CREATE TABLE divisions (
+                  id INTEGER PRIMARY KEY, law_id TEXT NOT NULL REFERENCES laws(id),
+                  lang TEXT NOT NULL, kind TEXT NOT NULL, number TEXT, heading TEXT,
+                  history TEXT, path TEXT NOT NULL, repealed INTEGER NOT NULL DEFAULT 0,
+                  parent_id INTEGER REFERENCES divisions(id), sort_order INTEGER NOT NULL,
+                  heading_norm TEXT
+                );
+                CREATE TABLE articles (
+                  id INTEGER PRIMARY KEY, law_id TEXT NOT NULL REFERENCES laws(id),
+                  lang TEXT NOT NULL, number TEXT NOT NULL, sort_key INTEGER NOT NULL,
+                  division_id INTEGER REFERENCES divisions(id), division_path TEXT NOT NULL,
+                  text TEXT NOT NULL, html TEXT, history TEXT, repealed INTEGER NOT NULL DEFAULT 0,
+                  marginal_note TEXT, footnotes TEXT
+                );
+                CREATE TABLE article_numbers (
+                  law_id TEXT NOT NULL REFERENCES laws(id), lang TEXT NOT NULL,
+                  number TEXT NOT NULL, article_id INTEGER NOT NULL REFERENCES articles(id),
+                  PRIMARY KEY (law_id, lang, number)
+                );
+                CREATE INDEX idx_art_lookup ON articles(law_id, lang, number);
+                CREATE VIRTUAL TABLE articles_fts USING fts5(
+                  text, marginal_note, law_id UNINDEXED, lang UNINDEXED, number UNINDEXED,
+                  content='articles', content_rowid='id'
+                );
+                """
+            )
+            mig_0006 = (config.REPO_ROOT / "migrations" / "0006_fk_indexes.sql").read_text(
+                encoding="utf-8"
+            )
+            conn.executescript(mig_0006)
+
+            c_ccq_1 = _sample_combo("ccq", "fr", date="2026-04-07", art_text="Ancien vocable.")
+            c_ccq_1.articles[0].alias_numbers = ["1"]
+            load.prepare(c_ccq_1.law, c_ccq_1.divisions, c_ccq_1.articles, id_base=10)
+            c_cpc = _sample_combo("cpc", "fr", date="2026-04-07", art_text="Témoin intangible.")
+            load.prepare(c_cpc.law, c_cpc.divisions, c_cpc.articles, id_base=50000)
+
+            conn.executescript(load.to_sql(c_ccq_1.law, c_ccq_1.divisions, c_ccq_1.articles, "fr", rebuild_fts=True))
+            conn.executescript(load.to_sql(c_cpc.law, c_cpc.divisions, c_cpc.articles, "fr", rebuild_fts=True))
+            conn.executescript(load.fts_integrity_check_sql())
+
+            # Bascule modifiée sur ccq/fr uniquement
+            c_ccq_2 = _sample_combo("ccq", "fr", date="2026-10-15", art_text="Nouvelle rédaction.")
+            c_ccq_2.articles[0].alias_numbers = ["1"]
+            load.prepare(c_ccq_2.law, c_ccq_2.divisions, c_ccq_2.articles, id_base=10)
+            conn.executescript(load.to_sql(c_ccq_2.law, c_ccq_2.divisions, c_ccq_2.articles, "fr", rebuild_fts=True))
+            conn.executescript(load.fts_integrity_check_sql())
+
+            old_hits = conn.execute(
+                "SELECT number FROM articles_fts WHERE articles_fts MATCH '{text}: Ancien'"
+            ).fetchall()
+            new_hits = conn.execute(
+                "SELECT law_id, number FROM articles_fts WHERE articles_fts MATCH '{text}: Nouvelle'"
+            ).fetchall()
+            other_hits = conn.execute(
+                "SELECT law_id, number FROM articles_fts WHERE articles_fts MATCH '{text}: intangible'"
+            ).fetchall()
+            self.assertEqual(old_hits, [])
+            self.assertEqual(new_hits, [("ccq", "1")])
+            self.assertEqual(other_hits, [("cpc", "1")])
+
+            plan_art = conn.execute(
+                "EXPLAIN QUERY PLAN SELECT 1 FROM articles WHERE division_id = 10"
+            ).fetchall()
+            plan_num = conn.execute(
+                "EXPLAIN QUERY PLAN SELECT 1 FROM article_numbers WHERE article_id = 10"
+            ).fetchall()
+            self.assertIn("idx_art_division_id", str(plan_art))
+            self.assertIn("idx_art_num_article_id", str(plan_num))
+        finally:
+            conn.close()
 
 
 class TestDiffEtApply(TestCase):
@@ -302,7 +394,9 @@ class TestDiffEtApply(TestCase):
         self.assertEqual(res["applied_meta"], 2)
         self.assertEqual(res["applied_content"], 1)
         self.assertEqual(res["vector_laws"], ["loi-x", "loi-z"])
-        self.assertIn("VALUES('rebuild')", sql_contents["loi-x-fr.sql"])
+        self.assertNotIn("VALUES('rebuild')", sql_contents["loi-x-fr.sql"])
+        self.assertIn("SELECT 'delete', id, text, marginal_note", sql_contents["loi-x-fr.sql"])
+        self.assertIn("INSERT INTO articles_fts(rowid, text, marginal_note", sql_contents["loi-x-fr.sql"])
         self.assertEqual(events, [
             "ping:loi-x:articles",
             "ping:loi-x:divisions",
@@ -311,7 +405,7 @@ class TestDiffEtApply(TestCase):
             "bookmark",
             "sql:metadata-1.sql",
             "sql:loi-x-fr.sql",
-            "sql:fts-rebuild.sql",
+            "sql:fts-check.sql",
             "backfill:--laws loi-x --mode full --prune",
             "backfill:--laws loi-z --mode incremental --prune",
         ])
@@ -372,10 +466,58 @@ class TestDiffEtApply(TestCase):
 
         self.assertEqual(res["vector_laws"], ["loi-x"])
         self.assertEqual(events, [
-            "sql:fts-rebuild.sql",
+            "sql:fts-check.sql",
             "backfill:--laws loi-x --mode incremental --prune",
         ])
         self.assertEqual(db.pending, "")
+
+    def test_fts_check_en_echec_bascule_sur_fts_rebuild(self):
+        c = _sample_combo("loi-x", "fr", date="2026-10-15", art_text="Identique.")
+        stored_law, divs, arts = self._stored_from(c)
+
+        class _FailingCheckD1(_FakeD1):
+            def __init__(self):
+                super().__init__(divs=divs, arts=arts)
+                self.pending = json.dumps({
+                    "vector_laws": ["loi-x"],
+                    "discovery_laws": ["loi-x"],
+                    "full_corpus": False,
+                    "fts_dirty": True,
+                    "relations_dirty": False,
+                })
+
+            def run(self, sql: str):
+                if "SELECT value FROM refresh_state" in sql and self.pending:
+                    return [{"value": self.pending}]
+                if "DELETE FROM refresh_state" in sql:
+                    self.pending = ""
+                    return []
+                return super().run(sql)
+
+        db = _FailingCheckD1()
+        diff = diff_combo_d1(db, c, stored_law)
+        events: list[str] = []
+
+        def run_file_with_check_failure(p: Path):
+            events.append("sql:" + p.name)
+            if p.name == "fts-check.sql":
+                raise d1_api.D1Error("database disk image is malformed")
+
+        db.run_file = run_file_with_check_failure  # type: ignore[method-assign]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"BACKFILL_TOKEN": "tok"}):
+            apply_refresh(
+                db, [c], [diff],
+                target="cloud", full_corpus=False, out_dir=Path(tmp),
+                ping_fn=lambda _u, _t, _l, _k: (True, 5),
+                bookmark_fn=lambda: "bm-fallback",
+                backfill_fn=lambda args, **_kw: events.append("backfill:" + " ".join(args)),
+            )
+
+        self.assertEqual(events, [
+            "sql:fts-check.sql",
+            "sql:fts-rebuild.sql",
+            "backfill:--laws loi-x --mode incremental --prune",
+        ])
 
     def test_relations_only_laws_preserve_autres_lois_auto(self):
         db = _FakeD1(divs=[], arts=[])

@@ -1081,7 +1081,7 @@ def apply_refresh(
         for fpath in _write_sql_chunks(sql_dir, "metadata", stmts):
             db.run_file(fpath)
 
-    # 3. Bascule contenu avec reconstruction FTS5 dans chaque bascule + integrity-check final
+    # 3. Bascule contenu avec mise à jour FTS5 incrémentale par bascule + integrity-check final
     if content_combos:
         for c in content_combos:
             p = sql_dir / f"{c.law_id}-{c.lang}.sql"
@@ -1091,9 +1091,14 @@ def apply_refresh(
             )
             db.run_file(p)
     if combined_fts_dirty:
-        fts_path = sql_dir / "fts-rebuild.sql"
-        fts_path.write_text(load.fts_rebuild_sql(), encoding="utf-8", newline="\n")
-        db.run_file(fts_path)
+        fts_check_path = sql_dir / "fts-check.sql"
+        fts_check_path.write_text(load.fts_integrity_check_sql(), encoding="utf-8", newline="\n")
+        try:
+            db.run_file(fts_check_path)
+        except d1_api.D1Error:
+            fts_path = sql_dir / "fts-rebuild.sql"
+            fts_path.write_text(load.fts_rebuild_sql(), encoding="utf-8", newline="\n")
+            db.run_file(fts_path)
 
     # 4. Couche découverte + relations (corpus complet ou portée ciblée --laws)
     _sync_discovery_and_relations(
