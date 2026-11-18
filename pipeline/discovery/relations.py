@@ -189,14 +189,20 @@ def epubs_manquants(laws: list[dict], samples_dir: Path | None = None) -> list[s
             and not _fr_epub_path(l["id"], samples_dir).exists()]
 
 
-def build(db, accepter_corpus_partiel: bool = False, samples_dir: Path | None = None) -> dict:
+def build(
+    db,
+    accepter_corpus_partiel: bool = False,
+    samples_dir: Path | None = None,
+    only_laws: set[str] | None = None,
+) -> dict:
     laws = config.load_all_laws()
+    target_laws = [l for l in laws if l["id"] in only_laws] if only_laws is not None else laws
 
     # PORTE, AVANT LE PREMIER DELETE. Cf. `CorpusEpubIncomplet` : sans les EPUB, la
     # reconstruction « réussit » en ne recréant presque rien.
-    manquants = epubs_manquants(laws, samples_dir=samples_dir)
+    manquants = epubs_manquants(target_laws, samples_dir=samples_dir)
     if manquants and not accepter_corpus_partiel:
-        attendus = sum(1 for l in laws if (l.get("jurisdiction") or "qc") == "qc")
+        attendus = sum(1 for l in target_laws if (l.get("jurisdiction") or "qc") == "qc")
         dossier = samples_dir if samples_dir is not None else config.SAMPLES_DIR
         raise CorpusEpubIncomplet(
             f"{len(manquants)} EPUB FR sur {attendus} absents de {dossier} : "
@@ -215,7 +221,7 @@ def build(db, accepter_corpus_partiel: bool = False, samples_dir: Path | None = 
     sans_parent: list[str] = []
 
     # 1) reglement-de (+ parent_law_id)
-    for l in laws:
+    for l in target_laws:
         if _is_regulation(l):
             parent = by_root.get(cle_de(l, root=True))
             if parent and parent != l["id"]:
@@ -231,7 +237,7 @@ def build(db, accepter_corpus_partiel: bool = False, samples_dir: Path | None = 
     # ACCIDENT. Un accident n'est pas une garantie — si `_sample_path` changeait de
     # convention, un fichier XML partirait dans un lecteur de zip. Et surtout, la moisson
     # de renvois LIMS n'est pas écrite : la déclarer ici serait mentir sur la couverture.
-    for l in laws:
+    for l in target_laws:
         if (l.get("jurisdiction") or "qc") != "qc":
             continue
         epub = _fr_epub_path(l["id"], samples_dir)
@@ -254,7 +260,11 @@ def build(db, accepter_corpus_partiel: bool = False, samples_dir: Path | None = 
             edges[key] = [prev[0] + count, 1 if target_id else 0, None]
 
     # 3) chargement (sans toucher aux relations 'cure')
-    db.run("DELETE FROM law_relations WHERE source = 'auto'")
+    if only_laws is None:
+        db.run("DELETE FROM law_relations WHERE source = 'auto'")
+    elif target_laws:
+        scoped = ", ".join(q(l["id"]) for l in target_laws)
+        db.run(f"DELETE FROM law_relations WHERE source = 'auto' AND from_law_id IN ({scoped})")
     rows = [[f, t, rt, "auto", w, ic, note] for (f, t, rt), (w, ic, note) in edges.items()]
     cols = ["from_law_id", "to_law_id", "rel_type", "source", "weight", "in_corpus", "note"]
     for i in range(0, len(rows), 100):

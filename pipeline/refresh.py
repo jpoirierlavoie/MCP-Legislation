@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import json
 import os
 import re
@@ -71,6 +72,7 @@ class ParsedCombo:
     divisions: list[Any]
     articles: list[Any]
     report: validate.Report
+    source_sha256: str = ""
 
 
 @dataclass
@@ -223,6 +225,7 @@ def acquire_all(
     lims_ref: str = "HEAD",
     ensure_lims: bool = False,
     allow_not_in_force: bool = False,
+    dates_override: dict[str, str] | None = None,
 ) -> tuple[list[ParsedCombo], str | None, list[str]]:
     """Télécharge/lit, parse et valide les combinaisons demandées.
 
@@ -280,9 +283,17 @@ def acquire_all(
             for lang in ("fr", "en"):
                 law = ingest._law_from_config(cfg_law)
                 if is_lims:
+                    date_ovr: str | None = None
+                    if dates_override is not None:
+                        date_ovr = dates_override.get(f"{law_id}|{lang}")
+                        if not date_ovr:
+                            raise ingest.DateDeConsolidationIntrouvable(
+                                f"{law_id}/{lang} : date absente du cliché Stage 1 (--dates-file)."
+                            )
                     divisions, articles, bilan = ingest._acquiert_lims(
-                        cfg_law, law, lang, allow_not_in_force
+                        cfg_law, law, lang, allow_not_in_force, consol_date_override=date_ovr,
                     )
+                    source_sha256 = getattr(bilan, "source_sha256", "")
                     load.prepare(law, divisions, articles, id_base=ingest._id_base(law_id, lang))
                     rep = validate.validate(
                         law_id, lang, divisions, articles,
@@ -294,16 +305,21 @@ def acquire_all(
                     epub = sdir / f"{law_id.upper()}-{lang}.epub"
                     if download or not epub.exists():
                         download_with_retry(cfg_law["epub"][lang], epub)
+                    source_sha256 = hashlib.sha256(epub.read_bytes()).hexdigest()
                     if lang == "en":
                         with zipfile.ZipFile(epub) as zf:
                             title = opf_metadata(zf)["title"]
                         if title:
                             law.name_en = title
-                    src = cfg_law.get("consolidation_source", {}).get(lang)
-                    date = ingest.fetch_consolidation(src) if src else None
+                    if dates_override is not None:
+                        date = dates_override.get(f"{law_id}|{lang}")
+                    else:
+                        src = cfg_law.get("consolidation_source", {}).get(lang)
+                        date = ingest.fetch_consolidation(src) if src else None
                     if not date:
                         raise ingest.DateDeConsolidationIntrouvable(
-                            f"{law_id}/{lang} : date « À jour au » introuvable sur {src}"
+                            f"{law_id}/{lang} : date « À jour au » introuvable"
+                            + (" dans --dates-file" if dates_override is not None else f" sur {cfg_law.get('consolidation_source', {}).get(lang)}")
                         )
                     setattr(law, f"consol_date_{lang}", date)
                     divisions, articles = parse_epub(epub, law, lang)
@@ -313,6 +329,8 @@ def acquire_all(
                     )
                     _phase_b_se_check(epub, articles, rep)
 
+                if not articles:
+                    raise ErreurValidation(f"{law_id}/{lang} : extraction vide (0 article)")
                 if not rep.ok:
                     raise ErreurValidation(
                         f"Invariants en échec pour {law_id}/{lang} :\n" + "\n".join(rep.lines)
@@ -320,6 +338,7 @@ def acquire_all(
                 pc = ParsedCombo(
                     law_id=law_id, lang=lang, cfg_law=cfg_law, law=law,
                     divisions=divisions, articles=articles, report=rep,
+                    source_sha256=source_sha256,
                 )
                 combos.append(pc)
                 by_lang[lang] = pc
@@ -423,7 +442,13 @@ def _compute_division_deltas(
     return added, removed, modified
 
 
-def diff_combo_d1(db, parsed: ParsedCombo, stored_law: dict[str, Any] | None) -> ComboDiff:
+def diff_combo_d1(
+    db,
+    parsed: ParsedCombo,
+    stored_law: dict[str, Any] | None,
+    *,
+    allow_shrinkage: bool = False,
+) -> ComboDiff:
     """Compare exactement un couple parsé contre l'état courant en D1."""
     law_id, lang = parsed.law_id, parsed.lang
     new_date = getattr(parsed.law, f"consol_date_{lang}")
@@ -474,6 +499,11 @@ def diff_combo_d1(db, parsed: ParsedCombo, stored_law: dict[str, Any] | None) ->
             old_consol_date=old_date, new_consol_date=new_date,
             added_articles=[a.number for a in parsed.articles],
             added_divisions=[d.path for d in parsed.divisions],
+        )
+
+    if len(stored_arts) >= 10 and len(parsed.articles) < len(stored_arts) * 0.5 and not allow_shrinkage:
+        raise ErreurValidation(
+            f"{law_id}/{lang} : chute anormale d'articles ({len(parsed.articles)} vs {len(stored_arts)} en base)"
         )
 
     old_art_by_num = {r["number"]: r for r in stored_arts}
@@ -598,7 +628,8 @@ def diff_all_mcp(
     combos: list[ParsedCombo],
     mcp_url: str,
     *,
-    deep_mcp: bool = False,
+    deep_mcp: bool = True,
+    allow_shrinkage: bool = False,
 ) -> list[ComboDiff]:
     """Compare les combinaisons parsées à la production via MCP lecture seule."""
     client = McpReadClient(mcp_url)
@@ -610,7 +641,6 @@ def diff_all_mcp(
         laws_list = (res.get("structuredContent") or {}).get("laws") or []
         by_lang_laws[lang] = {l["id"]: l for l in laws_list}
 
-    force_deep = deep_mcp or len({c.law_id for c in combos}) <= 15
     diffs: list[ComboDiff] = []
 
     for c in combos:
@@ -627,7 +657,20 @@ def diff_all_mcp(
 
         old_date = stored.get(f"consol_date_{c.lang}")
         stored_count = int(stored.get("article_count") or 0)
-        if old_date == new_date and stored_count == len(c.articles) and not force_deep:
+        if stored_count >= 10 and len(c.articles) < stored_count * 0.5 and not allow_shrinkage:
+            raise ErreurValidation(
+                f"{c.law_id}/{c.lang} : chute anormale d'articles "
+                f"({len(c.articles)} vs {stored_count} en production)"
+            )
+        name_col = "name_fr" if c.lang == "fr" else "name_en"
+        cite_col = "official_cite" if c.lang == "fr" else "official_cite_en"
+        new_cite = load._valeur(c.law, cite_col)
+        meta_differs = (
+            old_date != new_date
+            or (stored.get(name_col) or None) != (getattr(c.law, name_col) or None)
+            or (stored.get(cite_col) or None) != (new_cite or None)
+        )
+        if not deep_mcp and not meta_differs and stored_count == len(c.articles):
             diffs.append(ComboDiff(
                 law_id=c.law_id, lang=c.lang, status="unchanged",
                 old_consol_date=old_date, new_consol_date=new_date,
@@ -682,7 +725,7 @@ def diff_all_mcp(
             or old_div_paths != new_div_paths or old_art_nums != new_art_nums
         ):
             status = "content_changed"
-        elif old_date != new_date:
+        elif meta_differs:
             status = "metadata_only"
         else:
             status = "unchanged"
@@ -698,11 +741,74 @@ def diff_all_mcp(
     return diffs
 
 
-def diff_all_d1(db, combos: list[ParsedCombo]) -> list[ComboDiff]:
+def diff_all_d1(db, combos: list[ParsedCombo], *, allow_shrinkage: bool = False) -> list[ComboDiff]:
     """Compare toutes les combinaisons parsées contre la base D1 cible."""
     laws_rows = db.run("SELECT * FROM laws")
     by_id = {r["id"]: r for r in laws_rows}
-    return [diff_combo_d1(db, c, by_id.get(c.law_id)) for c in combos]
+    return [diff_combo_d1(db, c, by_id.get(c.law_id), allow_shrinkage=allow_shrinkage) for c in combos]
+
+
+def _sync_discovery_and_relations(
+    db,
+    *,
+    targeted_ids: set[str],
+    full_corpus: bool,
+    target: str,
+    samples_dir: Path | None,
+    relations_dirty: bool,
+) -> None:
+    taxonomy = json.loads((config.REPO_ROOT / "taxonomy.json").read_text(encoding="utf-8"))
+    relations_cfg = json.loads((config.REPO_ROOT / "relations.json").read_text(encoding="utf-8"))
+    cfg_laws = config.load_all_laws()
+    cfg_by_id = {l["id"]: l for l in cfg_laws}
+    db_law_ids = {r["id"] for r in db.run("SELECT id FROM laws")}
+    db_has_all_laws = set(cfg_by_id).issubset(db_law_ids)
+
+    if full_corpus:
+        d_load.seed_laws(db)
+        violations = d_load.validate(db, taxonomy, relations_cfg)
+        if violations:
+            raise ErreurValidation(
+                "Validation découverte en échec :\n" + "\n".join(f"  - {v}" for v in violations)
+            )
+        d_load.load(db, taxonomy, relations_cfg)
+        if relations_dirty:
+            d_relations.build(db, samples_dir=samples_dir)
+        if not d_verify.verify(db, allow_witness_drift=True):
+            raise ErreurValidation("Vérification découverte en échec.")
+        return
+
+    if not targeted_ids:
+        return
+    known_targets = targeted_ids & set(cfg_by_id)
+    if known_targets:
+        d_load.seed_laws(db, only_laws=known_targets)
+    violations = d_load.validate(
+        db, taxonomy, relations_cfg,
+        only_laws=None if db_has_all_laws else targeted_ids,
+    )
+    if violations:
+        raise ErreurValidation(
+            "Validation découverte en échec :\n" + "\n".join(f"  - {v}" for v in violations)
+        )
+    if db_has_all_laws:
+        d_load.load(db, taxonomy, relations_cfg)
+    qc_targeted = {
+        lid for lid in known_targets
+        if (cfg_by_id[lid].get("jurisdiction") or "qc") == "qc"
+    }
+    if qc_targeted and relations_dirty:
+        missing = d_relations.epubs_manquants(
+            [cfg_by_id[lid] for lid in sorted(qc_targeted)], samples_dir=samples_dir
+        )
+        if not missing:
+            d_relations.build(db, samples_dir=samples_dir, only_laws=qc_targeted)
+        elif target == "cloud":
+            raise ErreurValidation(
+                f"EPUB FR manquant(s) pour recalculer les relations de {', '.join(missing)}."
+            )
+    if db_has_all_laws and not d_verify.verify(db, allow_witness_drift=True):
+        raise ErreurValidation("Vérification découverte en échec.")
 
 
 def verify_staging_d1(
@@ -743,19 +849,14 @@ def verify_staging_d1(
         fts_path.write_text(load.fts_rebuild_sql(), encoding="utf-8", newline="\n")
         db.run_file(fts_path)
 
-        if full_corpus:
-            taxonomy = json.loads((config.REPO_ROOT / "taxonomy.json").read_text(encoding="utf-8"))
-            relations_cfg = json.loads((config.REPO_ROOT / "relations.json").read_text(encoding="utf-8"))
-            d_load.seed_laws(db)
-            violations = d_load.validate(db, taxonomy, relations_cfg)
-            if violations:
-                raise ErreurValidation(
-                    "Validation découverte en échec :\n" + "\n".join(f"  - {v}" for v in violations)
-                )
-            d_load.load(db, taxonomy, relations_cfg)
-            d_relations.build(db, samples_dir=samples_dir)
-            if not d_verify.verify(db, allow_witness_drift=True):
-                raise ErreurValidation("Vérification finale de découverte en échec en staging.")
+        _sync_discovery_and_relations(
+            db,
+            targeted_ids={c.law_id for c in combos},
+            full_corpus=full_corpus,
+            target="local",
+            samples_dir=samples_dir,
+            relations_dirty=True,
+        )
 
 
 def _ping_backfill(base_url: str, token: str, law: str, kind: str) -> tuple[bool, int]:
@@ -831,6 +932,68 @@ def _write_sql_chunks(out_dir: Path, prefix: str, statements: list[str], budget_
     return files
 
 
+def build_sources_manifest(combos: list[ParsedCombo]) -> dict[str, dict[str, Any]]:
+    return {
+        f"{c.law_id}|{c.lang}": {
+            "source_sha256": c.source_sha256,
+            "consol_date": getattr(c.law, f"consol_date_{c.lang}"),
+            "name": getattr(c.law, "name_fr" if c.lang == "fr" else "name_en"),
+            "article_count": len(c.articles),
+            "division_count": len(c.divisions),
+        }
+        for c in combos
+    }
+
+
+def verify_expected_plan(
+    combos: list[ParsedCombo],
+    lims_sha: str | None,
+    expected_plan: dict[str, Any],
+) -> None:
+    """Refuse toute dérive entre les sources validées au Stage 1 et celles rejouées au Stage 2."""
+    if expected_plan.get("lims_sha") != lims_sha:
+        raise ErreurPrevol(
+            f"SHA LIMS différent du plan Stage 1 : {lims_sha!r} vs {expected_plan.get('lims_sha')!r}"
+        )
+    expected_sources = expected_plan.get("sources")
+    if not isinstance(expected_sources, dict):
+        raise ErreurPrevol("Le fichier --expected-plan ne contient pas 'sources'.")
+    actual_sources = build_sources_manifest(combos)
+    if set(actual_sources) != set(expected_sources):
+        missing = sorted(set(expected_sources) - set(actual_sources))
+        extra = sorted(set(actual_sources) - set(expected_sources))
+        raise ErreurPrevol(
+            f"Ensemble de combinaisons différent du plan Stage 1 (manquants={missing[:5]}, surplus={extra[:5]})."
+        )
+    for key, exp in expected_sources.items():
+        got = actual_sources[key]
+        if got != exp:
+            raise ErreurPrevol(
+                f"Source modifiée depuis l'approbation Stage 1 pour {key} : {got} != {exp}"
+            )
+
+
+def _load_pending_state(db) -> dict[str, Any] | None:
+    rows = db.run("SELECT value FROM refresh_state WHERE key = 'pending_post_d1'")
+    if not rows:
+        return None
+    raw = rows[0].get("value")
+    return json.loads(raw) if raw else None
+
+
+def _save_pending_state(db, state: dict[str, Any]) -> None:
+    payload = json.dumps(state, ensure_ascii=False, sort_keys=True)
+    db.run(
+        f"INSERT INTO refresh_state (key, value, updated_at) "
+        f"VALUES ('pending_post_d1', {d1_api.q(payload)}, datetime('now')) "
+        f"ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at"
+    )
+
+
+def _clear_pending_state(db) -> None:
+    db.run("DELETE FROM refresh_state WHERE key = 'pending_post_d1'")
+
+
 def apply_refresh(
     db,
     combos: list[ParsedCombo],
@@ -840,6 +1003,7 @@ def apply_refresh(
     full_corpus: bool,
     out_dir: Path,
     samples_dir: Path | None = None,
+    seed_untracked: bool = False,
     ping_fn=_ping_backfill,
     bookmark_fn=_capture_time_travel_bookmark,
     backfill_fn=_run_backfill_driver,
@@ -848,37 +1012,65 @@ def apply_refresh(
     by_key = {(d.law_id, d.lang): d for d in diffs}
     meta_combos = [c for c in combos if by_key[(c.law_id, c.lang)].status == "metadata_only"]
     content_combos = [c for c in combos if by_key[(c.law_id, c.lang)].status == "content_changed"]
-    vector_laws = sorted({c.law_id for c in content_combos if c.lang == "fr"})
+    pending = _load_pending_state(db)
 
-    if not meta_combos and not content_combos:
+    current_vector_laws = [c.law_id for c in meta_combos + content_combos if c.lang == "fr"]
+    current_discovery_laws = [c.law_id for c in meta_combos + content_combos]
+    combined_vector_laws = sorted(
+        set(current_vector_laws) | set((pending or {}).get("vector_laws") or [])
+    )
+    combined_discovery_laws = sorted(
+        set(current_discovery_laws) | set((pending or {}).get("discovery_laws") or [])
+    )
+    combined_full_corpus = full_corpus or bool((pending or {}).get("full_corpus"))
+    combined_fts_dirty = bool(content_combos) or bool((pending or {}).get("fts_dirty"))
+    combined_relations_dirty = (
+        any(c.lang == "fr" and (c.cfg_law.get("jurisdiction") or "qc") == "qc" for c in content_combos)
+        or bool((pending or {}).get("relations_dirty"))
+    )
+
+    if not meta_combos and not content_combos and pending is None:
         return {"applied_meta": 0, "applied_content": 0, "vector_laws": [], "bookmark": None}
 
     bookmark: str | None = None
     untracked_pairs: list[tuple[str, str]] = []
+    full_backfill_laws: set[str] = set()
     backfill_url = os.environ.get("BACKFILL_URL") or _DEFAULT_BACKFILL_URL
     backfill_token: str | None = None
 
     # 1. Pré-vols AVANT toute écriture distante
     if target == "cloud":
-        if vector_laws:
+        if combined_vector_laws:
             backfill_token = resolve_secret("BACKFILL_TOKEN", "backfill.token")
             if not backfill_token:
                 raise ErreurPrevol(
                     "BACKFILL_TOKEN requis avant écriture D1 en production (--target cloud)."
                 )
-            for law_id in vector_laws:
+            for law_id in combined_vector_laws:
                 for kind in ("articles", "divisions"):
                     exists, tracked = ping_fn(backfill_url, backfill_token, law_id, kind)
-                    if exists and tracked == 0:
-                        untracked_pairs.append((law_id, kind))
+                    if tracked == 0:
+                        if seed_untracked and exists:
+                            untracked_pairs.append((law_id, kind))
+                        else:
+                            full_backfill_laws.add(law_id)
         bookmark = bookmark_fn()
         print(f"Bookmark Time Travel capturé : {bookmark}")
 
-        # Amorcer vector_state AVANT la bascule pour ne ré-embedder que les deltas
+        # Amorçage préalable optionnel (désactivé par défaut pour ne jamais sauter d'index absent)
         for law_id, kind in untracked_pairs:
             print(f"Amorçage préalable vector_state ({kind}|{law_id}) …")
             backfill_fn(["--laws", law_id, "--kind", kind, "--mode", "seed"],
                         env_extra={"BACKFILL_TOKEN": backfill_token, "BACKFILL_URL": backfill_url})
+
+    if meta_combos or content_combos:
+        _save_pending_state(db, {
+            "vector_laws": combined_vector_laws,
+            "discovery_laws": combined_discovery_laws,
+            "full_corpus": combined_full_corpus,
+            "fts_dirty": combined_fts_dirty,
+            "relations_dirty": combined_relations_dirty,
+        })
 
     sql_dir = out_dir / "sql"
     sql_dir.mkdir(parents=True, exist_ok=True)
@@ -889,46 +1081,51 @@ def apply_refresh(
         for fpath in _write_sql_chunks(sql_dir, "metadata", stmts):
             db.run_file(fpath)
 
-    # 3. Bascule contenu + reconstruction FTS5 unique
+    # 3. Bascule contenu avec reconstruction FTS5 dans chaque bascule + integrity-check final
     if content_combos:
         for c in content_combos:
             p = sql_dir / f"{c.law_id}-{c.lang}.sql"
             p.write_text(
-                load.to_sql(c.law, c.divisions, c.articles, c.lang, rebuild_fts=False),
+                load.to_sql(c.law, c.divisions, c.articles, c.lang, rebuild_fts=True),
                 encoding="utf-8", newline="\n",
             )
             db.run_file(p)
+    if combined_fts_dirty:
         fts_path = sql_dir / "fts-rebuild.sql"
         fts_path.write_text(load.fts_rebuild_sql(), encoding="utf-8", newline="\n")
         db.run_file(fts_path)
 
-    # 4. Couche découverte + relations (si corpus complet et changements appliqués)
-    if full_corpus:
-        taxonomy = json.loads((config.REPO_ROOT / "taxonomy.json").read_text(encoding="utf-8"))
-        relations_cfg = json.loads((config.REPO_ROOT / "relations.json").read_text(encoding="utf-8"))
-        d_load.seed_laws(db)
-        violations = d_load.validate(db, taxonomy, relations_cfg)
-        if violations:
-            raise ErreurValidation(
-                "Validation découverte en échec post-bascule :\n" + "\n".join(violations)
-            )
-        d_load.load(db, taxonomy, relations_cfg)
-        if any(c.lang == "fr" and (c.cfg_law.get("jurisdiction") or "qc") == "qc" for c in content_combos):
-            d_relations.build(db, samples_dir=samples_dir)
-        if not d_verify.verify(db, allow_witness_drift=True):
-            raise ErreurValidation("Vérification découverte en échec post-bascule.")
+    # 4. Couche découverte + relations (corpus complet ou portée ciblée --laws)
+    _sync_discovery_and_relations(
+        db,
+        targeted_ids=set(combined_discovery_laws),
+        full_corpus=combined_full_corpus,
+        target=target,
+        samples_dir=samples_dir,
+        relations_dirty=combined_relations_dirty,
+    )
 
-    # 5. Synchronisation incrémentale Vectorize + suppression des orphelins
-    if target == "cloud" and vector_laws and backfill_token:
-        backfill_fn(
-            ["--laws", ",".join(vector_laws), "--mode", "incremental", "--prune"],
-            env_extra={"BACKFILL_TOKEN": backfill_token, "BACKFILL_URL": backfill_url},
-        )
+    # 5. Synchronisation Vectorize (`full` pour lois sans état suivi, `incremental` sinon) + purge
+    if target == "cloud" and combined_vector_laws and backfill_token:
+        full_list = sorted(full_backfill_laws)
+        inc_list = [lid for lid in combined_vector_laws if lid not in full_backfill_laws]
+        if full_list:
+            backfill_fn(
+                ["--laws", ",".join(full_list), "--mode", "full", "--prune"],
+                env_extra={"BACKFILL_TOKEN": backfill_token, "BACKFILL_URL": backfill_url},
+            )
+        if inc_list:
+            backfill_fn(
+                ["--laws", ",".join(inc_list), "--mode", "incremental", "--prune"],
+                env_extra={"BACKFILL_TOKEN": backfill_token, "BACKFILL_URL": backfill_url},
+            )
+
+    _clear_pending_state(db)
 
     return {
         "applied_meta": len(meta_combos),
         "applied_content": len(content_combos),
-        "vector_laws": vector_laws,
+        "vector_laws": combined_vector_laws,
         "bookmark": bookmark,
     }
 
@@ -971,7 +1168,9 @@ def build_markdown_report(
     n_content = sum(1 for d in diffs if d.status == "content_changed")
     n_meta = sum(1 for d in diffs if d.status == "metadata_only")
     n_same = sum(1 for d in diffs if d.status == "unchanged")
-    vector_laws = sorted({d.law_id for d in diffs if d.status == "content_changed" and d.lang == "fr"})
+    vector_laws = sorted(
+        {d.law_id for d in diffs if d.status in ("content_changed", "metadata_only") and d.lang == "fr"}
+    )
     witness_deltas = [w for c in combos for w in c.report.witness_deltas]
 
     lines = [
@@ -1053,10 +1252,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ensure-lims-repo", action="store_true", help="Cloner/actualiser laws-lois-xml.")
     ap.add_argument("--compare-mcp", action="store_true", help="Comparer contre l'endpoint MCP public.")
     ap.add_argument("--mcp-url", default=os.environ.get("MCP_URL") or _DEFAULT_MCP_URL)
-    ap.add_argument("--deep-mcp", action="store_true", help="Inspecter les articles MCP même à date égale.")
+    ap.add_argument("--fast-mcp", action="store_true", help="Sauter le diff profond quand date et compte concordent.")
+    ap.add_argument("--deep-mcp", action="store_true", help="Défaut actif : conservé par compatibilité.")
     ap.add_argument("--verify-staging", action="store_true", help="Valider dans une D1 locale vierge.")
     ap.add_argument("--write-config", action="store_true", help="Mettre à jour `consolidation` dans laws.config.json.")
     ap.add_argument("--allow-not-in-force", action="store_true")
+    ap.add_argument("--allow-shrinkage", action="store_true")
+    ap.add_argument("--seed-untracked", action="store_true")
+    ap.add_argument("--dates-file", default=None, help="JSON des dates validées au Stage 1.")
+    ap.add_argument("--expected-plan", default=None, help="Plan Stage 1 à vérifier avant bascule Stage 2.")
     ap.add_argument("--out-dir", default=str(config.REPO_ROOT / "_tmp_refresh"))
     args = ap.parse_args(argv)
 
@@ -1064,6 +1268,11 @@ def main(argv: list[str] | None = None) -> int:
     full_corpus = law_ids is None
     samples_dir = Path(args.samples_dir) if args.samples_dir else None
     lims_repo = Path(args.lims_repo) if args.lims_repo else None
+    dates_override = (
+        json.loads(Path(args.dates_file).read_text(encoding="utf-8"))
+        if args.dates_file
+        else None
+    )
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1075,13 +1284,19 @@ def main(argv: list[str] | None = None) -> int:
         lims_ref=args.lims_ref,
         ensure_lims=args.ensure_lims_repo,
         allow_not_in_force=args.allow_not_in_force,
+        dates_override=dates_override,
     )
 
+    if args.expected_plan and args.mode == "apply":
+        expected_plan = json.loads(Path(args.expected_plan).read_text(encoding="utf-8"))
+        verify_expected_plan(combos, lims_sha, expected_plan)
+
     if args.compare_mcp and args.mode == "prepare":
-        diffs = diff_all_mcp(combos, args.mcp_url, deep_mcp=args.deep_mcp)
+        deep_mcp = not args.fast_mcp
+        diffs = diff_all_mcp(combos, args.mcp_url, deep_mcp=deep_mcp, allow_shrinkage=args.allow_shrinkage)
     else:
         db = d1_api.make_client(args.target, persist_to=args.persist_to)
-        diffs = diff_all_d1(db, combos)
+        diffs = diff_all_d1(db, combos, allow_shrinkage=args.allow_shrinkage)
 
     staging_verified = False
     if args.verify_staging:
@@ -1092,7 +1307,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_config:
         update_laws_config_dates(combos)
 
-    vector_laws = sorted({d.law_id for d in diffs if d.status == "content_changed" and d.lang == "fr"})
+    vector_laws = sorted(
+        {d.law_id for d in diffs if d.status in ("content_changed", "metadata_only") and d.lang == "fr"}
+    )
+    sources = build_sources_manifest(combos)
+    consol_dates = {k: v["consol_date"] for k, v in sources.items() if v.get("consol_date")}
     plan = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": args.mode,
@@ -1101,6 +1320,7 @@ def main(argv: list[str] | None = None) -> int:
         "staging_verified": staging_verified,
         "witness_deltas": [w for c in combos for w in c.report.witness_deltas],
         "warnings": warnings,
+        "sources": sources,
         "summary": {
             "total_combos": len(diffs),
             "content_changed": sum(1 for d in diffs if d.status == "content_changed"),
@@ -1117,6 +1337,10 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / "refresh-plan.json").write_text(
         json.dumps(plan, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
     )
+    (out_dir / "consolidation-dates.json").write_text(
+        json.dumps(consol_dates, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8", newline="\n",
+    )
     (out_dir / "refresh-report.md").write_text(report, encoding="utf-8", newline="\n")
     _write_github_outputs(plan)
 
@@ -1125,7 +1349,8 @@ def main(argv: list[str] | None = None) -> int:
         db = d1_api.make_client(args.target, persist_to=args.persist_to)
         res = apply_refresh(
             db, combos, diffs,
-            target=args.target, full_corpus=full_corpus, out_dir=out_dir, samples_dir=samples_dir,
+            target=args.target, full_corpus=full_corpus, out_dir=out_dir,
+            samples_dir=samples_dir, seed_untracked=args.seed_untracked,
         )
         print(f"Application terminée : {res}")
     return 0

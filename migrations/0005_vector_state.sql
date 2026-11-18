@@ -1,6 +1,6 @@
--- Migration 0005 — état content-addressed de l'index Vectorize (rafraîchissement incrémental).
+-- Migration 0005 — état content-addressed de l'index Vectorize et état de reprise (rafraîchissement incrémental).
 --
--- Table d'administration interne (hors outils MCP, aucun effet sur structuredContent ni sur
+-- Tables d'administration interne (hors outils MCP, aucun effet sur structuredContent ni sur
 -- schema.sql, qui reste gelé sur l'état initial pré-0001). Purement additive.
 
 CREATE TABLE IF NOT EXISTS vector_state (
@@ -12,3 +12,9 @@ CREATE TABLE IF NOT EXISTS vector_state (
 );
 
 CREATE INDEX IF NOT EXISTS idx_vector_state_law_kind ON vector_state(law_id, kind);
+
+CREATE TABLE IF NOT EXISTS refresh_state (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

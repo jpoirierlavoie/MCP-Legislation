@@ -1,20 +1,26 @@
 """Tests hors réseau du pipeline de rafraîchissement incrémental (pipeline/refresh.py)."""
 from __future__ import annotations
 
+import json
 import os
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest import TestCase, main, mock
 
 from pipeline import load, validate
+from pipeline.discovery import relations as d_relations
 from pipeline.ingest import extrait_consolidation_quebec
 from pipeline.model import Article, Division, Law
 from pipeline.refresh import (
     ErreurPrevol,
+    ErreurValidation,
     ParsedCombo,
     apply_refresh,
     build_markdown_report,
+    build_sources_manifest,
     diff_combo_d1,
+    verify_expected_plan,
 )
 
 
@@ -143,6 +149,11 @@ class TestValidateWitnessDrift(TestCase):
         rep_dup = validate.validate("ccq", "fr", divs, arts, allow_witness_drift=True)
         self.assertFalse(rep_dup.ok)
 
+        # Extraction vide (0 article réel) : refusée même hors ccq/cpc
+        rep_empty = validate.validate("loi-x", "fr", divs[:1], [arts_sh[-1]], allow_witness_drift=False)
+        self.assertFalse(rep_empty.ok)
+        self.assertIn("extraction vide", "\n".join(rep_empty.lines))
+
 
 class TestLoadIncrementalSql(TestCase):
     def test_to_sql_sans_fts_et_metadata_only_invariant_3(self):
@@ -247,21 +258,25 @@ class TestDiffEtApply(TestCase):
         self.assertEqual(db.executed_files, [])
         self.assertFalse(bookmark_called)
 
-    def test_apply_refresh_cloud_enchaîne_seed_d1_fts_et_backfill_incremental(self):
+    def test_apply_refresh_cloud_enchaîne_full_et_incremental_et_fts_par_bascule(self):
         c_fr = _sample_combo("loi-x", "fr", date="2026-10-15", art_text="Nouveau texte.")
+        c_meta = _sample_combo("loi-z", "fr", date="2026-10-15", art_text="Same.")
         c_en = _sample_combo("loi-y", "en", date="2026-10-15", art_text="Same.")
         s_fr, d_fr, a_fr = self._stored_from(_sample_combo("loi-x", "fr", date="2026-04-07", art_text="Ancien texte."))
+        s_meta, d_meta, a_meta = self._stored_from(_sample_combo("loi-z", "fr", date="2026-04-07", art_text="Same."))
         s_en, d_en, a_en = self._stored_from(_sample_combo("loi-y", "en", date="2026-04-07", art_text="Same."))
         db = _FakeD1(divs=[], arts=[])
 
         diff_fr = diff_combo_d1(_FakeD1(divs=d_fr, arts=a_fr), c_fr, s_fr)
+        diff_meta = diff_combo_d1(_FakeD1(divs=d_meta, arts=a_meta), c_meta, s_meta)
         diff_en = diff_combo_d1(_FakeD1(divs=d_en, arts=a_en), c_en, s_en)
 
         events: list[str] = []
+        sql_contents: dict[str, str] = {}
 
         def fake_ping(_u, _t, law, kind):
             events.append(f"ping:{law}:{kind}")
-            return (True, 0)
+            return (True, 0 if law == "loi-x" else 10)
 
         def fake_bookmark():
             events.append("bookmark")
@@ -272,31 +287,123 @@ class TestDiffEtApply(TestCase):
 
         def record_run_file(sql_path: Path):
             events.append("sql:" + sql_path.name)
+            sql_contents[sql_path.name] = sql_path.read_text(encoding="utf-8")
 
         db.run_file = record_run_file  # type: ignore[method-assign]
 
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"BACKFILL_TOKEN": "tok"}):
             res = apply_refresh(
-                db, [c_fr, c_en], [diff_fr, diff_en],
+                db, [c_fr, c_meta, c_en], [diff_fr, diff_meta, diff_en],
                 target="cloud", full_corpus=False, out_dir=Path(tmp),
                 ping_fn=fake_ping, bookmark_fn=fake_bookmark, backfill_fn=fake_backfill,
             )
 
         self.assertEqual(res["bookmark"], "bm-123")
-        self.assertEqual(res["applied_meta"], 1)
+        self.assertEqual(res["applied_meta"], 2)
         self.assertEqual(res["applied_content"], 1)
-        self.assertEqual(res["vector_laws"], ["loi-x"])
+        self.assertEqual(res["vector_laws"], ["loi-x", "loi-z"])
+        self.assertIn("VALUES('rebuild')", sql_contents["loi-x-fr.sql"])
         self.assertEqual(events, [
             "ping:loi-x:articles",
             "ping:loi-x:divisions",
+            "ping:loi-z:articles",
+            "ping:loi-z:divisions",
             "bookmark",
-            "backfill:--laws loi-x --kind articles --mode seed",
-            "backfill:--laws loi-x --kind divisions --mode seed",
             "sql:metadata-1.sql",
             "sql:loi-x-fr.sql",
             "sql:fts-rebuild.sql",
+            "backfill:--laws loi-x --mode full --prune",
+            "backfill:--laws loi-z --mode incremental --prune",
+        ])
+
+    def test_verify_expected_plan_refuse_toute_derive_source(self):
+        c = _sample_combo("loi-x", "fr", date="2026-10-15")
+        c.source_sha256 = "abc123"
+        expected = {"lims_sha": None, "sources": build_sources_manifest([c])}
+        verify_expected_plan([c], None, expected)
+
+        c.source_sha256 = "modified"
+        with self.assertRaises(ErreurPrevol):
+            verify_expected_plan([c], None, expected)
+
+        c.source_sha256 = "abc123"
+        c.law.consol_date_fr = "2026-11-01"
+        with self.assertRaises(ErreurPrevol):
+            verify_expected_plan([c], None, expected)
+
+    def test_reprise_refresh_state_meme_si_d1_unchanged(self):
+        c = _sample_combo("loi-x", "fr", date="2026-10-15", art_text="Identique.")
+        stored_law, divs, arts = self._stored_from(c)
+
+        class _PendingD1(_FakeD1):
+            def __init__(self):
+                super().__init__(divs=divs, arts=arts)
+                self.pending = json.dumps({
+                    "vector_laws": ["loi-x"],
+                    "discovery_laws": ["loi-x"],
+                    "full_corpus": False,
+                    "fts_dirty": True,
+                    "relations_dirty": False,
+                })
+
+            def run(self, sql: str):
+                self.queries.append(sql)
+                if "SELECT value FROM refresh_state" in sql and self.pending:
+                    return [{"value": self.pending}]
+                if "DELETE FROM refresh_state" in sql:
+                    self.pending = ""
+                    return []
+                return super().run(sql)
+
+        db = _PendingD1()
+        diff = diff_combo_d1(db, c, stored_law)
+        self.assertEqual(diff.status, "unchanged")
+
+        events: list[str] = []
+        db.run_file = lambda p: events.append("sql:" + p.name)  # type: ignore[method-assign]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"BACKFILL_TOKEN": "tok"}):
+            res = apply_refresh(
+                db, [c], [diff],
+                target="cloud", full_corpus=False, out_dir=Path(tmp),
+                ping_fn=lambda _u, _t, _l, _k: (True, 5),
+                bookmark_fn=lambda: "bm-resumed",
+                backfill_fn=lambda args, **_kw: events.append("backfill:" + " ".join(args)),
+            )
+
+        self.assertEqual(res["vector_laws"], ["loi-x"])
+        self.assertEqual(events, [
+            "sql:fts-rebuild.sql",
             "backfill:--laws loi-x --mode incremental --prune",
         ])
+        self.assertEqual(db.pending, "")
+
+    def test_relations_only_laws_preserve_autres_lois_auto(self):
+        db = _FakeD1(divs=[], arts=[])
+        with tempfile.TemporaryDirectory() as tmp:
+            epub = Path(tmp) / "C-73.2-R.6-fr.epub"
+            with zipfile.ZipFile(epub, "w") as zf:
+                zf.writestr("page1.xhtml", "<html><body><p>Texte</p></body></html>")
+            d_relations.build(db, samples_dir=Path(tmp), only_laws={"c-73.2-r.6"})
+        deletes = [q for q in db.queries if "DELETE FROM law_relations" in q]
+        self.assertEqual(
+            deletes,
+            ["DELETE FROM law_relations WHERE source = 'auto' AND from_law_id IN ('c-73.2-r.6')"],
+        )
+
+    def test_diff_combo_d1_refuse_chute_anormale_sur_autre_loi(self):
+        c_old = _sample_combo("loi-z", "fr", date="2026-04-07")
+        c_old.articles = [
+            Article(law_id="loi-z", lang="fr", number=str(i), text=f"Art {i}.",
+                    division_path="ga:l_i", html="<div>x</div>", history=None, repealed=0)
+            for i in range(1, 15)
+        ]
+        load.prepare(c_old.law, c_old.divisions, c_old.articles, id_base=100)
+        stored_law, divs, arts = self._stored_from(c_old)
+
+        c_shrunk = _sample_combo("loi-z", "fr", date="2026-10-15")
+        db = _FakeD1(divs=divs, arts=arts)
+        with self.assertRaises(ErreurValidation):
+            diff_combo_d1(db, c_shrunk, stored_law)
 
 
 if __name__ == "__main__":

@@ -45,6 +45,11 @@ on:
         required: false
         default: ""
         type: string
+      reprendre:
+        description: "Forcer Stage 2 pour reprendre une bascule interrompue même si D1 est déjà à jour"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -109,9 +114,11 @@ jobs:
           MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
         run: |
           set -euo pipefail
+          mkdir -p _tmp_refresh/samples
           args=(
             --mode prepare
             --download
+            --samples-dir _tmp_refresh/samples
             --ensure-lims-repo
             --lims-ref "$LIMS_REF"
             --compare-mcp
@@ -131,6 +138,8 @@ jobs:
           path: |
             _tmp_refresh/refresh-report.md
             _tmp_refresh/refresh-plan.json
+            _tmp_refresh/consolidation-dates.json
+            _tmp_refresh/samples/*.epub
           retention-days: 30
 
       - name: Publier le résumé du diff dans GITHUB_STEP_SUMMARY
@@ -171,7 +180,7 @@ jobs:
       github.event_name == 'workflow_dispatch'
       && inputs.mode == 'appliquer'
       && inputs.confirmer == 'APPLIQUER'
-      && needs.preparer.outputs.has_changes == 'true'
+      && (needs.preparer.outputs.has_changes == 'true' || inputs.reprendre == true)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: production
@@ -284,13 +293,25 @@ jobs:
           python-version: "3.12"
       - run: pip install -r pipeline/requirements.txt
 
+      - name: Relevé du signet Time Travel D1 avant migration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_COMPTE }}
+        run: npx wrangler d1 time-travel info legislation --json
+
       - name: Appliquer les migrations D1 en production (dont 0005_vector_state)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CF_COMPTE }}
         run: npx wrangler d1 migrations apply legislation --remote
 
-      - name: Bascule incrémentale D1 + Vectorize (SHA exact validé par Stage 1)
+      - name: Récupérer l'instantané validé au Stage 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: refresh-stage1-plan
+          path: _tmp_refresh
+
+      - name: Bascule incrémentale D1 + Vectorize (instantané exact validé par Stage 1)
         env:
           PYTHONUTF8: "1"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -301,11 +322,16 @@ jobs:
           LAWS: ${{ github.event.inputs.laws || '' }}
         run: |
           set -euo pipefail
+          test -f _tmp_refresh/refresh-plan.json
+          test -f _tmp_refresh/consolidation-dates.json
+          mkdir -p _tmp_refresh/samples
           args=(
             --mode apply
             --target cloud
-            --download
-            --out-dir _tmp_refresh
+            --samples-dir _tmp_refresh/samples
+            --dates-file _tmp_refresh/consolidation-dates.json
+            --expected-plan _tmp_refresh/refresh-plan.json
+            --out-dir _tmp_refresh_apply
           )
           if [ -n "${LIMS_SHA:-}" ]; then
             args+=(--ensure-lims-repo --lims-ref "$LIMS_SHA")

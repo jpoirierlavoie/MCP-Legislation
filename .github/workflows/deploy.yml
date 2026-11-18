@@ -194,6 +194,9 @@ jobs:
           npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('vector_state')" \
             | grep -q '"n": *5' || { echo "vector_state absente ou incomplète"; exit 1; }
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('refresh_state')" \
+            | grep -q '"n": *3' || { echo "refresh_state absente ou incomplète"; exit 1; }
           rm -rf "$T"
 
       - name: Paquet de déploiement (à blanc)

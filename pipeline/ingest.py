@@ -9,6 +9,7 @@ Par défaut, l'EPUB est lu depuis pipeline/samples/ ; --download le récupère d
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import subprocess
 import sys
@@ -224,7 +225,13 @@ def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
     return 0 if rep.ok else 2
 
 
-def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
+def _acquiert_lims(
+    cfg_law: dict,
+    law,
+    lang: str,
+    allow_not_in_force: bool,
+    consol_date_override: str | None = None,
+):
     """Acquisition + parsing d'un texte FÉDÉRAL. Rend (divisions, articles, bilan).
 
     Pendant du bloc EPUB, et volontairement SÉPARÉ de lui : quatre choses y sont propres à
@@ -245,6 +252,7 @@ def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
     chemin = cfg_law["xml"][lang]
     print(f"Lecture {chemin} @ {config.LIMS_REF} ({law.id}/{lang}) …")
     data = parser_lims.git_show_lims(config.LIMS_REF, chemin)
+    source_sha256 = hashlib.sha256(data).hexdigest()
     racine = ET.fromstring(data)
 
     # Métadonnées DÉRIVÉES du fichier, jamais recopiées de la config (R10).
@@ -290,7 +298,11 @@ def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
     # servi : exactement le faux silencieux que ce dépôt refuse. Une ingestion refusée
     # coûte une reprise ; elle est manuelle et surveillée (CLAUDE.md, « Rafraîchissement
     # semestriel »), donc quelqu'un lit ce message à l'instant où il tombe.
-    consol = fetch_consolidation_federale(cfg_law["official_source"][lang])
+    consol = (
+        consol_date_override
+        if consol_date_override is not None
+        else fetch_consolidation_federale(cfg_law["official_source"][lang])
+    )
     if not consol:
         raise DateDeConsolidationIntrouvable(
             f"{law.id}/{lang} : la page officielle "
@@ -312,6 +324,7 @@ def _acquiert_lims(cfg_law: dict, law, lang: str, allow_not_in_force: bool):
         )
 
     bilan = parser_lims.Bilan()
+    bilan.source_sha256 = source_sha256  # type: ignore[attr-defined]
     divisions, articles = parser_lims.parse_lims(data, law, lang, bilan=bilan)
     print(f"  bilan de matière : {bilan.as_dict()}")
     return divisions, articles, bilan

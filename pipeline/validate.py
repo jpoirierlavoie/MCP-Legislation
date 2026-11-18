@@ -248,4 +248,7 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
         r.check("articles sans division", "aucun", "aucun")
     empty = [a.number for a in articles if not a.text]
     r.check("articles au texte vide", empty if empty else "aucun", "aucun")
+    if len(real) == 0:
+        r.ok = False
+        r.lines.append("  ✗ extraction vide : aucun article réel extrait")
     return r

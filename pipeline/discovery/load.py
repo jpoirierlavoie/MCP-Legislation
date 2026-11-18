@@ -37,11 +37,13 @@ def _insert_rows(db, table: str, cols: list[str], rows: list[list], or_ignore: b
     db.run(f"{verb} {table} ({', '.join(cols)}) VALUES {values}")
 
 
-def seed_laws(db) -> int:
+def seed_laws(db, only_laws: set[str] | None = None) -> int:
     """Enregistre les lois de la configuration (métadonnées) et pose les attributs de
-    découverte sur TOUTES — pas seulement sur les textes ajoutés, sans quoi ccq/cpc restaient
+    découverte sur TOUTES (ou sur `only_laws` si précisé) — sans quoi ccq/cpc restaient
     sans `fonction` et échappaient au filtre correspondant."""
     laws = config.load_all_laws()
+    if only_laws is not None:
+        laws = [l for l in laws if l["id"] in only_laws]
     rows = [[l["id"], l["name_fr"], l.get("name_en") or l["name_fr"], l["official_cite"]]
             for l in laws]
     _insert_rows(db, "laws", ["id", "name_fr", "name_en", "official_cite"], rows, or_ignore=True)
@@ -94,7 +96,7 @@ def seed_laws(db) -> int:
     return len(laws)
 
 
-def validate(db, taxonomy: dict, relations: dict) -> list[str]:
+def validate(db, taxonomy: dict, relations: dict, only_laws: set[str] | None = None) -> list[str]:
     v: list[str] = []
     law_ids = {r["id"] for r in db.run("SELECT id FROM laws")}
     subject_ids = {s["id"] for s in taxonomy["subjects"]}
@@ -116,6 +118,8 @@ def validate(db, taxonomy: dict, relations: dict) -> list[str]:
         if key in seen:
             v.append(f"mappage en doublon : {key}")
         seen.add(key)
+        if only_laws is not None and law not in only_laws:
+            continue
         if subj not in subject_ids:
             v.append(f"sujet non déclaré : '{subj}' (mappage vers '{law}')")
         if law not in law_ids:
@@ -133,6 +137,8 @@ def validate(db, taxonomy: dict, relations: dict) -> list[str]:
                          f"(le routeur serait muet en anglais sur cette matière)")
 
     for rel in relations["relations"]:
+        if only_laws is not None and rel["from"] not in only_laws:
+            continue
         if rel["from"] not in law_ids:
             v.append(f"relation 'from' absente de `laws` : '{rel['from']}' -> '{rel['to']}'")
     return v

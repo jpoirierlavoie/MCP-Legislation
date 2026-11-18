@@ -143,7 +143,7 @@ jobs:
           T=$(mktemp -d)
           npx wrangler d1 execute legislation --local --persist-to "$T" --file=./schema.sql -y
           npx wrangler d1 migrations apply legislation --local --persist-to "$T"
-          for t in search_log division_links concept_gazetteer article_headnotes vector_state; do
+          for t in search_log division_links concept_gazetteer article_headnotes vector_state refresh_state; do
             npx wrangler d1 execute legislation --local --persist-to "$T" --json \
               --command "SELECT COUNT(*) AS n FROM pragma_table_info('$t')" \
               | grep -q '"n": *[1-9]' || { echo "$t absente après migrations"; exit 1; }
