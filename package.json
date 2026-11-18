@@ -19,6 +19,7 @@
     "backfill:incremental": "node scripts/backfill-vectors.mjs --mode incremental --prune",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
+    "audit": "node scripts/verifier-audit.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "pretest": "node scripts/wrangler-test-config.mjs --ecrire"
@@ -27,7 +28,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@cloudflare/vitest-pool-workers": "^0.23.0",
-    "@poirierlavoie/mcp-socle": "github:jpoirierlavoie/MCP-Socle#v0.7.0",
+    "@poirierlavoie/mcp-socle": "file:../MCP-Socle",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12",
     "wrangler": "^4.162.0"

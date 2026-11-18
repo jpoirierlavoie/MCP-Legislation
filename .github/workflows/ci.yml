@@ -36,6 +36,7 @@ jobs:
       - run: npx wrangler types # génère worker-configuration.d.ts (pas d'auth requise)
       - run: npx tsc --noEmit
       - run: npx biome check .
+      - run: npm run audit
 
       # Une seule commande pour DEUX projets (cf. vitest.config.mts) :
       #   « node »    — gardes de provenance, qui lisent le TypeScript comme du texte

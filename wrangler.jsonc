@@ -4,7 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": false,
+    "logs": { "enabled": false, "invocation_logs": false }
+  },
   "cache": { "enabled": true },
 
   // Domaine personnalisé (zone poirierlavoie.ca) : Cloudflare gère DNS + certificat.
@@ -28,6 +31,13 @@
       // `wrangler d1 create legislation`. Le dev local utilise quand même un SQLite local.
       "database_id": "82779d59-480f-4847-9716-6f4d7c62af5b",
       "migrations_dir": "migrations"
+    },
+    {
+      "binding": "DB_IDENTITE",
+      "database_name": "mcp-identite",
+      // Base D1 partagée du socle d'identité (jetons individuels, quotas et événements sans contenu).
+      // L'UUID réel est substitué au déploiement Phase 5 après `wrangler d1 create mcp-identite`.
+      "database_id": "00000000-0000-0000-0000-000000000000"
     }
   ],
 
@@ -64,23 +74,22 @@
     // deux choses : ajouter un client web tiers, ou autoriser une origine de
     // développement. Toute origine de navigateur absente de la liste est refusée par un
     // 403 — c'est la défense contre le ré-attachement DNS exigée par la spécification MCP.
-    "ALLOWED_ORIGINS": ""
+    "ALLOWED_ORIGINS": "",
+    // Origine canonique du serveur d'autorisation OAuth 2.1 publiée dans RFC 9728 (/mcp/oauth).
+    "ORIGINE_PORTAIL": "https://acces.poirierlavoie.ca"
   },
 
-  // Limitation de débit DANS le Worker, et non au WAF de la zone — même choix que le
-  // connecteur jumeau (jurisprudence), qui a constaté que la limitation de zone n'était pas
-  // accessible malgré l'abonnement Pro. Bénéfice second, décisif ici : une règle WAF vit au
-  // tableau de bord, hors du dépôt et hors CI ; ce binding est VERSIONNÉ et se relit.
-  //
-  // LE SEUIL EST MESURÉ, PAS RECOPIÉ. Le jumeau tient à 60/min parce que ses clients sont
-  // des humains. Ici, `npm run evals` a émis 61 requêtes en 3 s (mesuré le 2026-08-27 sur
-  // wrangler dev) et `npm run eval` en émet une soixantaine : à 60/min, les DEUX harnais
-  // déclencheraient leurs propres 429 et on lirait une régression là où il n'y a qu'un
-  // compteur. 300/min laisse 5x la rafale mesurée et coupe toujours un flot abusif.
-  // Le clavardage de Pallas Athéna, lui, est structurellement borné (2 instances App
-  // Engine, 2 dépêches concurrentes) : il n'approche pas ce seuil.
+  // Limitation de débit à deux niveaux DANS le Worker (SPEC-SOCLE-COMMUN.md §6.1, G34) :
+  // - pré-authentification par IP (`1011`), échecs d'auth par IP (`1012`) et globalement (`1013`) ;
+  // - post-authentification par `titulaire_id` (`1014` à 300/min en régime `actif`, `1015` à 20/min
+  //   en régime `limite`), pour que 50 avocats derrière le même NAT ou la même IP infonuagique ne
+  //   s'épuisent jamais mutuellement et que les harnais d'évals (61 req / 3 s) passent sans faux 429.
   "ratelimits": [
-    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } }
+    { "name": "RL_PRE_AUTH_IP", "namespace_id": "1011", "simple": { "limit": 600, "period": 60 } },
+    { "name": "RL_ECHEC_IP", "namespace_id": "1012", "simple": { "limit": 20, "period": 60 } },
+    { "name": "RL_ECHECS_GLOBAL", "namespace_id": "1013", "simple": { "limit": 300, "period": 60 } },
+    { "name": "RL_TITULAIRE", "namespace_id": "1014", "simple": { "limit": 300, "period": 60 } },
+    { "name": "RL_TITULAIRE_LIMITE", "namespace_id": "1015", "simple": { "limit": 20, "period": 60 } }
   ],
 
   // Couche sémantique (plan v2, phase 2) : embeddings bge-m3 + index Vectorize.

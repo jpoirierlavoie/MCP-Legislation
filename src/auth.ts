@@ -62,9 +62,28 @@ export const NOMS_SECRETS = ["MCP_TOKEN", "MCP_TOKEN_VEILLE"] as const;
  * `tests/catalogue.test.mjs` lit `MOUNT`, `QUERY_KEY` et `NOMS_SECRETS` directement ici pour
  * ne pas dupliquer la liste. Un même littéral pilote désormais le runtime et la vérification.
  */
+/**
+ * Identifiant de service attendu dans `DB_IDENTITE` (`jeton.portee` = `'legislation'` ou
+ * `'les_deux'`).
+ */
+export const SERVICE_ID = "legislation" as const;
+
 export const PORTE = {
   mount: MOUNT,
   queryKey: QUERY_KEY,
   nomsSecrets: NOMS_SECRETS,
   segmentBorne: true,
+} as const;
+
+/**
+ * Montage OAuth 2.1 dédié (`/mcp/oauth`) : en-tête `Authorization: Bearer <jeton>` uniquement,
+ * aucun secret partagé de Worker, aucun jeton en chemin ni en paramètre de requête (`?key=`),
+ * refus `401` RFC 9728 pointant vers `acces.poirierlavoie.ca`.
+ */
+export const MOUNT_OAUTH = "/mcp/oauth" as const;
+
+export const PORTE_OAUTH = {
+  mount: MOUNT_OAUTH,
+  nomsSecrets: [] as const,
+  autoriserChemin: false,
 } as const;

@@ -207,12 +207,12 @@
       "corps_fr": [
         "Les deux moteurs ne se remplacent pas : ils se fusionnent. La liste lexicale et la liste sémantique sont combinées par un rang réciproque, ce qui évite d'avoir à comparer des échelles de score incommensurables. Un article trouvé par les deux voies remonte naturellement.",
         "Le moteur sémantique repose sur des plongements multilingues, ce qui lui donne deux usages précis : franchir l'écart de vocabulaire — une recherche sur « congédiement » atteint « délai de congé » — et franchir la barrière de langue, une requête en anglais atteignant le texte français.",
-        "Un plancher de similarité est appliqué, et il est calibré par mesure et non au jugé. Sans lui, une requête en charabia recevrait quand même ses plus proches voisins, présentés comme des résultats. Sous ce plancher, l'outil préfère ne rien rendre."
+        "Un plancher de similarité est appliqué, et il est calibré par mesure et non au jugé. Sans lui, une requête en charabia recevrait quand même ses plus proches voisins, présentés comme des résultats. Sous ce plancher, l'outil préfère ne rien rendre. Chaque titulaire peut en outre désactiver le volet vectoriel dans son espace personnel afin de borner la recherche au seul index lexical local, ce que la réponse signale alors explicitement."
       ],
       "corps_en": [
         "The two engines do not replace one another: they are fused. The lexical list and the semantic list are combined by reciprocal rank, which avoids having to compare incommensurable score scales. An article found by both routes naturally rises.",
         "The semantic engine rests on multilingual embeddings, which gives it two precise uses: bridging the vocabulary gap — a search for “dismissal” reaches “notice of termination” — and bridging the language barrier, an English query reaching the French text.",
-        "A similarity floor is applied, and it is calibrated by measurement rather than by judgement. Without it, a gibberish query would still receive its nearest neighbours, presented as results. Below that floor, the tool prefers to return nothing."
+        "A similarity floor is applied, and it is calibrated by measurement rather than by judgement. Without it, a gibberish query would still receive its nearest neighbours, presented as results. Below that floor, the tool prefers to return nothing. Each account holder may also opt out of vector search in their self-service portal so searches run strictly against the local lexical index, which the response then states explicitly."
       ],
       "constantes": [
         "RRF_K",

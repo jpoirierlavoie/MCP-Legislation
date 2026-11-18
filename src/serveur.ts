@@ -2,7 +2,12 @@
  * Identité du serveur, fiche publique SEP-2127 et versions servies.
  */
 
-import { construireCarteServeur, SERVER_CARD_SCHEMA } from "@poirierlavoie/mcp-socle";
+import {
+  construireCarteServeur,
+  construireRessourceProtegee,
+  PORTEE_UNIVERSELLE,
+  SERVER_CARD_SCHEMA,
+} from "@poirierlavoie/mcp-socle";
 
 export { SERVER_CARD_SCHEMA };
 
@@ -59,6 +64,11 @@ export const PUBLIC_DESCRIPTION =
  * Toutes les valeurs d'identité et de protocole dérivent de `PACKAGE_NAME`, `SERVER_INFO`,
  * `PUBLIC_DESCRIPTION` et `VERSIONS` (R10 : aucune copie littérale).
  */
+export const ORIGINE_PORTAIL_DEFAUT = "https://acces.poirierlavoie.ca";
+export const META_RESSOURCE_OAUTH_URL =
+  "https://legislation.poirierlavoie.ca/.well-known/oauth-protected-resource/mcp/oauth";
+export const SCOPE_OAUTH = "legislation les_deux";
+
 export function carteServeur() {
   return construireCarteServeur({
     name: `ca.poirierlavoie.legislation/${PACKAGE_NAME}`,
@@ -69,7 +79,24 @@ export function carteServeur() {
     repositoryUrl: "https://github.com/jpoirierlavoie/MCP-Legislation",
     remoteUrl: "https://legislation.poirierlavoie.ca/mcp",
     supportedProtocolVersions: VERSIONS,
-    authDescription: "Jeton d'accès de l'instance (« Bearer <jeton> »).",
+    authDescription:
+      "Jeton individuel de titulaire (« Bearer <jeton> ») ou connexion OAuth 2.1 sur /mcp/oauth via acces.poirierlavoie.ca.",
+  });
+}
+
+/**
+ * Métadonnées RFC 9728 de ressource protégée OAuth 2.1 servies sur
+ * `GET /.well-known/oauth-protected-resource/mcp/oauth` (tandis que la racine
+ * `/.well-known/oauth-protected-resource` demeure en 404 afin de préserver les clients à jeton
+ * direct sur `/mcp`).
+ */
+export function ressourceProtegeeOAuth(originePortail?: string) {
+  const serveur = (originePortail ?? "").trim() || ORIGINE_PORTAIL_DEFAUT;
+  return construireRessourceProtegee({
+    resource: "https://legislation.poirierlavoie.ca/mcp/oauth",
+    authorizationServers: [serveur],
+    scopesSupported: [PORTEE_UNIVERSELLE, "legislation"],
+    resourceDocumentation: "https://legislation.poirierlavoie.ca/",
   });
 }
 

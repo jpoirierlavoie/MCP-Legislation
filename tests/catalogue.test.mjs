@@ -522,11 +522,60 @@ test("manifestes Antigravity / Gemini, version et description concordent partout
     "plugin.json doit fournir 3 suggestedPrompts non vides",
   );
 
-  // GEMINI.md sous la limite de troncature Antigravity (24 000 octets UTF-8).
+  // CLAUDE.md === GEMINI.md sous la limite de troncature Antigravity (24 000 octets UTF-8, G2).
+  const claudeMd = lire("CLAUDE.md");
+  assert.equal(
+    geminiMd,
+    claudeMd,
+    "GEMINI.md et CLAUDE.md doivent être identiques octet pour octet",
+  );
   const octets = new TextEncoder().encode(geminiMd).byteLength;
   assert.ok(octets > 1_000 && octets < 24_000, `GEMINI.md fait ${octets} octets`);
   assert.ok(geminiMd.includes("CLAUDE.md"), "GEMINI.md doit renvoyer vers CLAUDE.md");
   assert.ok(!/[0-9a-f]{32,}/i.test(geminiMd), "chaîne hexadécimale suspecte dans GEMINI.md");
+
+  // Garde G19, G34 et G37 : annotations Deep Research, zéro x-mcp-header, observabilité coupée,
+  // 5 limiteurs de débit distincts 1011..1015 et DB_IDENTITE déclarée.
+  const wranglerBrut = lire("wrangler.jsonc");
+  const wranglerSansComm = wranglerBrut
+    .split("\n")
+    .filter((l) => !/^\s*\/\//.test(l))
+    .join("\n");
+  const wranglerCfg = JSON.parse(wranglerSansComm);
+  assert.deepEqual(wranglerCfg.observability, {
+    enabled: false,
+    logs: { enabled: false, invocation_logs: false },
+  });
+  assert.ok(
+    wranglerCfg.d1_databases?.some(
+      (d) => d.binding === "DB_IDENTITE" && d.database_name === "mcp-identite",
+    ),
+    "wrangler.jsonc doit lier DB_IDENTITE (mcp-identite)",
+  );
+  assert.deepEqual(
+    wranglerCfg.ratelimits?.map((r) => [r.name, r.namespace_id, r.simple.limit, r.simple.period]),
+    [
+      ["RL_PRE_AUTH_IP", "1011", 600, 60],
+      ["RL_ECHEC_IP", "1012", 20, 60],
+      ["RL_ECHECS_GLOBAL", "1013", 300, 60],
+      ["RL_TITULAIRE", "1014", 300, 60],
+      ["RL_TITULAIRE_LIMITE", "1015", 20, 60],
+    ],
+  );
+  assert.ok(!schemasTs.includes("x-mcp-header"), "x-mcp-header interdit dans src/schemas.ts (G19)");
+  for (const [nom, d] of Object.entries(PUBLIES)) {
+    assert.equal(d.inputSchema.additionalProperties, false, `${nom} additionalProperties`);
+    assert.deepEqual(
+      d.annotations,
+      {
+        readOnlyHint: true,
+        idempotentHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+      `${nom} annotations`,
+    );
+  }
 
   // Garde miroir de tests/evals.mjs : aucun motif de jeton dans le texte non-commenté de src/site.ts.
   const siteSansCommentaires = siteTs

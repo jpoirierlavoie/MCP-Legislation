@@ -1454,78 +1454,11 @@ export async function lawNames(
   return new Map(rows.map((r) => [r.id, { name_fr: r.name_fr, name_en: r.name_en }]));
 }
 
-// --- journal des recherches (plan v2, 1.6) ------------------------------------
-
-export interface SearchLogEntry {
-  tool: "search_text" | "find_relevant";
-  query: string;
-  law?: string | null;
-  lang?: string | null;
-  result_count: number;
-  /** null | 'widened' | 'loo:<terme>' | 'or_relax' | 'semantic' */
-  fallback?: string | null;
-}
-
-/**
- * Journalise CHAQUE appel de recherche/orientation. Échec d'insertion SILENCIEUX — un
- * journal ne doit jamais casser une recherche.
- *
- * ⚠️ `result_count = 0` NE MESURE PAS L'ÉCHEC — mesuré, pas supposé. La migration 0001 a
- * posé `idx_search_log_misses ON search_log(result_count, ts)` en pariant sur le zéro. Mais
- * la conception fait *fail open* (R7) : l'échelle de relaxation garantit qu'on ne rend
- * quasiment jamais zéro. Dépouillement du 2026-07-30 sur 1 887 lignes : les 109 zéros
- * venaient INTÉGRALEMENT des trois requêtes-charabia d'éval (45 + 46 + 18). Sur les
- * 99 appels réels, ZÉRO recherche vide — et pourtant 43 % avaient eu besoin d'un barreau,
- * et une chaîne de cinq reformulations sur la même question montrait un échec de repérage
- * caractérisé.
- *
- * Les deux signaux qui, eux, disent quelque chose : la PROFONDEUR DU REPLI (`fallback` —
- * `or_relax` veut dire que le ET lexical a complètement échoué) et la REFORMULATION
- * RAPPROCHÉE (mêmes minutes, requêtes voisines). `scripts/journal.mjs` les calcule.
- */
-const RETENTION_JOURNAL_JOURS = 90;
-const PLAFOND_REQUETE_JOURNAL = 160;
-
-/**
- * Réduit le risque qu'un fait ou identifiant confidentiel persiste dans `search_log` :
- * normalise les espaces, masque les numéros de dossier judiciaire, courriels, téléphones
- * et identifiants numériques longs (NAS/NEQ), puis plafonne à 160 caractères.
- */
-export function minimiserRequeteJournal(raw: string): string {
-  const normalisee = raw
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\d{3}-\d{2}-\d{6}-\d{3}\b/g, "[DOSSIER]")
-    .replace(/[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}/g, "[COURRIEL]")
-    .replace(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\b\d{3}[\s.-])\d{3}[\s.-]\d{4}\b/g, "[TEL]")
-    .replace(/\b\d{3}[\s-]\d{3}[\s-]\d{3}\b|\b\d{9,10}\b/g, "[ID]");
-  if (normalisee.length <= PLAFOND_REQUETE_JOURNAL) return normalisee;
-  return `${normalisee.slice(0, PLAFOND_REQUETE_JOURNAL - 1)}…`;
-}
-
-export async function logSearch(db: D1Database, e: SearchLogEntry): Promise<void> {
-  try {
-    await db.batch([
-      db
-        .prepare(
-          "INSERT INTO search_log (tool, query, law, lang, result_count, fallback) VALUES (?,?,?,?,?,?)",
-        )
-        .bind(
-          e.tool,
-          "[REDACTED]",
-          e.law ?? null,
-          e.lang ?? null,
-          e.result_count,
-          e.fallback ?? null,
-        ),
-      db
-        .prepare("DELETE FROM search_log WHERE ts < datetime('now', ?)")
-        .bind(`-${RETENTION_JOURNAL_JOURS} days`),
-    ]);
-  } catch {
-    // table absente (migration non appliquée) ou write refusé : on n'échoue jamais.
-  }
-}
+// --- journal des recherches retiré à l'exécution (Phase 3 — S13, S14, G9) ---
+// Aucune écriture dans `search_log` n'a plus lieu à l'exécution : seuls les compteurs agrégés
+// (`compteur_jour`) et événements techniques sans contenu (`evenement_technique`) sont tenus
+// dans `DB_IDENTITE`. La migration `0001_search_log.sql` reste conservée uniquement pour la
+// reproductibilité de la chaîne historique D1.
 
 // --- recherche plein texte (FTS5) --------------------------------------------
 
