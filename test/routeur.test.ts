@@ -293,6 +293,7 @@ describe("la chaîne intergicielle", () => {
   it("/health répond avec le commit annoncé quand le service est armé", async () => {
     const r = await SELF.fetch("https://legislation.test/health");
     expect(r.status).toBe(200);
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
     expect(await r.json()).toEqual({ status: "ok", commit: "inconnu" });
 
     const precedent = e.COMMIT;

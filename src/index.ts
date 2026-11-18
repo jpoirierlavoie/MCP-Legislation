@@ -106,7 +106,10 @@ export default {
       }
 
       if (url.pathname === "/health") {
-        return reponseSante({ commit: (env as { COMMIT?: string }).COMMIT });
+        const sante = reponseSante({ commit: (env as { COMMIT?: string }).COMMIT });
+        const headers = new Headers(sante.headers);
+        headers.set("Cache-Control", "no-store");
+        return new Response(sante.body, { status: sante.status, headers });
       }
 
       // Fiche de découverte SEP-2127 (`/mcp/server-card`) : exception NOMMÉE et exacte

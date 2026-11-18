@@ -235,7 +235,7 @@ jobs:
           ok=0
           # Jusqu'à 60 s pour couvrir la propagation en bordure et le recyclage DO.
           for i in $(seq 1 12); do
-            code=$(curl -sS --max-time 20 -o /tmp/health.json -w '%{http_code}' "$SANTE" || echo 000)
+            code=$(curl -sS --max-time 20 -H "Cache-Control: no-cache" -o /tmp/health.json -w '%{http_code}' "${SANTE}?_=${ATTENDU_LONG}_${i}" || echo 000)
             if [ "$code" = "200" ]; then
               enligne=$(jq -r '.commit // "absent"' /tmp/health.json)
               if [ "$enligne" = "$attendu" ]; then
