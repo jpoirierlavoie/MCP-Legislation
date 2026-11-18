@@ -35,7 +35,7 @@ jobs:
           set -euo pipefail
           attendu="${ATTENDU_LONG:0:7}"
 
-          code=$(curl -sS --max-time 20 -o /tmp/sante.json -w '%{http_code}' "$SANTE" || echo 000)
+          code=$(curl -sS --max-time 20 -H "Cache-Control: no-cache" -o /tmp/sante.json -w '%{http_code}' "${SANTE}?_=${ATTENDU_LONG}" || echo 000)
 
           if [ "$code" = "000" ]; then
             echo "::error title=Le point d'entrée de santé est injoignable::Aucune conclusion possible sur la version en ligne."
