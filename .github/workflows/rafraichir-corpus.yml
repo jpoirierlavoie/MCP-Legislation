@@ -108,6 +108,7 @@ jobs:
         id: plan
         env:
           PYTHONUTF8: "1"
+          MODE: ${{ github.event.inputs.mode || 'preparer' }}
           LIMS_REF: ${{ github.event.inputs.lims_ref || 'HEAD' }}
           LAWS: ${{ github.event.inputs.laws || '' }}
           MCP_URL: https://legislation.poirierlavoie.ca/mcp
@@ -127,6 +128,9 @@ jobs:
           )
           if [ -n "${LAWS:-}" ]; then
             args+=(--laws "$LAWS")
+          fi
+          if [ "$MODE" = "appliquer" ]; then
+            args+=(--fast-mcp)
           fi
           python -m pipeline.refresh "${args[@]}"
 

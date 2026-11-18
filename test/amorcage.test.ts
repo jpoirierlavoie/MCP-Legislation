@@ -33,6 +33,15 @@ describe("la base de test porte le schéma de production", () => {
     expect(t).toContain("refresh_state"); // migration 0005
   });
 
+  it("porte les index de clés étrangères de la migration 0006", async () => {
+    const { results } = await db()
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name")
+      .all<{ name: string }>();
+    const indexes = results.map((r) => r.name);
+    expect(indexes).toContain("idx_art_division_id");
+    expect(indexes).toContain("idx_art_num_article_id");
+  });
+
   it("la migration 0004 a bien renommé rlrq_cite en official_cite", async () => {
     // L'assertion NÉGATIVE est celle qui compte, dit la CI : un schema.sql déclarant déjà
     // `official_cite` ferait passer un bootstrap naïf sans que la migration ait joué.
