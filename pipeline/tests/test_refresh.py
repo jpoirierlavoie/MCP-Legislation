@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import os
 import tempfile
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 from pipeline import load, validate
 from pipeline.ingest import extrait_consolidation_quebec
@@ -72,7 +71,7 @@ class _FakeD1:
         self.executed_files.append((sql_path.name, sql_path.read_text(encoding="utf-8")))
 
 
-class TestExtractionQuebec(unittest.TestCase):
+class TestExtractionQuebec(TestCase):
     def test_extrait_consolidation_quebec(self):
         html_ok = (
             '<p>Mise à jour au 1 janvier 1999</p>'
@@ -84,7 +83,7 @@ class TestExtractionQuebec(unittest.TestCase):
         self.assertIsNone(extrait_consolidation_quebec("<div>sans bannière</div>"))
 
 
-class TestValidateWitnessDrift(unittest.TestCase):
+class TestValidateWitnessDrift(TestCase):
     def _ccq_like(self, *, n_int: int, extra_decimals: int, n_ss: int):
         divs: list[Division] = []
         for kind, count in (
@@ -145,7 +144,7 @@ class TestValidateWitnessDrift(unittest.TestCase):
         self.assertFalse(rep_dup.ok)
 
 
-class TestLoadIncrementalSql(unittest.TestCase):
+class TestLoadIncrementalSql(TestCase):
     def test_to_sql_sans_fts_et_metadata_only_invariant_3(self):
         c = _sample_combo("ccq", "fr", date="2026-10-15")
         sql_no_fts = load.to_sql(c.law, c.divisions, c.articles, "fr", rebuild_fts=False)
@@ -162,7 +161,7 @@ class TestLoadIncrementalSql(unittest.TestCase):
         self.assertIn("VALUES('integrity-check', 1)", fts_sql)
 
 
-class TestDiffEtApply(unittest.TestCase):
+class TestDiffEtApply(TestCase):
     def _stored_from(self, combo: ParsedCombo):
         law = combo.law
         stored_law = {
@@ -301,4 +300,4 @@ class TestDiffEtApply(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

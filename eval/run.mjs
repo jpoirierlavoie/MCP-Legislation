@@ -16,7 +16,7 @@
 //                 (chemins résolus une fois via get_article, cache cases.resolved.json).
 // UNE session MCP pour tous les appels (eval/mcp-client.mjs).
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createMcpClient } from "./mcp-client.mjs";
@@ -95,9 +95,12 @@ export function checkBaselineGate(current, baseline) {
  * geste rendrait toute comparaison avec eval/baselines/*.json invalide.
  */
 async function resolvePaths(cases, callTool, { refresh = false } = {}) {
-  const cache = existsSync(RESOLVED_PATH)
-    ? JSON.parse(readFileSync(RESOLVED_PATH, "utf-8"))
-    : {};
+  let cache = {};
+  try {
+    cache = JSON.parse(readFileSync(RESOLVED_PATH, "utf-8"));
+  } catch (e) {
+    if (e?.code !== "ENOENT") throw e;
+  }
   const wanted = new Map();
   for (const c of cases) {
     for (const a of [...c.must_include, ...(c.nice_to_have ?? [])]) wanted.set(keyOf(a), a);

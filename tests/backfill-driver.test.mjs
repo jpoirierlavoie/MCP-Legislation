@@ -1,9 +1,6 @@
 // Tests hors ligne du pilote de backfill incrémental (scripts/backfill-vectors.mjs).
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { test } from "vitest";
 import {
   parseBackfillArgs,
@@ -38,13 +35,8 @@ test("parseBackfillArgs : drapeaux --mode, --incremental, --prune, --seed-if-emp
 });
 
 test("resolveBackfillToken : lit BACKFILL_TOKEN en env et refuse si absent", () => {
-  assert.equal(resolveBackfillToken({ BACKFILL_TOKEN: "  abc  " }, "/inexistant"), "abc");
-  const vide = mkdtempSync(join(tmpdir(), "bf-empty-"));
-  try {
-    assert.throws(() => resolveBackfillToken({}, vide), /BACKFILL_TOKEN absent/);
-  } finally {
-    rmSync(vide, { recursive: true, force: true });
-  }
+  assert.equal(resolveBackfillToken({ BACKFILL_TOKEN: "  abc  " }), "abc");
+  assert.throws(() => resolveBackfillToken({}), /BACKFILL_TOKEN absent/);
 });
 
 test("runBackfill : enchaîne incremental + prune et gère reprise sur 502", async () => {

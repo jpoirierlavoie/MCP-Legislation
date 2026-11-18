@@ -8,14 +8,14 @@
 //   node scripts/backfill-vectors.mjs --resume                 # reprend un mode full
 //
 // Boucle sur POST /admin/backfill-vectors (Worker) avec le Bearer de BACKFILL_TOKEN
-// (variable d'env ou fichier local backfill.token).
+// (variable d'environnement ; cf. CLAUDE.md et scripts/deployer.mjs).
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import lawsConfig from "../laws.config.json" with { type: "json" };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, "..");
 const DEFAULT_BASE = "https://legislation.poirierlavoie.ca";
 const PROGRESS = join(HERE, ".backfill-progress.json");
 
@@ -52,17 +52,13 @@ export function parseBackfillArgs(argv) {
   };
 }
 
-/** Résout BACKFILL_TOKEN (env d'abord, puis fichier local backfill.token). */
-export function resolveBackfillToken(env = process.env, rootDir = ROOT) {
+/** Résout BACKFILL_TOKEN depuis l'environnement (aucun fichier secret lu en direct). */
+export function resolveBackfillToken(env = process.env) {
   const fromEnv = env.BACKFILL_TOKEN?.trim();
   if (fromEnv) return fromEnv;
-  const file = join(rootDir, "backfill.token");
-  if (existsSync(file)) {
-    const v = readFileSync(file, "utf-8").trim();
-    if (v) return v;
-  }
   throw new Error(
-    "BACKFILL_TOKEN absent (variable d'environnement ou backfill.token à la racine).",
+    "BACKFILL_TOKEN absent de l'environnement " +
+      "(PowerShell: $env:BACKFILL_TOKEN=(Get-Content backfill.token -Raw).Trim() | bash: export BACKFILL_TOKEN=\"$(tr -d ' \\t\\r\\n' < backfill.token)\").",
   );
 }
 
@@ -85,10 +81,15 @@ export async function runBackfill({
   if (!MODES_VALIDES.has(mode)) {
     throw new Error(`Mode invalide '${mode}'.`);
   }
-  const progress =
-    mode === "full" && resume && progressPath && existsSync(progressPath)
-      ? JSON.parse(readFileSync(progressPath, "utf-8"))
-      : {};
+  let rawProgress = {};
+  if (mode === "full" && resume && progressPath) {
+    try {
+      rawProgress = JSON.parse(readFileSync(progressPath, "utf-8"));
+    } catch (e) {
+      if (e?.code !== "ENOENT") throw e;
+    }
+  }
+  const savedProgress = {};
 
   async function post(body, attempt = 1) {
     await sleep(paceMs);
@@ -145,12 +146,15 @@ export async function runBackfill({
       }
 
       const key = `${kind}|${law}`;
-      if (effectiveMode === "full" && progress[key] === "done") {
+      if (effectiveMode === "full" && rawProgress[key] === "done") {
+        savedProgress[key] = "done";
         log(`— ${key} déjà fait —`);
         continue;
       }
       let offset =
-        effectiveMode === "full" && typeof progress[key] === "number" ? progress[key] : 0;
+        effectiveMode === "full" && typeof rawProgress[key] === "number"
+          ? Math.max(0, Number.parseInt(String(rawProgress[key]), 10) || 0)
+          : 0;
       for (;;) {
         const r = await post({ kind, law, mode: effectiveMode, offset });
         totalScanned += r.scanned ?? r.embedded ?? 0;
@@ -158,20 +162,21 @@ export async function runBackfill({
         totalSkipped += r.skipped ?? 0;
         totalSeeded += r.seeded ?? 0;
         totalOverruns += r.overruns ?? 0;
+        const nextOffset = Math.max(0, Number.parseInt(String(r.next ?? 0), 10) || 0);
         write(
-          `\r${key} [${effectiveMode}]: ${r.next} parcourus ` +
+          `\r${key} [${effectiveMode}]: ${nextOffset} parcourus ` +
             `(embed=${totalEmbedded}, skip=${totalSkipped}, seed=${totalSeeded})   `,
         );
         if (r.done) break;
-        offset = r.next;
+        offset = nextOffset;
         if (effectiveMode === "full" && progressPath) {
-          progress[key] = offset;
-          writeFileSync(progressPath, JSON.stringify(progress, null, 2));
+          savedProgress[key] = offset;
+          writeFileSync(progressPath, JSON.stringify(savedProgress, null, 2));
         }
       }
       if (effectiveMode === "full" && progressPath) {
-        progress[key] = "done";
-        writeFileSync(progressPath, JSON.stringify(progress, null, 2));
+        savedProgress[key] = "done";
+        writeFileSync(progressPath, JSON.stringify(savedProgress, null, 2));
       }
       log("");
 
@@ -207,8 +212,7 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv
 if (isMain) {
   const opts = parseBackfillArgs(process.argv.slice(2));
   const token = resolveBackfillToken();
-  const config = JSON.parse(readFileSync(join(ROOT, "laws.config.json"), "utf-8"));
-  const allLaws = config.laws.map((l) => l.id);
+  const allLaws = lawsConfig.laws.map((l) => l.id);
   runBackfill({
     token,
     laws: opts.laws ?? allLaws,
