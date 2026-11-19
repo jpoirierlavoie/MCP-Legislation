@@ -7,4 +7,4 @@ beautifulsoup4>=4.13
 lxml>=6.1.0
 # Extraction PDF déterministe sans OCR ni LLM (recon_pdf.py / parser_pdf.py).
 # Borné <2 pour éviter les dépendances ML/ONNX de PyMuPDF 2.x.
-pymupdf>=1.24,<2
+pymupdf>=2.1,<3
