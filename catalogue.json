@@ -83,12 +83,12 @@
       "title_en": "Official texts in bulk",
       "groupe": "extraction",
       "page_fr": [
-        "Plusieurs articles en une seule demande, soit par plage continue, soit par liste explicite de numéros. La réponse est paginée, ce qui permet de parcourir un chapitre entier sans saturer le contexte.",
-        "Le mode plage respecte l'ordre réel des articles du texte, y compris les numéros décimaux insérés entre deux articles entiers — les bornes sont lues en base plutôt que recalculées, ce qui rend la plage insensible aux particularités de numérotation d'un texte donné."
+        "Plusieurs articles en une seule demande, soit par plage continue, soit par liste explicite de numéros, avec le titre, la citation officielle et la date de consolidation du texte. La réponse est paginée, ce qui permet de parcourir un chapitre entier sans saturer le contexte.",
+        "Le mode plage respecte l'ordre réel des articles du texte, y compris les numéros décimaux insérés entre deux articles entiers — les bornes sont lues en base plutôt que recalculées, ce qui rend la plage insensible aux particularités de numérotation d'un texte donné. En mode liste (numbers), tout numéro demandé absent du texte est explicitement signalé plutôt qu'omis en silence."
       ],
       "page_en": [
-        "Several articles in a single request, either as a continuous range or as an explicit list of numbers. The response is paginated, which makes it possible to walk through an entire chapter without flooding the context.",
-        "Range mode follows the text's real article order, including decimal numbers inserted between two whole ones — the bounds are read from the database rather than recomputed, which makes ranges immune to a given text's numbering quirks."
+        "Several articles in a single request, either as a continuous range or as an explicit list of numbers, together with the statute's title, official citation, and consolidation date. The response is paginated, which makes it possible to walk through an entire chapter without flooding the context.",
+        "Range mode follows the text's real article order, including decimal numbers inserted between two whole ones — the bounds are read from the database rather than recomputed, which makes ranges immune to a given text's numbering quirks. In list mode (numbers), any requested number absent from the text is explicitly reported rather than silently omitted."
       ]
     },
     "get_structure": {
@@ -141,12 +141,12 @@
       "title_en": "Citation resolution",
       "groupe": "extraction",
       "page_fr": [
-        "D'une citation écrite en langage libre vers l'article ou le paragraphe officiel qu'elle désigne. L'outil reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, les abréviations usuelles des deux grands codes, les paragraphes de directives judiciaires (par./dir., Cour supérieure ou Cour du Québec) et les instructions générales de l'AMF (« IG 45-106, art. 2A.1 », distinctes du Règlement 45-106).",
+        "D'une citation écrite en langage libre vers l'article ou le paragraphe officiel qu'elle désigne. L'outil reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, les abréviations usuelles des deux grands codes et des lois fédérales (L.F.I./B.I.A., L.C.S.A./C.B.C.A., L.A.C.C./C.C.A.A., L.D., etc.), les paragraphes de directives judiciaires (par./dir., Cour supérieure ou Cour du Québec) et les instructions générales de l'AMF (« IG 45-106, art. 2A.1 », distinctes du Règlement 45-106).",
         "Il indique par quelle voie la citation a été reconnue, ce qui permet de vérifier la résolution plutôt que de la prendre pour acquise.",
         "Un chapitre RLRQ absent du corpus ou une citation ambiguë (ex. « Directives C.S. » sans division ni district, ou « 45-106 » sans préciser règlement ni instruction générale) n'est jamais rabattu sur un voisin : l'outil refuse explicitement de résoudre plutôt que de rendre l'article d'un autre texte. Dans un outil juridique, un résultat faux rendu en silence est le pire défaut possible."
       ],
       "page_en": [
-        "From a citation written in free form to the official section or paragraph it designates. The tool recognizes the RLRQ chapter of any statute in the corpus, the usual abbreviations of the two major codes, court practice directive paragraphs (par./dir., Superior Court or Court of Québec), and AMF Policy Statements (« IG 45-106, art. 2A.1 », kept distinct from Regulation 45-106).",
+        "From a citation written in free form to the official section or paragraph it designates. The tool recognizes the RLRQ chapter of any statute in the corpus, the usual abbreviations of the two major codes and federal statutes (L.F.I./B.I.A., L.C.S.A./C.B.C.A., L.A.C.C./C.C.A.A., L.D., etc.), court practice directive paragraphs (par./dir., Superior Court or Court of Québec), and AMF Policy Statements (« IG 45-106, art. 2A.1 », kept distinct from Regulation 45-106).",
         "It reports how the citation was recognized, which lets you verify the resolution rather than take it on trust.",
         "An RLRQ chapter absent from the corpus or an ambiguous citation (e.g. « Directives C.S. » without division or district, or « 45-106 » without specifying regulation or policy statement) is never rounded to a neighbour: the tool explicitly declines to resolve rather than return a provision from another text. In a legal tool, a wrong result delivered silently is the worst possible defect."
       ]

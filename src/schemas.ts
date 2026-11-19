@@ -445,7 +445,7 @@ export const SEARCH_TEXT: DescripteurPublie = {
 export const RESOLVE_REFERENCE: DescripteurPublie = {
   title: titre("resolve_reference"),
   description:
-    "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, ainsi que les abréviations C.c.Q. et C.p.c. Reconnaît aussi par./dir. (directives C.S./C.Q.) et les instructions générales AMF (« IG 45-106, art. 2A.1 »), en refusant toute citation ambiguë. Si la loi pertinente est inconnue, commencer par find_relevant.",
+    "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 », « art. 69.3 L.F.I. ») vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, ainsi que les abréviations usuelles (C.c.Q., C.p.c., L.F.I./B.I.A., L.C.S.A./C.B.C.A., L.A.C.C./C.C.A.A., L.D.…). Reconnaît aussi par./dir. (directives C.S./C.Q.) et les instructions générales AMF (« IG 45-106, art. 2A.1 »), en refusant toute citation ambiguë. Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
