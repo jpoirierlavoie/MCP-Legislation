@@ -945,6 +945,14 @@ export async function nearestArticles(
       .all<{ number: string; sort_key: number }>()
   ).results;
 
+  const isNonNumericTarget = typeof target === "string" && !/^\d/.test(target.trim());
+  const foldTarget = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  const foldedTarget = isNonNumericTarget ? foldTarget(target.trim()) : "";
+
   return rows
     .map((r) => {
       const k = effectiveNearestSortKey(r.number, r.sort_key);
@@ -955,10 +963,19 @@ export async function nearestArticles(
         targetTrailing !== null
           ? Math.abs((trailingIntOf(r.number) ?? Number.MAX_SAFE_INTEGER) - targetTrailing)
           : 0;
-      return { number: r.number, sortKey: r.sort_key, dist, dispDist };
+      const isPseudo = r.sort_key === 0 || r.sort_key >= DISPOSITION_SORT_BASE ? 0 : 1;
+      let textTier = 3;
+      if (isNonNumericTarget && isPseudo === 0) {
+        const fn = foldTarget(r.number);
+        if (fn === foldedTarget) textTier = 0;
+        else if (fn.startsWith(foldedTarget)) textTier = 1;
+        else if (fn.includes(foldedTarget) || foldedTarget.includes(fn)) textTier = 2;
+      }
+      return { number: r.number, sortKey: r.sort_key, dist, dispDist, isPseudo, textTier };
     })
     .sort(
       (a, b) =>
+        (isNonNumericTarget ? a.isPseudo - b.isPseudo || a.textTier - b.textTier : 0) ||
         a.dist - b.dist ||
         a.dispDist - b.dispDist ||
         a.sortKey - b.sortKey ||
@@ -968,17 +985,43 @@ export async function nearestArticles(
     .map((r) => r.number);
 }
 
-/** Borne de plage résolue : la clé de tri, et l'`id` quand la borne est un article RÉEL. */
+/** Borne de plage résolue : la clé de tri, l'`id` quand la borne est un article RÉEL, et son existence. */
 export interface BoundRef {
   key: number;
   id: number | null;
+  exists?: boolean;
+}
+
+/**
+ * Clé de tri historique base 1000 (utilisée par certaines lois EPUB encore en production),
+ * bornée sous DISPOSITION_SORT_BASE pour préserver l’exclusion des pseudo-articles sur `..9999`.
+ */
+export function legacySortKeyOf(article: string): number {
+  if (
+    article === "préliminaire" ||
+    article === "preambule" ||
+    article === "preamble" ||
+    article === "note-preliminaire"
+  ) {
+    return 0;
+  }
+  const parts = article.split(".");
+  if (!SORT_COMP_RE.test(parts[0] ?? "")) return DISPOSITION_SORT_BASE;
+  const comps = parts.slice(0, 5);
+  let k = 0;
+  for (const p of comps) {
+    const m = /^(\d+)/.exec(p);
+    k = k * 1000 + (m ? parseInt(m[1], 10) : 0);
+  }
+  for (let i = comps.length; i < 5; i++) k *= 1000;
+  return Math.min(DISPOSITION_SORT_BASE - 1, k);
 }
 
 /**
  * Résout une borne de plage. On LIT la clé en base quand l'article existe, au lieu de la
  * recalculer : c'est la seule façon d'être insensible à un changement d'échelle de sort_key
  * (une divergence entre le pipeline et le serveur vidait silencieusement toutes les plages).
- * Repli sur le calcul si le numéro n'existe pas (borne ouverte, ex. to='9999').
+ * Repli sur le calcul dans l’échelle de la loi si le numéro n'existe pas (borne ouverte, ex. to='9999').
  *
  * On rend AUSSI l'`id`, parce que `sort_key` N'EST PAS UN ORDRE TOTAL et que deux articles
  * distincts peuvent y collisionner — mesuré en production le 2026-09-07 : `15.01` et `15.1`
@@ -1009,9 +1052,27 @@ export async function boundRef(
     .prepare("SELECT sort_key, id FROM articles WHERE law_id=? AND lang=? AND number=?")
     .bind(lawId, lang, number)
     .first<{ sort_key: number; id: number }>();
-  if (!row) return { key: sortKeyOf(number), id: null };
-  const reel = row.sort_key > 0 && row.sort_key < DISPOSITION_SORT_BASE;
-  return { key: row.sort_key, id: reel ? row.id : null };
+  if (row) {
+    const reel = row.sort_key > 0 && row.sort_key < DISPOSITION_SORT_BASE;
+    return { key: row.sort_key, id: reel ? row.id : null, exists: true };
+  }
+  if (!SORT_COMP_RE.test(number.split(".")[0] ?? "")) {
+    return { key: sortKeyOf(number), id: null, exists: false };
+  }
+  const sample = await db
+    .prepare(
+      `SELECT number, sort_key FROM articles
+       WHERE law_id=? AND lang=? AND sort_key > 0 AND sort_key < ${DISPOSITION_SORT_BASE}
+       LIMIT 1`,
+    )
+    .bind(lawId, lang)
+    .first<{ number: string; sort_key: number }>();
+  const usesLegacy = sample != null && sample.sort_key !== sortKeyOf(sample.number);
+  return {
+    key: usesLegacy ? legacySortKeyOf(number) : sortKeyOf(number),
+    id: null,
+    exists: false,
+  };
 }
 
 /**
@@ -1105,19 +1166,25 @@ export async function articlesByNumbers(
   numbers: string[],
 ): Promise<ArticleRow[]> {
   if (numbers.length === 0) return [];
-  const placeholders = numbers.map(() => "?").join(",");
-  const rows = (
-    await db
-      .prepare(
-        // Départage par `id` : deux numéros demandés peuvent partager une clé de tri
-        // (cf. `boundRef`), et sans départage leur ordre serait arbitraire.
-        `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND number IN (${placeholders})
+  const allRows: Array<ArticleRow & { sort_key: number }> = [];
+  for (let i = 0; i < numbers.length; i += 90) {
+    const chunk = numbers.slice(i, i + 90);
+    const placeholders = chunk.map(() => "?").join(",");
+    const chunkRows = (
+      await db
+        .prepare(
+          // Départage par `id` : deux numéros demandés peuvent partager une clé de tri
+          // (cf. `boundRef`), et sans départage leur ordre serait arbitraire.
+          `SELECT ${ARTICLE_COLS}, sort_key FROM articles WHERE law_id=? AND lang=? AND number IN (${placeholders})
        ORDER BY sort_key, id`,
-      )
-      .bind(lawId, lang, ...numbers)
-      .all<ArticleRow>()
-  ).results;
-  return rows;
+        )
+        .bind(lawId, lang, ...chunk)
+        .all<ArticleRow & { sort_key: number }>()
+    ).results;
+    allRows.push(...chunkRows);
+  }
+  allRows.sort((a, b) => a.sort_key - b.sort_key || a.id - b.id);
+  return allRows.map(({ sort_key: _sk, ...rest }) => rest);
 }
 
 export async function getDivision(
@@ -1276,8 +1343,12 @@ export interface ParsedCitation {
    * Aujourd'hui une seule valeur : « C-25 », l'ANCIEN Code de procédure civile.
    */
   hors_corpus: string | null;
-  /** Candidats multiples quand la citation est ambiguë (ex. « Directives C.S. », « 45-106 »). */
+  /** Candidats multiples quand la citation est ambiguë (ex. « Directives C.S. », « 45-106 », « L.I. »). */
   ambigu: AmbiguousLaw[] | null;
+  /** Borne haute éventuelle lorsque la citation mentionne une plage (ex. « art. 1726 à 1731 »). */
+  plage_fin?: string | null;
+  /** Alinéa ou sous-division mentionné après le numéro d’article (ex. « al. 2 »). */
+  alinea?: string | null;
 }
 
 /**
@@ -1640,9 +1711,50 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     } else if (/c\.?\s*p\.?\s*c\.?|cpc/i.test(citation)) {
       law = "cpc";
       lawSource = "abreviation";
-    } else if (/c\.?\s*c\.?\s*q\.?|ccq/i.test(citation)) {
+    } else if (
+      /c\.?\s*c\.?\s*q\.?|ccq|\b(?:code\s+civil\s+du\s+qu[ée]bec|civil\s+code\s+of\s+qu[ée]bec)\b/i.test(
+        citation,
+      )
+    ) {
       law = "ccq";
       lawSource = "abreviation";
+      motif = /\b(?:code\s+civil\s+du\s+qu[ée]bec|civil\s+code\s+of\s+qu[ée]bec)\b/i;
+    } else if (
+      /\b(?:l\.?\s*i\.?\s*(?:\(\s*(?:qu[ée]bec|qc)\s*\)|qu[ée]bec|qc)|loi\s+d['’]interpr[ée]tation\s+(?:du\s+qu[ée]bec|\(\s*qu[ée]bec\s*\))|qu[ée]bec\s+interpretation\s+act)(?![A-Za-zÀ-ÿ0-9])/i.test(
+        citation,
+      )
+    ) {
+      if (byId.has("i-16")) {
+        law = "i-16";
+        lawSource = "abreviation";
+        motif =
+          /\b(?:l\.?\s*i\.?\s*(?:\(\s*(?:qu[ée]bec|qc)\s*\)|qu[ée]bec|qc)|loi\s+d['’]interpr[ée]tation\s+(?:du\s+qu[ée]bec|\(\s*qu[ée]bec\s*\))|qu[ée]bec\s+interpretation\s+act)(?![A-Za-zÀ-ÿ0-9])/i;
+      }
+    } else if (
+      /\b(?:l\.?\s*i\.?\s*(?:f[ée]d[ée]rale?|\(\s*(?:canada|ca|f[ée]d\.?)\s*\)|canada|ca|f[ée]d\.?)|loi\s+d['’]interpr[ée]tation\s+(?:f[ée]d[ée]rale|\(\s*canada\s*\))|federal\s+interpretation\s+act|interpretation\s+act\s*\(\s*canada\s*\))(?![A-Za-zÀ-ÿ0-9])/i.test(
+        citation,
+      )
+    ) {
+      if (byId.has("ca-i-21")) {
+        law = "ca-i-21";
+        lawSource = "abreviation";
+        motif =
+          /\b(?:l\.?\s*i\.?\s*(?:f[ée]d[ée]rale?|\(\s*(?:canada|ca|f[ée]d\.?)\s*\)|canada|ca|f[ée]d\.?)|loi\s+d['’]interpr[ée]tation\s+(?:f[ée]d[ée]rale|\(\s*canada\s*\))|federal\s+interpretation\s+act|interpretation\s+act\s*\(\s*canada\s*\))(?![A-Za-zÀ-ÿ0-9])/i;
+      }
+    } else if (
+      /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*I\.?(?!\.?[A-Za-zÀ-ÿ0-9])|\bloi\s+d['’]interpr[ée]tation\b|\binterpretation\s+act\b/i.test(
+        citation,
+      )
+    ) {
+      const cands = [byId.get("i-16"), byId.get("ca-i-21")].filter((x): x is LawRow => Boolean(x));
+      if (cands.length > 1) {
+        ambigu = cands.map(toAmbiguous);
+      } else if (cands.length === 1) {
+        law = cands[0].id;
+        lawSource = "abreviation";
+      }
+      motif =
+        /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*I\.?(?!\.?[A-Za-zÀ-ÿ0-9])|\bloi\s+d['’]interpr[ée]tation\b|\binterpretation\s+act\b/i;
     } else {
       // Abréviations fédérales usuelles (ordre du plus spécifique au plus court, servies
       // uniquement si la loi correspondante est présente dans `laws`, donc derrière FEDERAL_CORPUS).
@@ -1719,6 +1831,16 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   let rest = motif ? citation.replace(motif, " ") : citation;
   if (extraStrip) rest = rest.replace(extraStrip, " ");
   for (const stripRe of STRIP_DATES_ET_SALLES) rest = rest.replace(stripRe, " ");
+  const rangeMatch =
+    /(?:\b(?:articles?|arts?\.?|a\.|s\.)\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s*(?:[àa]|to|[–—-])\s*(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b|\b(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s+(?:[àa]|to)\s+(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b/i.exec(
+      rest,
+    );
+  const plageFin = rangeMatch ? (rangeMatch[2] ?? rangeMatch[4] ?? null) : null;
+  const alineaMatch =
+    /(?:\b(?:articles?|arts?\.?|a\.|s\.)\s*\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*\s*,?\s*)\b(al\.?\s*\d+(?:\s*(?:et|[àa]|-)\s*\d+)?|alin[ée]as?\s+\d+|subpar\.?\s*\d+|par\.?\s*\d+°?)\b/i.exec(
+      rest,
+    );
+  const alinea = alineaMatch?.[1]?.trim() ?? null;
   const article =
     rest.match(MARQUEUR_ARTICLE)?.[1] ??
     extractPseudoArticle(rest, isIG) ??
@@ -1748,6 +1870,8 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     chapitre_inconnu: horsCorpus ? null : explicite,
     hors_corpus: horsCorpus,
     ambigu,
+    plage_fin: plageFin,
+    alinea,
   };
 }
 
@@ -2178,10 +2302,42 @@ export interface SearchHit {
 
 /** Tokens FTS d'une requête (même découpage que toFtsQuery — un seul point de vérité). */
 export function ftsTokens(query: string): string[] {
-  return query.match(/[\p{L}\p{N}][\p{L}\p{N}'’.-]*/gu) ?? [];
+  return query.normalize("NFC").match(/[\p{L}\p{N}][\p{L}\p{N}'’.-]*/gu) ?? [];
 }
 
-const quoteTok = (t: string) => `"${t.replace(/"/g, '""')}"`;
+function ligatureVariants(t: string): string[] {
+  if (!/œ|æ|oe|ae/i.test(t)) return [t];
+  const out = new Set<string>([t]);
+  if (/œ|Œ/.test(t)) {
+    out.add(t.replace(/œ/g, "oe").replace(/Œ/g, "OE"));
+  }
+  if (/oe/i.test(t)) {
+    out.add(t.replace(/oe/g, "œ").replace(/OE/g, "Œ"));
+  }
+  if (/æ|Æ/.test(t)) {
+    out.add(t.replace(/æ/g, "ae").replace(/Æ/g, "AE"));
+  }
+  if (/ae/i.test(t)) {
+    out.add(t.replace(/ae/g, "æ").replace(/AE/g, "Æ"));
+  }
+  return [...out];
+}
+
+const quoteSingleTok = (t: string) => `"${t.replace(/"/g, '""')}"`;
+
+const quoteTok = (t: string) => {
+  const vars = ligatureVariants(t);
+  if (vars.length === 1) return quoteSingleTok(vars[0]!);
+  return `(${vars.map(quoteSingleTok).join(" OR ")})`;
+};
+
+/**
+ * En FTS5 SQLite, `"a" ("b" OR "c")` sans opérateur explicite est une erreur de syntaxe
+ * dès qu'une expansion parenthésée suit ou précède un terme. Lorsque tous les termes
+ * sont simples, on conserve la séparation par espace (exactement comme avant).
+ */
+const joinFtsTerms = (terms: string[]) =>
+  terms.some((x) => x.startsWith("(")) ? terms.join(" AND ") : terms.join(" ");
 
 /**
  * Tokenise en requête FTS5 sûre : chaque mot en littéral quoté, combinés en ET.
@@ -2191,7 +2347,7 @@ const quoteTok = (t: string) => `"${t.replace(/"/g, '""')}"`;
  * il en donne — et c'est l'échelle de relaxation qui le rattrape, en le DISANT (R7).
  */
 export function toFtsQuery(query: string): string {
-  return ftsTokens(query).map(quoteTok).join(" ");
+  return joinFtsTerms(ftsTokens(query).map(quoteTok));
 }
 
 /**
@@ -2319,7 +2475,7 @@ interface VectorHits {
 async function embedQuery(v: VectorBackend, query: string): Promise<number[] | null> {
   try {
     const res = (await v.ai.run(EMBED_MODEL as Parameters<Ai["run"]>[0], {
-      text: [query],
+      text: [query.normalize("NFC").toLowerCase()],
     })) as { data?: number[][] };
     return res?.data?.[0] ?? null;
   } catch {
@@ -2667,10 +2823,7 @@ export async function searchText(
   if (relaxable && tokens.length <= RELAX_MAX_LOO_TERMS) {
     let best: { hits: SearchHit[]; total: number; omitted: string; sum: number } | null = null;
     for (let i = 0; i < tokens.length; i++) {
-      const partial = tokens
-        .filter((_, j) => j !== i)
-        .map(quoteTok)
-        .join(" ");
+      const partial = joinFtsTerms(tokens.filter((_, j) => j !== i).map(quoteTok));
       const r = await runMatch(db, partial, lang, scope, page, true, env);
       if (r.total === 0) continue;
       const sum = r.hits.reduce((acc, h) => acc + (h.score ?? 0), 0);
@@ -2699,7 +2852,9 @@ export async function searchText(
       ...new Set(tokens.flatMap((t) => t.split(/[-.'’]/)).filter((t) => t.length >= 2)),
     ];
     if (orTerms.length) {
-      const matchOr = orTerms.map(quoteTok).join(" OR ");
+      const matchOr = [...new Set(orTerms.flatMap(ligatureVariants))]
+        .map(quoteSingleTok)
+        .join(" OR ");
       const scoped = await runMatch(db, matchOr, lang, scope, page, true, env);
       if (scoped.total > 0) {
         return {
