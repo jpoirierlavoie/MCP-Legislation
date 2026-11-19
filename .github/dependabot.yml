@@ -78,3 +78,6 @@ updates:
       - "python"
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "pymupdf"
+        versions: [">= 2.0.0"]

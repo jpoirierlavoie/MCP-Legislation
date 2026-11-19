@@ -60,3 +60,11 @@ npm.cmd run lint
 npm.cmd run audit
 npm.cmd test
 ```
+
+---
+
+## Gouvernance Git et chaîne d'approvisionnement
+
+- **Rulesets GitHub actifs (`main-integrity`, `immutable-release-tags`, `main-pr-and-ci`) :** Historique linéaire exigé ; suppression et *fast-forward* bloqués sur `main` et sur les étiquettes de version ; contournement administrateur de `main-pr-and-ci` restreint au mode `pull_request` (aucun `push` direct sur `main` ; toute modification passe par Pull Request validée par `CI`, `CodeQL`, `OSV-Scanner` et `Trivy`).
+- **Analyse de secrets et dépendances :** GitHub *Secret Scanning* et *Push Protection* activés sur le dépôt (les motifs hors fournisseurs et contrôles de validité étendus restent au palier GHAS et sont complétés en CI par le balayage `secret` de Trivy) ; Dependabot actif pour `npm`, `github-actions` et `pip` (`pymupdf` borné `< 2` dans `.github/dependabot.yml`), et installation Python verrouillée par empreintes SHA-256 (`pip install --require-hashes` sur `pipeline/requirements-ci.txt` et `pipeline/requirements-lock.txt`).
+- **Actions et dérive en production :** Actions GitHub épinglées au SHA complet sous `step-security/harden-runner`, OpenSSF Scorecard actif, et contrôle quotidien de dérive `/health` (`COMMIT` injecté au déploiement) via `.github/workflows/verifier-deploiement.yml`.
