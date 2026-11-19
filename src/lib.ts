@@ -897,24 +897,75 @@ export async function getArticle(
     .first<ArticleJoined>();
 }
 
-/** Numéros d'articles voisins (par clé de tri) — pour les erreurs actionnables. */
+function effectiveNearestSortKey(article: string, dbSortKey?: number): number {
+  const sk = sortKeyOf(article);
+  if (sk !== DISPOSITION_SORT_BASE) return sk;
+  if (
+    dbSortKey != null &&
+    dbSortKey > 0 &&
+    dbSortKey < DISPOSITION_SORT_BASE &&
+    /^\d/.test(article)
+  ) {
+    const head = article.split("-")[0];
+    const hsk = sortKeyOf(head);
+    if (hsk < DISPOSITION_SORT_BASE) return hsk;
+  }
+  return sk;
+}
+
+function trailingIntOf(s: string): number | null {
+  const m = /(\d+)$/.exec(s);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/**
+ * Numéros d'articles voisins, insensible à l’échelle historique de `sort_key` en D1 —
+ * pour les erreurs actionnables.
+ *
+ * Calcule la distance sur `sortKeyOf(number)` des deux côtés : en production, certaines
+ * lois EPUB conservent l’ancienne échelle `1000^4` tandis que `sortKeyOf()` utilise la
+ * base mixte alphanumérique (`27 * 13500 * 2700 * 864`), ce qui décalait « 3169 » vers
+ * `2693..2697` en SQL brut.
+ */
 export async function nearestArticles(
   db: D1Database,
   lawId: string,
   lang: Lang,
-  key: number,
+  target: number | string,
   limit = 5,
 ): Promise<string[]> {
+  const targetKey = typeof target === "string" ? effectiveNearestSortKey(target) : target;
+  const targetTrailing = typeof target === "string" ? trailingIntOf(target) : null;
   const rows = (
     await db
       .prepare(
-        `SELECT number FROM articles WHERE law_id = ? AND lang = ?
-       ORDER BY ABS(sort_key - ?) LIMIT ?`,
+        "SELECT number, sort_key FROM articles WHERE law_id = ? AND lang = ? ORDER BY sort_key, id",
       )
-      .bind(lawId, lang, key, limit)
-      .all<{ number: string }>()
+      .bind(lawId, lang)
+      .all<{ number: string; sort_key: number }>()
   ).results;
-  return rows.map((r) => r.number);
+
+  return rows
+    .map((r) => {
+      const k = effectiveNearestSortKey(r.number, r.sort_key);
+      const dist = Math.abs(k - targetKey);
+      const dispDist =
+        targetKey === DISPOSITION_SORT_BASE &&
+        k === DISPOSITION_SORT_BASE &&
+        targetTrailing !== null
+          ? Math.abs((trailingIntOf(r.number) ?? Number.MAX_SAFE_INTEGER) - targetTrailing)
+          : 0;
+      return { number: r.number, sortKey: r.sort_key, dist, dispDist };
+    })
+    .sort(
+      (a, b) =>
+        a.dist - b.dist ||
+        a.dispDist - b.dispDist ||
+        a.sortKey - b.sortKey ||
+        a.number.localeCompare(b.number),
+    )
+    .slice(0, limit)
+    .map((r) => r.number);
 }
 
 /** Borne de plage résolue : la clé de tri, et l'`id` quand la borne est un article RÉEL. */
@@ -1592,6 +1643,75 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     } else if (/c\.?\s*c\.?\s*q\.?|ccq/i.test(citation)) {
       law = "ccq";
       lawSource = "abreviation";
+    } else {
+      // Abréviations fédérales usuelles (ordre du plus spécifique au plus court, servies
+      // uniquement si la loi correspondante est présente dans `laws`, donc derrière FEDERAL_CORPUS).
+      const FEDERAL_ABBREVS: ReadonlyArray<readonly [string, RegExp]> = [
+        [
+          "ca-c-50",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*R\.?\s*C\.?\s*E\.?\s*C\.?\s*A\.?|C\.?\s*L\.?\s*P\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-p-8.6",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*P\.?\s*R\.?\s*P\.?\s*D\.?\s*E\.?|P\.?\s*I\.?\s*P\.?\s*E\.?\s*D\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-c-44",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*C\.?\s*S\.?\s*A\.?|C\.?\s*B\.?\s*C\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-c-36",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*A\.?\s*C\.?\s*C\.?|C\.?\s*C\.?\s*A\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-crc-368",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:R\.?\s*G\.?\s*F\.?\s*I\.?|B\.?\s*I\.?\s*G\.?\s*R\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-b-3",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*F\.?\s*I\.?|B\.?\s*I\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        ["ca-c-42", /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*D\.?\s*A\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i],
+        [
+          "ca-t-13",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*M\.?\s*C\.?|T\.?\s*M\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-l-2",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:C\.?\s*c\.?\s*t\.?|C\.?\s*L\.?\s*C\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        ["ca-c-5", /(?<![A-Za-zÀ-ÿ0-9.])C\.?\s*E\.?\s*A\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i],
+        [
+          "ca-f-7",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*C\.?\s*F\.?|F\.?\s*C\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-s-26",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*C\.?\s*S\.?|S\.?\s*C\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-b-4",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.\s*L\.\s*C\.?|B\.?\s*E\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-dors-98-106",
+          /(?<![A-Za-zÀ-ÿ0-9.])(?:R\.?\s*C\.?\s*F\.?|F\.?\s*C\.?\s*R\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "ca-d-3.4",
+          /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*D\.?(?!\.?[A-Za-zÀ-ÿ0-9])(?!\s+[A-Za-z]\.(?!\s*\d))/i,
+        ],
+      ];
+      for (const [id, re] of FEDERAL_ABBREVS) {
+        if (re.test(citation)) {
+          if (byId.has(id)) {
+            law = id;
+            lawSource = "abreviation";
+            motif = re;
+          }
+          break;
+        }
+      }
     }
   }
 

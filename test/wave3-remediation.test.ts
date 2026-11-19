@@ -1,0 +1,522 @@
+import { env } from "cloudflare:test";
+import { beforeAll, describe, expect, it } from "vitest";
+import { DISPOSITION_SORT_BASE, type LawRow, parseCitation, sortKeyOf } from "../src/lib";
+import { detectLanguageMismatch, normalize } from "../src/relevance";
+import { construireOutils } from "../src/tools";
+
+const db = () => (env as unknown as { DB: D1Database }).DB;
+
+/** Ancienne échelle `1000^4` encore présente en production sur les lois EPUB non réingérées. */
+const legacySortKey = (n: number) => n * 1_000_000_000_000;
+
+const FEDERAL_LAWS_SAMPLE = [
+  {
+    id: "ca-b-3",
+    name_fr: "Loi sur la faillite et l’insolvabilité",
+    official_cite: "L.R.C. (1985), ch. B-3",
+    official_cite_en: "R.S.C. 1985, c. B-3",
+  },
+  {
+    id: "ca-c-36",
+    name_fr: "Loi sur les arrangements avec les créanciers des compagnies",
+    official_cite: "L.R.C. (1985), ch. C-36",
+    official_cite_en: "R.S.C. 1985, c. C-36",
+  },
+  {
+    id: "ca-d-3.4",
+    name_fr: "Loi sur le divorce",
+    official_cite: "L.R.C. (1985), ch. 3 (2e suppl.)",
+    official_cite_en: "R.S.C. 1985, c. 3 (2nd Supp.)",
+  },
+  {
+    id: "ca-c-44",
+    name_fr: "Loi canadienne sur les sociétés par actions",
+    official_cite: "L.R.C. (1985), ch. C-44",
+    official_cite_en: "R.S.C. 1985, c. C-44",
+  },
+  {
+    id: "ca-c-42",
+    name_fr: "Loi sur le droit d’auteur",
+    official_cite: "L.R.C. (1985), ch. C-42",
+    official_cite_en: "R.S.C. 1985, c. C-42",
+  },
+  {
+    id: "ca-t-13",
+    name_fr: "Loi sur les marques de commerce",
+    official_cite: "L.R.C. (1985), ch. T-13",
+    official_cite_en: "R.S.C. 1985, c. T-13",
+  },
+  {
+    id: "ca-l-2",
+    name_fr: "Code canadien du travail",
+    official_cite: "L.R.C. (1985), ch. L-2",
+    official_cite_en: "R.S.C. 1985, c. L-2",
+  },
+  {
+    id: "ca-p-8.6",
+    name_fr: "Loi sur la protection des renseignements personnels et les documents électroniques",
+    official_cite: "L.C. 2000, ch. 5",
+    official_cite_en: "S.C. 2000, c. 5",
+  },
+  {
+    id: "ca-c-5",
+    name_fr: "Loi sur la preuve au Canada",
+    official_cite: "L.R.C. (1985), ch. C-5",
+    official_cite_en: "R.S.C. 1985, c. C-5",
+  },
+  {
+    id: "ca-f-7",
+    name_fr: "Loi sur les Cours fédérales",
+    official_cite: "L.R.C. (1985), ch. F-7",
+    official_cite_en: "R.S.C. 1985, c. F-7",
+  },
+  {
+    id: "ca-s-26",
+    name_fr: "Loi sur la Cour suprême",
+    official_cite: "L.R.C. (1985), ch. S-26",
+    official_cite_en: "R.S.C. 1985, c. S-26",
+  },
+  {
+    id: "ca-c-50",
+    name_fr: "Loi sur la responsabilité civile de l’État et le contentieux administratif",
+    official_cite: "L.R.C. (1985), ch. C-50",
+    official_cite_en: "R.S.C. 1985, c. C-50",
+  },
+  {
+    id: "ca-b-4",
+    name_fr: "Loi sur les lettres de change",
+    official_cite: "L.R.C. (1985), ch. B-4",
+    official_cite_en: "R.S.C. 1985, c. B-4",
+  },
+  {
+    id: "ca-dors-98-106",
+    name_fr: "Règles des Cours fédérales",
+    official_cite: "DORS/98-106",
+    official_cite_en: "SOR/98-106",
+    unit: "regle",
+  },
+  {
+    id: "ca-crc-368",
+    name_fr: "Règles générales sur la faillite et l’insolvabilité",
+    official_cite: "C.R.C., ch. 368",
+    official_cite_en: "C.R.C., c. 368",
+  },
+  {
+    id: "ccq",
+    name_fr: "Code civil du Québec",
+    official_cite: "RLRQ, c. CCQ-1991",
+    official_cite_en: "CQLR, c. CCQ-1991",
+  },
+  {
+    id: "cpc",
+    name_fr: "Code de procédure civile",
+    official_cite: "RLRQ, c. C-25.01",
+    official_cite_en: "CQLR, c. C-25.01",
+  },
+] as unknown as LawRow[];
+
+describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
+  beforeAll(async () => {
+    const d = db();
+    await d
+      .prepare(
+        `INSERT INTO laws (id, name_fr, name_en, official_cite, official_cite_en, consol_date_fr, consol_date_en, jurisdiction, source, fonction, unit, name_norm)
+         VALUES
+           ('ccq', 'Code civil du Québec', 'Civil Code of Québec', 'RLRQ, c. CCQ-1991', 'CQLR, c. CCQ-1991', '2026-02-23', '2026-02-10', 'qc', 'epub', 'loi', 'article', ?),
+           ('cpc', 'Code de procédure civile', 'Code of Civil Procedure', 'RLRQ, c. C-25.01', 'CQLR, c. C-25.01', '2026-02-23', '2026-02-10', 'qc', 'epub', 'loi', 'article', ?),
+           ('sans-date', 'Loi sans date', 'Undated Act', 'RLRQ, c. U-1', 'CQLR, c. U-1', NULL, NULL, 'qc', 'epub', 'loi', 'article', ?),
+           ('ca-b-3', 'Loi sur la faillite et l’insolvabilité', 'Bankruptcy and Insolvency Act', 'L.R.C. (1985), ch. B-3', 'R.S.C. 1985, c. B-3', '2026-03-01', '2026-03-01', 'ca', 'lims', 'loi', 'article', ?)`,
+      )
+      .bind(
+        normalize("Code civil du Québec"),
+        normalize("Code de procédure civile"),
+        normalize("Loi sans date"),
+        normalize("Loi sur la faillite et l’insolvabilité"),
+      )
+      .run();
+
+    await d
+      .prepare(
+        `INSERT INTO divisions (id, law_id, lang, kind, number, heading, heading_norm, path, sort_order)
+         VALUES
+           (1, 'ccq', 'fr', 'livre', 'V', 'DES OBLIGATIONS', 'des obligations', 'ga:l_v', 1),
+           (2, 'ccq', 'en', 'livre', 'V', 'OBLIGATIONS', 'obligations', 'ga:l_five', 1),
+           (3, 'cpc', 'fr', 'livre', 'II', 'PROCÉDURE CONTENTIEUSE', 'procedure contentieuse', 'ga:l_ii', 1),
+           (4, 'cpc', 'en', 'livre', 'II', 'CONTENTIOUS PROCEEDINGS', 'contentious proceedings', 'ga:l_two', 1),
+           (5, 'sans-date', 'fr', 'chapitre', 'I', 'OBJET', 'objet', 'ga:l_i', 1),
+           (6, 'ca-b-3', 'fr', 'partie', 'III', 'PROPOSITIONS CONCORDATAIRES ET FAILLITE', 'propositions concordataires et faillite', 'pt:III', 1)`,
+      )
+      .run();
+
+    // D19 : `ccq` utilise ici l'ancienne échelle `1000^4` pour prouver l'immunité de nearestArticles.
+    const ccqNums = [2693, 2694, 2695, 2696, 2697, 3165, 3166, 3167, 3168, 3170];
+    let artId = 1;
+    for (const n of ccqNums) {
+      await d
+        .prepare(
+          `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
+           VALUES (?, 'ccq', 'fr', ?, ?, 1, 'ga:l_v', ?)`,
+        )
+        .bind(artId++, String(n), legacySortKey(n), `Texte de l'article ${n} C.c.Q.`)
+        .run();
+    }
+    await d
+      .prepare(
+        `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
+         VALUES (?, 'ccq', 'fr', 'finales', ?, 1, 'ga:l_v', 'Dispositions finales.')`,
+      )
+      .bind(artId++, DISPOSITION_SORT_BASE + 1_000_000)
+      .run();
+
+    // Articles C.p.c. FR/EN + sans-date + ca-b-3
+    await d
+      .prepare(
+        `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
+         VALUES
+           (?, 'cpc', 'fr', '145', ?, 3, 'ga:l_ii', 'Le défendeur doit répondre dans les 15 jours.'),
+           (?, 'cpc', 'fr', '146', ?, 3, 'ga:l_ii', 'La réponse précise les moyens de défense.'),
+           (?, 'cpc', 'en', '145', ?, 4, 'ga:l_two', 'The defendant must answer within 15 days.'),
+           (?, 'cpc', 'en', '146', ?, 4, 'ga:l_two', 'The answer states the grounds of defence.'),
+           (?, 'sans-date', 'fr', '1', ?, 5, 'ga:l_i', 'Article premier sans date de consolidation.'),
+           (?, 'ca-b-3', 'fr', '69.3', ?, 6, 'pt:III', 'Suspension des procédures lors de la faillite.'),
+           (?, 'ccq', 'fr', '1457', ?, 1, 'ga:l_v', 'Toute personne a le devoir de respecter les règles de conduite et de réparer le préjudice.'),
+           (?, 'ccq', 'en', '1457', ?, 2, 'ga:l_five', 'Every person has a duty to abide by the rules of conduct and repair injury caused.')`,
+      )
+      .bind(
+        artId++,
+        sortKeyOf("145"),
+        artId++,
+        sortKeyOf("146"),
+        artId++,
+        sortKeyOf("145"),
+        artId++,
+        sortKeyOf("146"),
+        artId++,
+        sortKeyOf("1"),
+        artId++,
+        sortKeyOf("69.3"),
+        artId++,
+        legacySortKey(1457),
+        artId++,
+        legacySortKey(1457),
+      )
+      .run();
+
+    await d.prepare("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')").run();
+  });
+
+  const makeOutils = (federal = "1") =>
+    construireOutils({
+      DB: db(),
+      FEDERAL_CORPUS: federal,
+      PDF_CORPUS: "1",
+      HYBRID_SEARCH: "0",
+      RELAX_SEARCH: "1",
+    } as unknown as Env);
+
+  // --- D7 & D16 : get_articles ----------------------------------------------
+  it("D16 : get_articles émet l'en-tête titre/citation + date de consolidation en prose et structuredContent", async () => {
+    const outils = makeOutils();
+
+    const fr = await outils.get_articles({ law: "cpc", numbers: ["145"], lang: "fr" } as never);
+    expect(fr.isError).toBeUndefined();
+    expect(fr.content[0].text).toContain(
+      "Code de procédure civile (RLRQ, c. C-25.01) (à jour au 2026-02-23)",
+    );
+    expect(fr.content[0].text).not.toContain("Introuvable");
+    expect(fr.structuredContent).toMatchObject({
+      consolidation: "2026-02-23",
+      missing_numbers: [],
+    });
+
+    const enRange = await outils.get_articles({
+      law: "cpc",
+      from: "145",
+      to: "146",
+      lang: "en",
+    } as never);
+    expect(enRange.isError).toBeUndefined();
+    expect(enRange.content[0].text).toContain(
+      "Code of Civil Procedure (CQLR, c. C-25.01) (updated to 2026-02-10)",
+    );
+    expect(enRange.structuredContent).toMatchObject({
+      consolidation: "2026-02-10",
+    });
+    expect(enRange.structuredContent?.missing_numbers).toBeUndefined();
+
+    const undated = await outils.get_articles({ law: "sans-date", numbers: ["1"] } as never);
+    expect(undated.isError).toBeUndefined();
+    expect(undated.content[0].text).toContain("Loi sans date (RLRQ, c. U-1)");
+    expect(undated.content[0].text).not.toContain("à jour au");
+    expect(undated.structuredContent?.consolidation).toBeNull();
+  });
+
+  it("D7 : get_articles signale explicitement les numéros manquants en mode numbers[]", async () => {
+    const outils = makeOutils();
+
+    const frMissing = await outils.get_articles({
+      law: "cpc",
+      numbers: ["145", "9999"],
+      lang: "fr",
+    } as never);
+    expect(frMissing.isError).toBeUndefined();
+    expect(frMissing.content[0].text).toContain("Introuvable(s) dans cpc (fr) : 9999.");
+    expect(frMissing.structuredContent).toMatchObject({
+      count: 1,
+      missing_numbers: ["9999"],
+    });
+
+    // Normalisation (trim + dédoublonnage) + EN
+    const enMissing = await outils.get_articles({
+      law: "cpc",
+      numbers: [" 145 ", "9999", "145", "8888"],
+      lang: "en",
+    } as never);
+    expect(enMissing.isError).toBeUndefined();
+    expect(enMissing.content[0].text).toContain("Not found in cpc (en): 9999, 8888.");
+    expect(enMissing.structuredContent).toMatchObject({
+      count: 1,
+      missing_numbers: ["9999", "8888"],
+    });
+
+    // Tous manquants -> isError: true nommant les numéros introuvables
+    const allMissing = await outils.get_articles({
+      law: "cpc",
+      numbers: ["9998", "9999"],
+      lang: "fr",
+    } as never);
+    expect(allMissing.isError).toBe(true);
+    expect(allMissing.content[0].text).toContain("9998, 9999");
+
+    // Liste blanche/vide après trim -> isError: true
+    const blankNums = await outils.get_articles({
+      law: "cpc",
+      numbers: ["  ", ""],
+    } as never);
+    expect(blankNums.isError).toBe(true);
+  });
+
+  // --- D17 : détecteur de décalage de langue --------------------------------
+  it("D17 : detectLanguageMismatch détecte les décalages francs sans faux positifs bilingues", () => {
+    // Anglais sous lang='fr' -> avertissement
+    for (const q of [
+      "breach of contract damages",
+      "landlord and tenant eviction",
+      "limitation of liability",
+      "defendant outside Quebec time to answer",
+      "shareholder agreement without notice",
+    ]) {
+      expect(detectLanguageMismatch(q, "fr"), q).toContain("lang='en'");
+    }
+
+    // Français sous lang='en' -> avertissement
+    for (const q of [
+      "responsabilité civile faute préjudice",
+      "délai de prescription",
+      "vice caché maison",
+      "les obligations du contrat",
+      "congédiement sans préavis",
+      "procédure",
+      "demande pour vice",
+    ]) {
+      expect(detectLanguageMismatch(q, "en"), q).toContain("lang='fr'");
+    }
+
+    // Cas bilingues / noms propres / mots isolés : JAMAIS de faux positif
+    expect(
+      detectLanguageMismatch("Court of Québec civil notice provisional roll", "en"),
+    ).toBeNull();
+    expect(detectLanguageMismatch("Superior Court Montréal practice", "en")).toBeNull();
+    expect(
+      detectLanguageMismatch("commercial lease resiliation failure to pay rent", "en"),
+    ).toBeNull();
+    expect(detectLanguageMismatch("procedure", "en")).toBeNull();
+    expect(detectLanguageMismatch("Bélanger", "en")).toBeNull();
+    expect(detectLanguageMismatch("Québec", "en")).toBeNull();
+    expect(detectLanguageMismatch("vice versa", "en")).toBeNull();
+    expect(detectLanguageMismatch("damages", "fr")).toBeNull();
+    expect(detectLanguageMismatch("Bank of Montreal", "fr")).toBeNull();
+    expect(detectLanguageMismatch("Convention La Haye", "fr")).toBeNull();
+    expect(detectLanguageMismatch("clause non-concurrence fin d'emploi", "fr")).toBeNull();
+  });
+
+  it("D17 : find_relevant et search_text servent avertissement_langue en prose et structuredContent", async () => {
+    const outils = makeOutils();
+
+    const frSearchWithEnQuery = await outils.search_text({
+      query: "duty to repair injury caused",
+      lang: "fr",
+    } as never);
+    expect(frSearchWithEnQuery.isError).toBe(true);
+    expect(frSearchWithEnQuery.content[0].text).toContain("lang='en'");
+
+    const enSearchWithEnQuery = await outils.search_text({
+      query: "duty to repair injury caused",
+      lang: "en",
+    } as never);
+    expect(enSearchWithEnQuery.isError).toBeUndefined();
+    expect(enSearchWithEnQuery.structuredContent?.avertissement_langue).toBeUndefined();
+
+    // Requête FR sur texte EN (0 résultats) ou avec résultats (via texte FR)
+    const frQueryUnderEn = await outils.search_text({
+      query: "règles de conduite et de réparer le préjudice",
+      lang: "en",
+    } as never);
+    expect(frQueryUnderEn.isError).toBe(true);
+    expect(frQueryUnderEn.content[0].text).toContain("lang='fr'");
+
+    // Requête EN matchant un résultat avec lang='fr' via mot partagé « rules »/« duty » + avertissement
+    await db()
+      .prepare(
+        `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
+         VALUES (999, 'cpc', 'fr', '900', ?, 3, 'ga:l_ii', 'breach contract damages witness')`,
+      )
+      .bind(sortKeyOf("900"))
+      .run();
+    await db().prepare("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')").run();
+
+    const hitWarn = await outils.search_text({
+      query: "breach contract damages",
+      lang: "fr",
+    } as never);
+    expect(hitWarn.isError).toBeUndefined();
+    expect(hitWarn.content[0].text).toContain("lang='en'");
+    expect(hitWarn.structuredContent?.avertissement_langue).toContain("lang='en'");
+
+    // find_relevant : requête EN sous lang='fr' déclenche l'avertissement (succès et 0 résultat)
+    const frFindZero = await outils.find_relevant({
+      query: "breach of contract damages",
+      lang: "fr",
+    } as never);
+    expect(frFindZero.isError).toBe(true);
+    expect(frFindZero.content[0].text).toContain("lang='en'");
+
+    const frFindHit = await outils.find_relevant({
+      query: "breach of obligations without notice",
+      lang: "fr",
+    } as never);
+    expect(frFindHit.isError).toBeUndefined();
+    expect(frFindHit.content[0].text).toContain("lang='en'");
+    expect(frFindHit.structuredContent?.avertissement_langue).toContain("lang='en'");
+
+    const enFindHit = await outils.find_relevant({
+      query: "responsabilité des obligations",
+      lang: "en",
+    } as never);
+    expect(enFindHit.isError).toBeUndefined();
+    expect(enFindHit.content[0].text).toContain("lang='fr'");
+    expect(enFindHit.structuredContent?.avertissement_langue).toContain("lang='fr'");
+
+    // Requête bilingue légitime en lang='en' -> aucun avertissement
+    const validEnFind = await outils.find_relevant({
+      query: "Court of Québec contentious proceedings",
+      lang: "en",
+    } as never);
+    expect(validEnFind.isError).toBeUndefined();
+    expect(validEnFind.structuredContent?.avertissement_langue).toBeUndefined();
+    expect(validEnFind.content[0].text).not.toContain("appears to be in French");
+  });
+
+  // --- D19 : nearestArticles avec échelle historique 1000^4 ------------------
+  it("D19 : get_article(law='ccq', article='3169') et resolve_reference retournent 3165..3168/3170 et jamais 2693..2697", async () => {
+    const outils = makeOutils();
+
+    const ga = await outils.get_article({ law: "ccq", article: "3169", lang: "fr" } as never);
+    expect(ga.isError).toBe(true);
+    expect(ga.content[0].text).toContain("3168");
+    expect(ga.content[0].text).toContain("3170");
+    expect(ga.content[0].text).toContain("3167");
+    expect(ga.content[0].text).not.toContain("2694");
+    expect(ga.content[0].text).not.toContain("2695");
+    expect(ga.content[0].text).not.toContain("finales");
+
+    const rr = await outils.resolve_reference({
+      citation: "art. 3169 C.c.Q.",
+      lang: "fr",
+    } as never);
+    expect(rr.isError).toBe(true);
+    expect(rr.content[0].text).toContain("3168");
+    expect(rr.content[0].text).toContain("3170");
+    expect(rr.content[0].text).not.toContain("2694");
+  });
+
+  // --- D20 : abréviations fédérales dans parseCitation et resolve_reference --
+  it("D20 : parseCitation résout les abréviations fédérales usuelles FR/EN et respecte FEDERAL_CORPUS", async () => {
+    const cases: Array<[string, string, string]> = [
+      ["art. 69.3 L.F.I.", "ca-b-3", "69.3"],
+      ["art. 69.3 LFI", "ca-b-3", "69.3"],
+      ["s. 69.3 B.I.A.", "ca-b-3", "69.3"],
+      ["s. 69.3 BIA", "ca-b-3", "69.3"],
+      ["art. 241 L.C.S.A.", "ca-c-44", "241"],
+      ["art. 241 LCSA", "ca-c-44", "241"],
+      ["s. 241 C.B.C.A.", "ca-c-44", "241"],
+      ["s. 241 CBCA", "ca-c-44", "241"],
+      ["art. 11.02 L.A.C.C.", "ca-c-36", "11.02"],
+      ["art. 11.02 LACC", "ca-c-36", "11.02"],
+      ["s. 11.02 C.C.A.A.", "ca-c-36", "11.02"],
+      ["s. 11.02 CCAA", "ca-c-36", "11.02"],
+      ["art. 15.1 L.D.", "ca-d-3.4", "15.1"],
+      ["L.D., art. 15.1", "ca-d-3.4", "15.1"],
+      ["L.D. s. 15.1", "ca-d-3.4", "15.1"],
+      ["art. 34 L.D.A.", "ca-c-42", "34"],
+      ["art. 34 LDA", "ca-c-42", "34"],
+      ["art. 19 L.M.C.", "ca-t-13", "19"],
+      ["s. 19 T.M.A.", "ca-t-13", "19"],
+      ["art. 240 C.c.t.", "ca-l-2", "240"],
+      ["s. 240 C.L.C.", "ca-l-2", "240"],
+      ["art. 5 L.P.R.P.D.E.", "ca-p-8.6", "5"],
+      ["art. 5 LPRPDE", "ca-p-8.6", "5"],
+      ["s. 5 P.I.P.E.D.A.", "ca-p-8.6", "5"],
+      ["s. 5 PIPEDA", "ca-p-8.6", "5"],
+      ["s. 30 C.E.A.", "ca-c-5", "30"],
+      ["art. 18.1 L.C.F.", "ca-f-7", "18.1"],
+      ["s. 18.1 F.C.A.", "ca-f-7", "18.1"],
+      ["art. 40 L.C.S.", "ca-s-26", "40"],
+      ["s. 40 S.C.A.", "ca-s-26", "40"],
+      ["art. 3 L.R.C.E.C.A.", "ca-c-50", "3"],
+      ["s. 3 C.L.P.A.", "ca-c-50", "3"],
+      ["art. 16 L.L.C.", "ca-b-4", "16"],
+      ["s. 16 B.E.A.", "ca-b-4", "16"],
+      ["règle 221 R.C.F.", "ca-dors-98-106", "221"],
+      ["rule 221 F.C.R.", "ca-dors-98-106", "221"],
+      ["DORS/98-106, règle 221", "ca-dors-98-106", "221"],
+      ["SOR/98-106, rule 221", "ca-dors-98-106", "221"],
+      ["art. 105 R.G.F.I.", "ca-crc-368", "105"],
+      ["s. 105 B.I.G.R.", "ca-crc-368", "105"],
+    ];
+
+    for (const [cit, expLaw, expArt] of cases) {
+      expect(parseCitation(cit, FEDERAL_LAWS_SAMPLE), cit).toMatchObject({
+        law: expLaw,
+        article: expArt,
+        ambigu: null,
+      });
+    }
+
+    // Garde-fous anti-collision
+    expect(parseCitation("art. 10 L.P.C.", FEDERAL_LAWS_SAMPLE).law).toBeNull();
+    expect(parseCitation("art. 15 L.D.Q.", FEDERAL_LAWS_SAMPLE).law).toBeNull();
+    expect(parseCitation("art. 10 L.C.S.Q.", FEDERAL_LAWS_SAMPLE).law).toBeNull();
+    expect(parseCitation("Acme LLC, art. 1", FEDERAL_LAWS_SAMPLE).law).toBeNull();
+
+    // Non-fuite quand FEDERAL_CORPUS="0" (aucun texte ca-* dans `laws`)
+    const qcOnly = FEDERAL_LAWS_SAMPLE.filter((l) => !l.id.startsWith("ca-"));
+    expect(parseCitation("art. 69.3 L.F.I.", qcOnly).law).toBeNull();
+
+    // Bout en bout contre D1 avec FEDERAL_CORPUS='1' vs '0'
+    const outilsOpen = makeOutils("1");
+    const rrOpen = await outilsOpen.resolve_reference({ citation: "art. 69.3 L.F.I." } as never);
+    expect(rrOpen.isError).toBeUndefined();
+    expect(rrOpen.structuredContent?.resolved).toMatchObject({
+      law: "ca-b-3",
+      number: "69.3",
+      reconnue_par: "abreviation",
+    });
+
+    const outilsClosed = makeOutils("0");
+    const rrClosed = await outilsClosed.resolve_reference({
+      citation: "art. 69.3 L.F.I.",
+    } as never);
+    expect(rrClosed.isError).toBe(true);
+  });
+});

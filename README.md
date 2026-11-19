@@ -117,11 +117,11 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 | Outil | Rôle | Exemple |
 |---|---|---|
 | `get_article` | Un article ou paragraphe verbatim, avec citation, hiérarchie, historique, statut normatif, liens d'annexe et date | `law=ccq, article=1457` ou `law=amf-ig-45-106, article=2A.1` |
-| `get_articles` | Plage (`from`/`to`) ou liste (`numbers`) d'articles, paginée | `law=cpc, from=489, to=496` |
+| `get_articles` | Plage (`from`/`to`) ou liste (`numbers`) d'articles, paginée, avec date de consolidation et signalement des numéros introuvables (`missing_numbers`) | `law=cpc, from=489, to=496` |
 | `get_structure` | L'arbre des divisions, sans texte — pour explorer avant d'extraire | `law=ccq, depth=2` |
 | `get_division` | Une division (Livre/Titre/Chapitre…) : intitulé, sous-divisions, articles | `path=ga:l_cinquieme` |
 | `search_text` | Recherche hybride dans le texte des articles (voir ci-dessous) | `« délai réponse défendeur hors du Québec »` |
-| `resolve_reference` | D'une citation libre vers l'article ou paragraphe officiel ; reconnaît chapitres RLRQ, C.c.Q./C.p.c., `par.`/`dir.` (C.S./C.Q.) et `IG 45-106` | `« RLRQ, c. T-16, art. 12 »` |
+| `resolve_reference` | D'une citation libre vers l'article ou paragraphe officiel ; reconnaît chapitres RLRQ, C.c.Q./C.p.c., abréviations fédérales (`L.F.I.`, `L.C.S.A.`, `L.A.C.C.`, `L.D.`…), `par.`/`dir.` (C.S./C.Q.) et `IG 45-106` | `« RLRQ, c. T-16, art. 12 »` |
 
 ## La recherche, en détail
 
