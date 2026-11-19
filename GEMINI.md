@@ -118,6 +118,8 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 - **Interdiction absolue** de lire, afficher, copier ou commiter : `cf.token`, `mcp.token`, `mcp-veille.token`, `backfill.token`, `*.token`, `mcp.url`, `.dev.vars`, `.env*`, `~/.gemini/config/*`.
 - **Interdiction absolue** d'exécuter `wrangler d1 delete` ou `wrangler deploy` seul (employer `npm run deploy` / `scripts/deployer.mjs`).
+- **Gouvernance Git (`main-pr-and-ci`) :** Le contournement administrateur du ruleset `main-pr-and-ci` est restreint à `pull_request` — **ne jamais pousser directement sur `main`** ; travailler sur une branche dédiée, ouvrir une Pull Request, attendre le passage des contrôles requis (`CI`, `CodeQL`, `OSV-Scanner`, `Trivy`), puis fusionner par *squash* (`gh pr merge --squash --delete-branch`).
+- **Dépendances Python en CI :** Installations verrouillées par empreintes SHA-256 (`pip install --require-hashes` sur `pipeline/requirements-ci.txt` et `pipeline/requirements-lock.txt`) ; `pymupdf` borné `< 2` (`.github/dependabot.yml` ignore `>= 2.0.0`).
 - **`src/site.ts`** : Mise en forme Biome avec `complexity.noUselessStringRaw` désarmé intentionnellement sur `BOOT`/`JS` ; en dev local, vider `.wrangler/state/v3/cache` (jamais `d1`) pour observer un changement de page mis en cache sous `CACHE_KEY`.
 - **Veille mensuelle (`scripts/check-consolidation.mjs`)** : Lecture seule avec trois seaux par publieur (LégisQuébec + Justice Canada + PDF QCCS/QCCQ/AMF : en-tête `%PDF-`, SHA-256 contre `pipeline/pdf_profiles/*.json`, page d'index et classement propre des `403` Cloudflare en `injoignable`) et seuil de joignabilité évalué **par publieur** (`agregeParSeau`).
 
