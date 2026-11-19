@@ -214,7 +214,7 @@ export function extractPdfIndexDrift(html, { expectedFilename, baseUrl } = {}) {
     const cible = expectedFilename.toLowerCase();
     const cleanPaths = links.map((u) => {
       const rawPath = u.split(/[?#]/)[0];
-      let decoded = rawPath;
+      let decoded;
       try {
         decoded = decodeURIComponent(rawPath);
       } catch {

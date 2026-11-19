@@ -1,4 +1,6 @@
 # Pipeline d'ingestion (Python 3.12+). Parseur EPUB/XHTML et reconnaissance/parseur PDF.
+# En CI, employer les fichiers verrouillés par hachage SHA-256 :
+# `pipeline/requirements-ci.txt` (`ci.yml`) et `pipeline/requirements-lock.txt` (`rafraichir-corpus.yml`).
 beautifulsoup4>=4.13
 # Accélérateur optionnel de parsing (BeautifulSoup l'utilise s'il est présent ;
 # sinon le backend stdlib html.parser est employé). Le pipeline n'en dépend pas.

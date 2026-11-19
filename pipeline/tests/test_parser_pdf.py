@@ -12,8 +12,8 @@ import re
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 try:
     import pymupdf
@@ -276,7 +276,7 @@ class TestParserPdfPurePython(unittest.TestCase):
         self.assertEqual(ingest._configured_langs({"source": "pdf", "langs": ["fr"]}), ("fr",))
         self.assertEqual(ingest._configured_langs({"source": "pdf", "langs": ["fr", "en"]}), ("fr", "en"))
         self.assertEqual(ingest._configured_langs({"source": "epub"}), ("fr", "en"))
-        with mock.patch.dict(sys.modules, {"pymupdf": None, "fitz": None}):
+        with unittest.mock.patch.dict(sys.modules, {"pymupdf": None, "fitz": None}):
             import importlib
             mod = importlib.reload(ingest)
             self.assertTrue(hasattr(mod, "_acquiert_pdf"))
@@ -331,7 +331,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             self.assertTrue(rep.ok, "\n".join(rep.lines))
 
             # fr-only saute en proprement dans ingest.run
-            with mock.patch("pipeline.config.get_law_any", return_value={"id": "amf-synth", "source": "pdf", "langs": ["fr"], "name_fr": "IG", "official_cite": "IG"}):
+            with unittest.mock.patch("pipeline.config.get_law_any", return_value={"id": "amf-synth", "source": "pdf", "langs": ["fr"], "name_fr": "IG", "official_cite": "IG"}):
                 self.assertEqual(ingest.run("amf-synth", "en", False, False, False, [], True), 0)
         finally:
             pdf_p.unlink(missing_ok=True)
@@ -353,9 +353,9 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         finally:
             blank_p.unlink(missing_ok=True)
 
-        corrupt_p = Path(tempfile.mktemp(suffix=".pdf"))
-        corrupt_p.write_bytes(b"not-a-pdf")
-        try:
+        with tempfile.TemporaryDirectory() as td:
+            corrupt_p = Path(td) / "corrupt.pdf"
+            corrupt_p.write_bytes(b"not-a-pdf")
             with self.assertRaises(parser_pdf.CorruptPdfError):
                 parser_pdf.parse_pdf(
                     corrupt_p,
@@ -364,8 +364,6 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
                     profile=_base_profile("x"),
                     verify_sha256=False,
                 )
-        finally:
-            corrupt_p.unlink(missing_ok=True)
 
     def test_synthetic_directive_abrogations_historique_liens_portes_1_et_2(self):
         def make_dir(doc):

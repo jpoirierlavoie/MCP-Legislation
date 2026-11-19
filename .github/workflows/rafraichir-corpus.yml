@@ -102,7 +102,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - run: pip install -r pipeline/requirements.txt
+      - run: pip install --require-hashes -r pipeline/requirements-lock.txt
 
       - name: Acquérir, valider en staging et produire le diff vs production
         id: plan
@@ -295,7 +295,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - run: pip install -r pipeline/requirements.txt
+      - run: pip install --require-hashes -r pipeline/requirements-lock.txt
 
       - name: Relevé du signet Time Travel D1 avant migration
         env:

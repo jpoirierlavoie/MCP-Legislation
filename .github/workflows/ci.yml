@@ -60,7 +60,7 @@ jobs:
       # beautifulsoup4 seulement : test_config n'en a pas besoin lui-même, mais il importe
       # pipeline.ingest pour _id_base, et ingest importe le parseur. lxml est OPTIONNEL
       # (BeautifulSoup retombe sur html.parser), donc écarté ici — rien ne parse en CI.
-      - run: pip install "beautifulsoup4>=4.13"
+      - run: pip install --require-hashes -r pipeline/requirements-ci.txt
       - run: python -m unittest pipeline.tests.test_config -v
 
       # Numérotage des annexes (pipeline/parser.py). Mesure du 2026-09-16 : les 24 annexes

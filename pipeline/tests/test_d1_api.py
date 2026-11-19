@@ -4,20 +4,20 @@ from __future__ import annotations
 import os
 import subprocess
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 from pipeline import d1_api
 
 
 class TestMakeClient(unittest.TestCase):
     def test_make_client_cloud_with_token_returns_CloudD1(self) -> None:
-        with mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "tok"}):
+        with unittest.mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "tok"}):
             c = d1_api.make_client("cloud")
             self.assertIsInstance(c, d1_api.CloudD1)
             self.assertEqual(c._token, "tok")
 
-        with mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "  tok  "}):
+        with unittest.mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "  tok  "}):
             c = d1_api.make_client("cloud")
             self.assertIsInstance(c, d1_api.CloudD1)
             self.assertEqual(c._token, "tok")
@@ -25,7 +25,7 @@ class TestMakeClient(unittest.TestCase):
     def test_make_client_cloud_unset_or_whitespace_returns_WranglerRemoteD1(self) -> None:
         for val in (None, "", "   \t\n"):
             env_patch = {} if val is None else {"CLOUDFLARE_API_TOKEN": val}
-            with mock.patch.dict(os.environ, env_patch, clear=False):
+            with unittest.mock.patch.dict(os.environ, env_patch, clear=False):
                 if val is None:
                     os.environ.pop("CLOUDFLARE_API_TOKEN", None)
                 c = d1_api.make_client("cloud")
@@ -50,7 +50,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
             captured["kwargs"] = kwargs
             return subprocess.CompletedProcess(cmd, 0, stdout=payload, stderr="")
 
-        with mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "   "}), mock.patch(
+        with unittest.mock.patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "   "}), unittest.mock.patch(
             "pipeline.d1_api.subprocess.run", side_effect=fake_run
         ):
             rows = client.run("SELECT COUNT(*) AS n FROM laws;")
@@ -77,7 +77,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
             captured["cmd"] = cmd
             return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
 
-        with mock.patch("pipeline.d1_api.subprocess.run", side_effect=fake_run):
+        with unittest.mock.patch("pipeline.d1_api.subprocess.run", side_effect=fake_run):
             rows = client.run(sql)
 
         self.assertEqual(rows, [{"n": 110}])
@@ -86,7 +86,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
     def test_wrangler_remote_run_raises_D1Error_on_nonzero_exit_or_json_error(self) -> None:
         client = d1_api.WranglerRemoteD1()
 
-        with mock.patch(
+        with unittest.mock.patch(
             "pipeline.d1_api.subprocess.run",
             return_value=subprocess.CompletedProcess([], 1, stdout="", stderr="boom stderr"),
         ):
@@ -94,7 +94,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
                 client.run("SELECT 1;")
             self.assertIn("boom stderr", str(ctx.exception))
 
-        with mock.patch(
+        with unittest.mock.patch(
             "pipeline.d1_api.subprocess.run",
             return_value=subprocess.CompletedProcess(
                 [], 1, stdout='\n{\n  "error": {\n    "text": "SQLITE_ERROR"\n  }\n}\n', stderr=""
@@ -104,7 +104,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
                 client.run("SELECT * FROM missing;")
             self.assertIn("SQLITE_ERROR", str(ctx.exception))
 
-        with mock.patch(
+        with unittest.mock.patch(
             "pipeline.d1_api.subprocess.run",
             return_value=subprocess.CompletedProcess([], 0, stdout='[{"success": false, "error": "bad"}]', stderr=""),
         ):
@@ -125,7 +125,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
             captured["file_bytes"] = p.read_bytes()
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with mock.patch("pipeline.d1_api.subprocess.run", side_effect=fake_run):
+        with unittest.mock.patch("pipeline.d1_api.subprocess.run", side_effect=fake_run):
             rows = client.run(big_insert)
 
         self.assertEqual(rows, [])
@@ -150,7 +150,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
             captured["kwargs"] = kwargs
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with mock.patch("pipeline.d1_api.subprocess.run", side_effect=fake_run):
+        with unittest.mock.patch("pipeline.d1_api.subprocess.run", side_effect=fake_run):
             client.run_file(Path("x.sql"))
 
         self.assertIn("--remote", captured["cmd"])
@@ -158,7 +158,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
         self.assertIn("-y", captured["cmd"])
         self.assertEqual(captured["kwargs"].get("stdin"), subprocess.DEVNULL)
 
-        with mock.patch(
+        with unittest.mock.patch(
             "pipeline.d1_api.subprocess.run",
             return_value=subprocess.CompletedProcess([], 1, stdout="", stderr="file fail"),
         ):
@@ -167,7 +167,7 @@ class TestWranglerRemoteD1(unittest.TestCase):
             self.assertIn("file fail", str(ctx.exception))
 
     def test_wrangler_cmd_falls_back_to_npx_when_node_or_wrangler_js_missing(self) -> None:
-        with mock.patch("pipeline.d1_api.shutil.which", return_value=None):
+        with unittest.mock.patch("pipeline.d1_api.shutil.which", return_value=None):
             cmd = d1_api._wrangler_cmd()
             self.assertEqual(cmd, [d1_api.npx_command(), "wrangler"])
 

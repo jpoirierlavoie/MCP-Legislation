@@ -25,7 +25,6 @@ from .discovery.recon_pdf import (
     _BAD_NUMERIC_LOWER_PROSE_RE,
     _BAD_NUMERIC_UNIT_RE,
     _BULLET_RE,
-    _SUBITEM_ALPHA_RE,
     _SUBITEM_NUM_RE,
     _SUBITEM_ROMAN_RE,
     CorruptPdfError,
