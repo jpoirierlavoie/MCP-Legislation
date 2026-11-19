@@ -444,7 +444,7 @@ export function construireOutils(
 
   // 1c) related_laws -----------------------------------------------------
   const H_RELATED_LAWS = async ({
-    law,
+    law: rawLaw,
     rel_type,
     direction: directionArg,
     limit,
@@ -456,6 +456,7 @@ export function construireOutils(
     limit?: number;
     lang?: "fr" | "en";
   }) => {
+    const law = rawLaw.trim().toLowerCase();
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const direction = directionArg ?? "both";
@@ -580,8 +581,8 @@ export function construireOutils(
 
   // 2) get_article -------------------------------------------------------
   const H_GET_ARTICLE = async ({
-    law,
-    article,
+    law: rawLaw,
+    article: rawArticle,
     lang: langArg,
   }: {
     law: string;
@@ -590,6 +591,9 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
+    const law = rawLaw.trim().toLowerCase();
+    const articleTrim = rawArticle.trim().normalize("NFC");
+    const article = articleTrim.toLowerCase() === "preliminaire" ? "préliminaire" : articleTrim;
     const lawRow = await getLaw(db, law, env);
     if (!lawRow) {
       const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
@@ -638,7 +642,7 @@ export function construireOutils(
 
   // 3) get_articles ------------------------------------------------------
   const H_GET_ARTICLES = async ({
-    law,
+    law: rawLaw,
     from,
     to,
     numbers,
@@ -656,12 +660,13 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
+    const law = rawLaw.trim().toLowerCase();
     const lawRow = await getLaw(db, law, env);
     if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const useRange = from != null && to != null;
-    const requestedNumbers = useRange
-      ? []
-      : [...new Set((numbers ?? []).map((n) => n.trim()).filter(Boolean))];
+    const rawNumsTrimmed = useRange ? [] : (numbers ?? []).map((n) => n.trim().normalize("NFC"));
+    const hasBlankEntry = !useRange && rawNumsTrimmed.some((n) => n.length === 0);
+    const requestedNumbers = useRange ? [] : [...new Set(rawNumsTrimmed.filter(Boolean))];
     if (!useRange && requestedNumbers.length === 0) {
       return err("Fournir soit (from ET to), soit numbers[].");
     }
@@ -682,21 +687,83 @@ export function construireOutils(
     let total: number;
     let resolution: "document" | "cle" | null = null;
     let missing: string[] = [];
+    const rangeNotes: string[] = [];
     if (useRange) {
+      const normBound = (s: string) => {
+        const t = s.trim().normalize("NFC");
+        return t.toLowerCase() === "preliminaire" ? "préliminaire" : t;
+      };
+      const fromNorm = normBound(from!);
+      const toNorm = normBound(to!);
       // bornes LUES en base (insensible à l'échelle de sort_key) — cf. boundRef
       const [b1, b2] = await Promise.all([
-        boundRef(db, law, lang as Lang, from!),
-        boundRef(db, law, lang as Lang, to!),
+        boundRef(db, law, lang as Lang, fromNorm),
+        boundRef(db, law, lang as Lang, toNorm),
       ]);
+      const badNonNumeric: string[] = [];
+      if (!b1.exists && !/^\d/.test(fromNorm)) badNonNumeric.push(fromNorm);
+      if (!b2.exists && !/^\d/.test(toNorm)) badNonNumeric.push(toNorm);
+      if (badNonNumeric.length > 0) {
+        if (lang === "en") {
+          const langs = await lawLangs(db, law, env);
+          if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+            return frOnlyError(law, lawRow);
+          }
+        }
+        const near = await nearestArticles(db, law, lang as Lang, badNonNumeric[0]!);
+        return err(
+          lang === "en"
+            ? `Unknown range bound(s) in ${law} (${lang}): ${badNonNumeric.join(", ")}. Nearest entries: ${near.join(", ") || "none"}.`
+            : `Borne(s) de plage introuvable(s) dans ${law} (${lang}) : ${badNonNumeric.join(", ")}. Entrées proches : ${near.join(", ") || "aucune"}.`,
+        );
+      }
+      const inverted = b1.id != null && b2.id != null ? b1.id > b2.id : b1.key > b2.key;
+      const missingBounds = [
+        !b1.exists ? fromNorm : null,
+        !b2.exists && toNorm !== fromNorm ? toNorm : null,
+      ].filter((x): x is string => x !== null);
       const r = await articlesByRange(db, law, lang as Lang, b1, b2, page);
       rows = r.rows;
       total = r.total;
       resolution = r.resolution;
+      if (inverted && rows.length > 0) {
+        rangeNotes.push(
+          lang === "en"
+            ? `Note: inverted bounds (${fromNorm} -> ${toNorm}) reordered ascending.`
+            : `Note : bornes inversées (${fromNorm} → ${toNorm}) remises dans l'ordre croissant.`,
+        );
+      }
+      if (missingBounds.length > 0 && rows.length > 0) {
+        const firstNum = rows[0]?.number ?? "";
+        const lastNum = rows.at(-1)?.number ?? "";
+        rangeNotes.push(
+          lang === "en"
+            ? `Note: bound(s) not in text (${missingBounds.join(", ")}) — resolved to ${firstNum}..${lastNum}.`
+            : `Note : borne(s) absente(s) du texte (${missingBounds.join(", ")}) — plage résolue sur ${firstNum} à ${lastNum}.`,
+        );
+      }
+      if (rows.length > 0 && (total > rows.length || page.offset > 0)) {
+        const nextOffset = page.offset + rows.length;
+        const suite =
+          nextOffset < total
+            ? lang === "en"
+              ? ` ; next: offset=${nextOffset}`
+              : ` ; suite : offset=${nextOffset}`
+            : "";
+        rangeNotes.push(
+          lang === "en"
+            ? `Articles ${page.offset + 1}–${page.offset + rows.length} / ${total}${suite}.`
+            : `Articles ${page.offset + 1}–${page.offset + rows.length} / ${total}${suite}.`,
+        );
+      }
     } else {
       rows = await articlesByNumbers(db, law, lang as Lang, requestedNumbers);
       total = rows.length;
       const foundSet = new Set(rows.map((r) => r.number));
       missing = requestedNumbers.filter((n) => !foundSet.has(n));
+      if (hasBlankEntry) {
+        missing.push(lang === "en" ? "(empty string)" : "(chaîne vide)");
+      }
     }
     if (rows.length === 0) {
       if (lang === "en") {
@@ -712,7 +779,13 @@ export function construireOutils(
             : `Aucun article trouvé dans ${law} (${lang}). Introuvable(s) : ${missing.join(", ")}.`,
         );
       }
-      return err("Aucun article dans cette plage/liste.");
+      return err(
+        useRange && total > 0 && page.offset >= total
+          ? lang === "en"
+            ? `No articles at offset=${page.offset} (total in range: ${total}).`
+            : `Aucun article à offset=${page.offset} (total dans la plage : ${total}).`
+          : "Aucun article dans cette plage/liste.",
+      );
     }
     const consol = consolOf(lawRow, lang as Lang);
     const normRels = await normativeRelations(db, [law], lang as Lang, env);
@@ -738,7 +811,9 @@ export function construireOutils(
           ? `Not found in ${law} (${lang}): ${missing.join(", ")}.`
           : `Introuvable(s) dans ${law} (${lang}) : ${missing.join(", ")}.`
         : null;
-    const headerLines = [headerLine, note, relsText, missingLine].filter(Boolean).join("\n");
+    const headerLines = [headerLine, note, relsText, ...rangeNotes, missingLine]
+      .filter(Boolean)
+      .join("\n");
     const body =
       `${headerLines}\n\n` +
       rows
@@ -780,7 +855,7 @@ export function construireOutils(
 
   // 4) get_structure -----------------------------------------------------
   const H_GET_STRUCTURE = async ({
-    law,
+    law: rawLaw,
     lang: langArg,
     root_path,
     depth,
@@ -792,6 +867,7 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
+    const law = rawLaw.trim().toLowerCase();
     const lawRow = await getLaw(db, law, env);
     if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const d = depth ?? 2;
@@ -826,7 +902,7 @@ export function construireOutils(
 
   // 5) get_division ------------------------------------------------------
   const H_GET_DIVISION = async ({
-    law,
+    law: rawLaw,
     path,
     division_id,
     lang: langArg,
@@ -844,6 +920,7 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
+    const law = rawLaw.trim().toLowerCase();
     const include_text = includeTextArg ?? true;
     const lawRow = await getLaw(db, law, env);
     if (!lawRow) return err(`Loi '${law}' inconnue.`);
@@ -899,7 +976,9 @@ export function construireOutils(
               : `${ul} ${a.number}${repTag}`;
           })
           .join(include_text ? "\n" : ", ")
-      : "\n\n(aucun article)";
+      : total > 0 && page.offset >= total
+        ? `\n\n(aucun article à offset=${page.offset} ; total : ${total})`
+        : "\n\n(aucun article)";
     return ok(`${header}${normBlock}${subs}${arts}`, {
       law,
       lang,
@@ -938,7 +1017,7 @@ export function construireOutils(
   // 6) search_text -------------------------------------------------------
   const H_SEARCH_TEXT = async ({
     query,
-    law,
+    law: rawLaw,
     lang: langArg,
     limit,
     offset,
@@ -951,6 +1030,7 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
+    const law = rawLaw !== undefined ? rawLaw.trim().toLowerCase() : undefined;
     const langWarn = detectLanguageMismatch(query, lang);
     const lawRow = law ? await getLaw(db, law, env) : null;
     if (law && !lawRow) return err(`Loi '${law}' inconnue.`);
@@ -1072,6 +1152,12 @@ export function construireOutils(
       if (frOnlyLawNotice) {
         return err(
           `${frOnlyLawNotice}${noteHybrideDesactive ? ` ${noteHybrideDesactive}` : ""}${langWarn ? `\n\n${langWarn}` : ""}`,
+        );
+      }
+      if (res.total > 0 && page.offset >= res.total) {
+        return err(
+          `Offset (${page.offset}) au-delà du total (${res.total} résultat(s) lexicaux). ` +
+            `Réessayer avec un offset inférieur à ${res.total}.`,
         );
       }
       return err(
@@ -1348,8 +1434,32 @@ export function construireOutils(
     }
     const consol = consolOf(lawRow, lang as Lang);
     const links = parseLinks(row.links);
-    return ok(renderArticle(row, lawRow, consol, lang as Lang, rels, links), {
-      resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
+    const resolveNotes: string[] = [];
+    if (parsed.plage_fin) {
+      resolveNotes.push(
+        lang === "en"
+          ? `Note: range detected (${article} to ${parsed.plage_fin}); only ${article} is returned here. Call get_articles(law='${law}', from='${article}', to='${parsed.plage_fin}') for the full range.`
+          : `Note : plage détectée (${article} à ${parsed.plage_fin}) ; seul l'article ${article} est rendu ici. Appeler get_articles(law='${law}', from='${article}', to='${parsed.plage_fin}') pour la plage complète.`,
+      );
+    }
+    if (parsed.alinea) {
+      resolveNotes.push(
+        lang === "en"
+          ? `Note: sub-provision noted (${parsed.alinea}); full text of ${article} is displayed below.`
+          : `Note : alinéa relevé (${parsed.alinea}) ; le texte intégral de l'article ${article} est affiché ci-dessous.`,
+      );
+    }
+    const rendered = renderArticle(row, lawRow, consol, lang as Lang, rels, links);
+    const prose = resolveNotes.length > 0 ? `${resolveNotes.join("\n")}\n\n${rendered}` : rendered;
+    return ok(prose, {
+      resolved: {
+        law,
+        number: row.number,
+        lang,
+        reconnue_par: parsed.law_source,
+        ...(parsed.plage_fin ? { plage_fin: parsed.plage_fin } : {}),
+        ...(parsed.alinea ? { alinea: parsed.alinea } : {}),
+      },
       citation: citationOf(lawRow, row.number, lang as Lang),
       division_path: row.division_path,
       consolidation: consol,

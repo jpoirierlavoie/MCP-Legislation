@@ -519,4 +519,220 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     } as never);
     expect(rrClosed.isError).toBe(true);
   });
+
+  // --- Wave 4 : B-N1, B-N2, B-N6, B-N8, B-N9, B-N10, B-N11 -----------------
+  it("B-N1 & B-N6 & B-N11 : get_articles gère l'échelle 1000^4 sur borne absente, la troncature, l'inversion et les bornes alphabétiques", async () => {
+    const outils = makeOutils();
+
+    // 1) Borne haute absente (1457 -> 1457.5) sur échelle 1000^4 ne retombe plus à 0.85x
+    const narrow = await outils.get_articles({
+      law: "ccq",
+      from: "1457",
+      to: "1457.5",
+    } as never);
+    expect(narrow.isError).toBeUndefined();
+    expect(
+      ((narrow.structuredContent?.articles ?? []) as Array<{ number: string }>).map(
+        (a) => a.number,
+      ),
+    ).toEqual(["1457"]);
+    expect(narrow.content[0].text).toContain("1457.5");
+
+    // 2) Borne haute au-delà du dernier article sur échelle 1000^4 (3165 -> 3200) reste exacte
+    const upperOpen = await outils.get_articles({
+      law: "ccq",
+      from: "3165",
+      to: "3200",
+    } as never);
+    expect(upperOpen.isError).toBeUndefined();
+    expect(
+      ((upperOpen.structuredContent?.articles ?? []) as Array<{ number: string }>).map(
+        (a) => a.number,
+      ),
+    ).toEqual(["3165", "3166", "3167", "3168", "3170"]);
+    expect(upperOpen.content[0].text).toContain("3200");
+
+    // 3) Borne alphabétique absente refusée explicitement (pas d'inversion silencieuse)
+    const alpha = await outils.get_articles({
+      law: "ccq",
+      from: "abc",
+      to: "1460",
+    } as never);
+    expect(alpha.isError).toBe(true);
+    expect(alpha.content[0].text).toContain("abc");
+
+    // 4) Plage inversée signalée
+    const inv = await outils.get_articles({
+      law: "ccq",
+      from: "3168",
+      to: "3165",
+    } as never);
+    expect(inv.isError).toBeUndefined();
+    expect(inv.content[0].text).toContain("bornes inversées");
+
+    // 5) Pagination explicite avec limit + offset suivant
+    const page1 = await outils.get_articles({
+      law: "ccq",
+      from: "2693",
+      to: "3170",
+      limit: 3,
+      offset: 0,
+    } as never);
+    expect(page1.isError).toBeUndefined();
+    expect(page1.content[0].text).toContain("Articles 1–3 / ");
+    expect(page1.content[0].text).toContain("suite : offset=3");
+
+    // 6) Chaîne vide dans numbers[] signalée dans les manquants
+    const withBlank = await outils.get_articles({
+      law: "cpc",
+      numbers: ["145", ""],
+    } as never);
+    expect(withBlank.isError).toBeUndefined();
+    expect(withBlank.content[0].text).toContain("(chaîne vide)");
+  });
+
+  it("B-N2 : get_articles découpe numbers[] au-delà de 98 éléments (limite D1 à 100 paramètres)", async () => {
+    const outils = makeOutils();
+    const nums = [
+      "1457",
+      "2693",
+      "3170",
+      ...Array.from({ length: 147 }, (_, i) => String(4000 + i)),
+    ];
+    const res = await outils.get_articles({
+      law: "ccq",
+      numbers: nums,
+    } as never);
+    expect(res.isError).toBeUndefined();
+    expect(
+      ((res.structuredContent?.articles ?? []) as Array<{ number: string }>).map((a) => a.number),
+    ).toEqual(["1457", "2693", "3170"]);
+  });
+
+  it("B-N8 : parseCitation & resolve_reference gèrent les intitulés complets, L.I. ambiguë, les plages et alinéas", async () => {
+    const withInterps = [
+      ...FEDERAL_LAWS_SAMPLE,
+      {
+        id: "i-16",
+        name_fr: "Loi d’interprétation",
+        name_en: "Interpretation Act",
+        official_cite: "RLRQ, c. I-16",
+        official_cite_en: "CQLR, c. I-16",
+      },
+      {
+        id: "ca-i-21",
+        name_fr: "Loi d’interprétation",
+        name_en: "Interpretation Act",
+        official_cite: "L.R.C. (1985), ch. I-21",
+        official_cite_en: "R.S.C. 1985, c. I-21",
+      },
+    ] as unknown as LawRow[];
+
+    expect(parseCitation("article 1457 du Code civil du Québec", withInterps)).toMatchObject({
+      law: "ccq",
+      article: "1457",
+    });
+    expect(parseCitation("Code civil du Québec, art. 1457", withInterps)).toMatchObject({
+      law: "ccq",
+      article: "1457",
+    });
+    expect(
+      parseCitation("art. 52 L.I.", withInterps)
+        .ambigu?.map((a) => a.id)
+        .sort(),
+    ).toEqual(["ca-i-21", "i-16"]);
+    expect(parseCitation("art. 52 L.I. (Québec)", withInterps)).toMatchObject({
+      law: "i-16",
+      article: "52",
+      ambigu: null,
+    });
+
+    const outils = makeOutils();
+    const rrRange = await outils.resolve_reference({
+      citation: "art. 1457 à 1460 C.c.Q.",
+    } as never);
+    expect(rrRange.isError).toBeUndefined();
+    expect(rrRange.content[0].text).toContain("plage détectée (1457 à 1460)");
+    expect(rrRange.content[0].text).toContain("get_articles");
+
+    const rrAlinea = await outils.resolve_reference({
+      citation: "art. 1457, al. 2 C.c.Q.",
+    } as never);
+    expect(rrAlinea.isError).toBeUndefined();
+    expect(rrAlinea.content[0].text).toContain("alinéa relevé (al. 2)");
+  });
+
+  it("B-N9, B-N10, B-N11 : NFD/ligature search_text, offset > total, get_article trim/casse/preliminaire, get_division offset", async () => {
+    const outils = makeOutils();
+
+    // Trim + casse sur law et article
+    const trimmed = await outils.get_article({ law: " CCQ ", article: "1457 " } as never);
+    expect(trimmed.isError).toBeUndefined();
+    expect(trimmed.structuredContent?.law).toBe("ccq");
+    expect(trimmed.structuredContent?.number).toBe("1457");
+
+    // 'preliminaire' non numérique suggère 'finales' plutôt que 3168/3167
+    const prelimMiss = await outils.get_article({
+      law: "ccq",
+      article: "preliminaire",
+    } as never);
+    expect(prelimMiss.isError).toBe(true);
+    expect(prelimMiss.content[0].text).toContain("finales");
+
+    // get_division avec offset > total indique le total
+    const divEmpty = await outils.get_division({
+      law: "ccq",
+      path: "ga:l_v",
+      offset: 999,
+    } as never);
+    expect(divEmpty.isError).toBeUndefined();
+    expect(divEmpty.content[0].text).toContain("offset=999 ; total :");
+
+    // NFD + ligature œ/oe + offset > total dans search_text
+    await db()
+      .prepare(
+        `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
+         VALUES (998, 'ccq', 'fr', '2100', ?, 1, 'ga:l_v', 'Responsabilité du maître d’œuvre pour la malfaçon.')`,
+      )
+      .bind(legacySortKey(2100))
+      .run();
+    await db().prepare("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')").run();
+
+    const nfd = await outils.search_text({
+      query: "pre\u0301judice", // NFD
+      law: "ccq",
+    } as never);
+    expect(nfd.isError).toBeUndefined();
+    expect(nfd.structuredContent?.total).toBeGreaterThanOrEqual(1);
+
+    const oeAsc = await outils.search_text({
+      query: "maitre d'oeuvre",
+      law: "ccq",
+    } as never);
+    expect(oeAsc.isError).toBeUndefined();
+    expect(
+      ((oeAsc.structuredContent?.results ?? []) as Array<{ number: string }>).some(
+        (r) => r.number === "2100",
+      ),
+    ).toBe(true);
+
+    const oeLig = await outils.search_text({
+      query: "maître d’œuvre",
+      law: "ccq",
+    } as never);
+    expect(oeLig.isError).toBeUndefined();
+    expect(
+      ((oeLig.structuredContent?.results ?? []) as Array<{ number: string }>).some(
+        (r) => r.number === "2100",
+      ),
+    ).toBe(true);
+
+    const overOffset = await outils.search_text({
+      query: "article",
+      law: "ccq",
+      offset: 500,
+    } as never);
+    expect(overOffset.isError).toBe(true);
+    expect(overOffset.content[0].text).toContain("Offset (500) au-delà du total");
+  });
 });
