@@ -117,11 +117,29 @@ test("F7-P1: SEG_SPLIT identique entre src/paths.ts et pipeline/paths.py et incl
   assert.deepEqual("annexe-a".split(re), ["annexe-a"]);
 });
 
+function resolvePythonExe() {
+  for (const candidate of [
+    join(ROOT, ".venv", "Scripts", "python.exe"),
+    join(ROOT, ".venv", "bin", "python"),
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  for (const cmd of ["python3", "python"]) {
+    try {
+      execFileSync(cmd, ["--version"], { stdio: "ignore" });
+      return cmd;
+    } catch {
+      // ignore missing executable
+    }
+  }
+  return null;
+}
+
 test("F7-P2: pipeline/model.py::sort_key() et src/lib.ts::sortKeyOf() sont un miroir exact pour les numéros alphanumériques", () => {
-  const pyExe = join(ROOT, ".venv", "Scripts", "python.exe");
+  const pyExe = resolvePythonExe();
   assert.ok(
-    existsSync(pyExe),
-    "Python .venv requis pour vérifier le miroir sort_key <-> sortKeyOf",
+    pyExe,
+    "Python (.venv ou python3/python dans PATH) requis pour vérifier le miroir sort_key <-> sortKeyOf",
   );
 
   const samples = [
