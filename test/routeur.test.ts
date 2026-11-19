@@ -274,8 +274,12 @@ describe("la chaîne intergicielle", () => {
   it("MCP_ENABLED absent ⇒ 404, et la page publique n'en souffre pas", async () => {
     e.MCP_ENABLED = undefined;
     try {
-      expect((await heritee("tools/list")).status).toBe(404);
-      expect((await SELF.fetch("https://legislation.test/health")).status).toBe(404);
+      const mcpCoupe = await heritee("tools/list");
+      expect(mcpCoupe.status).toBe(404);
+      expect(mcpCoupe.headers.get("Cache-Control")).toBe("no-store");
+      const santeCoupe = await SELF.fetch("https://legislation.test/health");
+      expect(santeCoupe.status).toBe(404);
+      expect(santeCoupe.headers.get("Cache-Control")).toBe("no-store");
       expect((await SELF.fetch("https://legislation.test/mcp/server-card")).status).toBe(404);
       // La base de test n'a pas de schéma (aucune migration n'est appliquée), si bien que le
       // rendu échoue sur « no such table: laws ». Cet échec est justement la preuve cherchée :
@@ -314,6 +318,7 @@ describe("la chaîne intergicielle", () => {
     });
     expect(r.status).toBe(403);
     expect(r.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("le pré-vol passe SANS porteur", async () => {
@@ -326,7 +331,21 @@ describe("la chaîne intergicielle", () => {
   });
 
   it("un GET sans porteur rend 404, JAMAIS 405 — la méthode se juge après l'identité", async () => {
-    expect((await SELF.fetch(URL_MCP, { method: "GET" })).status).toBe(404);
+    const r = await SELF.fetch(URL_MCP, { method: "GET" });
+    expect(r.status).toBe(404);
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
+
+    const postAnon = await SELF.fetch(URL_MCP, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rpc("tools/list")),
+    });
+    expect(postAnon.status).toBe(404);
+    expect(postAnon.headers.get("Cache-Control")).toBe("no-store");
+
+    const oauthAnon = await SELF.fetch("https://legislation.test/mcp/oauth", { method: "GET" });
+    expect(oauthAnon.status).toBe(401);
+    expect(oauthAnon.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("un GET AVEC porteur valide rend 405 — là, le refus n'apprend rien", async () => {
@@ -335,6 +354,7 @@ describe("la chaîne intergicielle", () => {
       headers: { Authorization: `Bearer ${JETON}` },
     });
     expect(r.status).toBe(405);
+    expect(r.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("aucun secret configuré ⇒ tout est refusé, même le bon jeton", async () => {

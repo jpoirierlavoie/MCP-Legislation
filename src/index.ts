@@ -101,10 +101,7 @@ export default {
       }
 
       if (url.pathname === "/health") {
-        const sante = reponseSante({ commit: (env as { COMMIT?: string }).COMMIT });
-        const headers = new Headers(sante.headers);
-        headers.set("Cache-Control", "no-store");
-        return new Response(sante.body, { status: sante.status, headers });
+        return reponseSante({ commit: (env as { COMMIT?: string }).COMMIT });
       }
 
       // Métadonnées RFC 9728 propres au sous-chemin `/mcp/oauth` (la racine
