@@ -1,0 +1,100 @@
+{
+  "$schema_version": 1,
+  "law_id": "qccq-daa-jurisprudence",
+  "fonction": "directive",
+  "jurisdiction": "qc",
+  "unit": "paragraphe",
+  "langs": ["fr"],
+  "files": {
+    "fr": {
+      "filename": "DAA_DirectiveListeCommuneJuris.pdf",
+      "sha256": "8d57aeebc574963dd96a19f7426c2de6f120808875a093b2130e2df6a7d2b04f",
+      "page_count": 20,
+      "toc_pages": [],
+      "body_start_page": 1,
+      "annexe_start_page": 2,
+      "consolidation_date": {
+        "pages": [1],
+        "regex": "(?:entre\\s+en\\s+vigueur\\s+le)\\s+(\\d{1,2}(?:\\s*er)?\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4})",
+        "lang": "fr"
+      },
+      "title_blocks": [
+        { "page": 1, "y_max": 160.0, "x0_min": 120.0 }
+      ],
+      "closing_blocks": [
+        { "page": 1, "y_min": 595.0, "y_max": 670.0, "x0_max": 200.0 }
+      ],
+      "toc_parser": {
+        "source": "none"
+      },
+      "body_typography": {
+        "dominant_size_pt": 11.04,
+        "y_line_tolerance_pt": 2.5,
+        "heading_wrap_dy_max_pt": 17.0,
+        "heading_x0_min": 88.0,
+        "heading_x0_max": 95.0,
+        "heading_min_size_pt": 10.8,
+        "heading_require_all_bold": true,
+        "heading_exclude_italic": true,
+        "level1_all_caps": true,
+        "level1_kind": "section",
+        "level2_kind": "sous-section"
+      },
+      "provisions": {
+        "x0_min": 88.0,
+        "x0_max": 95.0,
+        "min_size_pt": 10.5,
+        "continuation_x0_min": 102.0,
+        "subitem_x0_min": 102.0,
+        "number_mode": "numeric",
+        "repeal_regex": "^(?:Abrog[ée]\\.?|Abrogation\\.|Repealed\\.?|\\[\\s*(?:…|\\.\\.\\.)\\s*\\])$"
+      },
+      "history": {
+        "prefix_regex": "^(?:Modifications?|Abrogation|Ajouts?)\\s*:",
+        "max_size_pt": 10.0,
+        "allow_bold_italic_any_size": false,
+        "x0_min": 85.0,
+        "x0_max": 140.0
+      },
+      "footnotes": {
+        "y0_min": 680.0,
+        "lead_size_max_pt": 8.5,
+        "body_size_max_pt": 9.5,
+        "x0_min": 85.0,
+        "x0_max": 125.0,
+        "allow_inline_lead": true
+      },
+      "tables": {
+        "enabled": true,
+        "pages": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+      },
+      "annexes": {
+        "heading_x0_min": 160.0,
+        "heading_x0_max": 260.0,
+        "heading_min_size_pt": 10.8,
+        "list_sections": [
+          { "page": 2, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE DISCIPLINAIRE", "article_number": "annexe-disciplinaire" },
+          { "page": 5, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE DE DÉONTOLOGIE POLICIÈRE", "article_number": "annexe-deontologie-policiere" },
+          { "page": 7, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIERE DE FISCALITE MUNICIPALE, D’EXPROPRIATION ET DE PROTECTION DU TERRITOIRE AGRICOLE", "article_number": "annexe-fiscalite-municipale" },
+          { "page": 10, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIERE FISCALE", "article_number": "annexe-fiscale" },
+          { "page": 13, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE D’ENCADREMENT DU SECTEUR FINANCIER", "article_number": "annexe-secteur-financier" },
+          { "page": 17, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE D’ACCÈS À L’INFORMATION", "article_number": "annexe-acces-information" }
+        ]
+      },
+      "links": {
+        "allowed_schemes": ["https", "http", "mailto"],
+        "ignore_mailto_without_at_domain": true,
+        "sanitize_email_launch": true,
+        "ignore_zero_area_rect": true
+      },
+      "witness": {
+        "total_spans": 1788,
+        "real_articles": 5,
+        "int_min": 1,
+        "int_max": 5,
+        "decimals": 0,
+        "annexes_count": 6
+      }
+    }
+  }
+}

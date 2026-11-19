@@ -47,6 +47,11 @@ scripts/.backfill-progress.json
 # est docs/phase0-structure-lims.md, redige a la main a partir de ce vidage.
 docs/reconnaissance-lims-courante.md
 
+# Vidage reproductible du recensement PDF (pipeline/discovery/recon_pdf.py).
+# Meme raison que docs/reconnaissance-courante.md : le document de reference versionne
+# est docs/phase0-structure-pdf.md, redige a la main a partir de ce vidage.
+docs/reconnaissance-pdf-courante.md
+
 # Configuration de test, ENGENDRÉE avant chaque exécution par
 # `scripts/wrangler-test-config.mjs` (script `pretest`). Dérivée de wrangler.jsonc, moins
 # les liaisons `ai` et `vectorize`, qui n'ont pas d'émulation locale et feraient réclamer

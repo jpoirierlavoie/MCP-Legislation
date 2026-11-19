@@ -51,6 +51,9 @@
   // servir, puis ouvrir d'un flip — et refermer de même si la qualité se dégrade. Fermé par
   // défaut à dessein : un déploiement qui oublierait la variable ne sert rien de neuf, au
   // lieu de tout servir d'un coup.
+  // PDF_CORPUS : l'interrupteur du corpus PDF (R8). À "0" (fermé par défaut tant que la
+  // vague 1 et son backfill Vectorize ne sont pas validés), les textes `source = 'pdf'`
+  // sont INVISIBLES à tous les outils, aux vecteurs et aux décomptes de `GET /`.
   // MCP_ENABLED — COUPE-CIRCUIT DU BLOC /mcp, fermé par défaut.
   //
   // La polarité est « !== "true" ⇒ éteint » : variable absente, vide ou mal orthographiée
@@ -65,6 +68,7 @@
     "RELAX_SEARCH": "1",
     "HYBRID_SEARCH": "1",
     "FEDERAL_CORPUS": "1",
+    "PDF_CORPUS": "0",
     "MCP_ENABLED": "true",
     // Commit dont la version en ligne est issue, annoncé sur /health.
     // Posé à la volée par `scripts/deployer.mjs` via `--var COMMIT:<sha>`.

@@ -19,16 +19,16 @@ export const WEIGHTS = {
 } as const;
 
 /**
- * Spécificité d'un token. Un token qui ne touche qu'une poignée d'entités est
+ * Spécificité d'un token. Un token qui ne touche qu'une poignée de textes (lois) est
  * DISCRIMINANT (« taq », « rdprm », « courtage ») ; un token générique dans un corpus
  * entièrement juridique (« procédure », « contrat ») en touche des dizaines et n'apprend
  * presque rien. Sans ce correctif, « procédure TAQ » noie j-3 sous les sept règlements de
  * procédure civile déclenchés par le seul mot « procédure ».
  *
- * ⚠️ La pondération est CONTINUE, pas un seuil. Une falaise (« ≤ 4 entités -> ×2, sinon
- * ×1 ») a une position qui dépend de la TAILLE DU CORPUS : en passant de 47 à 78 lois,
- * « récusation » est passé de 4 à 5 entités touchées, a perdu son facteur d'un coup, et le
- * chapitre de la récusation du C.p.c. s'est fait évincer du top 8 par des dizaines de
+ * ⚠️ La pondération est CONTINUE, pas un seuil. Une falaise (« ≤ 4 textes (lois) -> ×2,
+ * sinon ×1 ») a une position qui dépend de la TAILLE DU CORPUS : en passant de 47 à 78 lois,
+ * « récusation » est passé de 4 à 5 textes (lois) touchés, a perdu son facteur d'un coup, et
+ * le chapitre de la récusation du C.p.c. s'est fait évincer du top 8 par des dizaines de
  * simples « juge ». Décroissance douce -> le classement ne bascule plus à l'ajout d'une loi.
  *
  *   facteur(portée) = 1 + (FACTOR - 1) × min(1, MAX_REACH / portée)
@@ -48,6 +48,29 @@ export const SPECIFIC_TOKEN_FACTOR = 2;
  * reviennent que s'il reste de la place.
  */
 export const MAX_PER_SUBJECT = 3;
+
+/**
+ * Pondération normative CONTINUE par `laws.fonction` (invariant 12) : les directives de
+ * pratique judiciaire et orientations administratives restent recherchables corpus-wide,
+ * sans déplacer les lois ni les règlements adoptés (dont les règlements AMF).
+ */
+export const FONCTION_WEIGHTS: Record<string, number> = {
+  loi: 1,
+  reglement: 1,
+  "regles-procedure": 1,
+  tarif: 1,
+  directive: 0.7,
+  orientation: 0.65,
+};
+
+export function fonctionWeight(fonction?: string | null): number {
+  if (!fonction) return 1;
+  return FONCTION_WEIGHTS[fonction] ?? 1;
+}
+
+/** Plafond de diversité par fonction souple ('directive' / 'orientation'). */
+export const MAX_PER_FONCTION_SOUPLE = 2;
+export const FONCTIONS_SOUPLES = new Set(["directive", "orientation"]);
 
 export function specificityFactor(reach: number): number {
   if (reach <= 0) return 1;
@@ -213,6 +236,8 @@ const STOPWORDS = new Set([
   "quebec",
   "droit",
   "droits",
+  "clause",
+  "clauses",
 ]);
 
 /** Normalisation de référence — miroir exact de pipeline/norm.py (§2). */
@@ -281,6 +306,7 @@ export interface LawLite {
   id: string;
   name_fr: string;
   name_norm: string | null;
+  fonction?: string | null;
 }
 export interface DivisionLite {
   law_id: string;
@@ -420,8 +446,8 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
     }
   }
 
-  // Portée de chaque token = nombre d'entités distinctes qu'il touche. Les tokens à faible
-  // portée sont discriminants et pèsent davantage (cf. SPECIFIC_TOKEN_FACTOR).
+  // Portée de chaque token = nombre de textes (lois) distincts qu'il touche. Les tokens à
+  // faible portée sont discriminants et pèsent davantage (cf. SPECIFIC_TOKEN_FACTOR).
   //
   // Le MÊME balayage rend le tableau croisé : quels tokens chaque candidat apparie. C'est
   // la base du facteur de couverture (cf. COVERAGE_FLOOR) — les deux lectures de `hits`
@@ -431,7 +457,7 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
   for (const h of hits) {
     const k = keyOf(h.lawId, h.path);
     const set = reach.get(h.token) ?? new Set<string>();
-    set.add(k);
+    set.add(h.lawId);
     reach.set(h.token, set);
     const toks = tokensOf.get(k) ?? new Set<string>();
     toks.add(h.token);
@@ -480,6 +506,11 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
     if (seedLaws.has(r.to_law_id)) link(r.from_law_id, r.to_law_id);
   }
 
+  const fonctionOf = new Map(input.laws.map((l) => [l.id, l.fonction ?? null]));
+  for (const c of cands.values()) {
+    c.score *= fonctionWeight(fonctionOf.get(c.law_id));
+  }
+
   const tries = [...cands.values()].sort(
     (a, b) =>
       b.score - a.score ||
@@ -489,22 +520,30 @@ export function rank(input: RelevanceInput, limit: number): Candidate[] {
       a.division_path.localeCompare(b.division_path),
   );
 
-  // Sélection avec plafond de diversité par matière (cf. MAX_PER_SUBJECT).
+  // Sélection avec plafond de diversité par matière (MAX_PER_SUBJECT) et par fonction
+  // souple (MAX_PER_FONCTION_SOUPLE).
   const parMatiere = new Map<string, number>();
+  const parFonction = new Map<string, number>();
   const retenus: Candidate[] = [];
   const attente: Candidate[] = [];
   for (const c of tries) {
     const matieres = c.pourquoi.filter((p) => p.startsWith("matière : "));
     const autreSignal = c.pourquoi.length > matieres.length;
-    const sature =
+    const satureMatiere =
       !autreSignal &&
       matieres.length > 0 &&
       matieres.every((m) => (parMatiere.get(m) ?? 0) >= MAX_PER_SUBJECT);
-    if (sature) {
+    const f = fonctionOf.get(c.law_id) ?? null;
+    const satureFonction =
+      f !== null &&
+      FONCTIONS_SOUPLES.has(f) &&
+      (parFonction.get(f) ?? 0) >= MAX_PER_FONCTION_SOUPLE;
+    if (satureMatiere || satureFonction) {
       attente.push(c);
       continue;
     }
     for (const m of matieres) parMatiere.set(m, (parMatiere.get(m) ?? 0) + 1);
+    if (f !== null && FONCTIONS_SOUPLES.has(f)) parFonction.set(f, (parFonction.get(f) ?? 0) + 1);
     retenus.push(c);
     if (retenus.length >= limit) return retenus;
   }

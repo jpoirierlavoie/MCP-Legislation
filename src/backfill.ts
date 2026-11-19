@@ -89,6 +89,19 @@ async function divVectorId(law: string, path: string): Promise<string> {
   return `div:${law}:${hex.slice(0, 24)}`;
 }
 
+/**
+ * Id Vectorize d'un article : les ids sont plafonnés à 64 OCTETS UTF-8. Les numéros
+ * courts restent verbatim (`art:${law}:${number}`) pour préserver les vecteurs existants ;
+ * au-delà de 64 octets UTF-8, on hache (`art:${law}:${hex.slice(0, 24)}`) à l'instar de
+ * `divVectorId` (le numéro complet vit dans `metadata.article`).
+ */
+export async function artVectorId(law: string, number: string): Promise<string> {
+  const raw = `art:${law}:${number}`;
+  if (new TextEncoder().encode(raw).byteLength <= 64) return raw;
+  const hex = await sha256Hex(`${law}|${number}`);
+  return `art:${law}:${hex.slice(0, 24)}`;
+}
+
 async function upsertVectorState(
   db: D1Database,
   law: string,
@@ -179,7 +192,7 @@ async function chargerPageBackfill(
       }
       const heading = [...chain].reverse().find((n) => n.heading)?.heading ?? "";
       items.push({
-        id: `art:${law}:${r.number}`,
+        id: await artVectorId(law, r.number),
         text,
         contentHash: await sha256Hex(text),
         metadata: { law, article: r.number, path: r.division_path, heading, type: "article" },
@@ -242,7 +255,7 @@ async function pruneVectors(
         .bind(law)
         .all<{ number: string }>()
     ).results;
-    for (const r of rows) live.add(`art:${law}:${r.number}`);
+    for (const r of rows) live.add(await artVectorId(law, r.number));
   } else {
     const rows = (
       await db

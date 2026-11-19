@@ -54,7 +54,10 @@ def seed_laws(db, only_laws: set[str] | None = None) -> int:
         # moins coûteux que de réingérer tous les couples (loi, langue) pour deux dates.
         # (name_en n'y figure PAS : il vient de l'OPF anglais, pas de la config — §5.)
         sets = [f"fonction = {q(l.get('fonction'))}", f"forum = {q(forum)}",
-                f"name_fr = {q(l['name_fr'])}", f"name_norm = {q(normalize(l['name_fr']))}"]
+                f"name_fr = {q(l['name_fr'])}", f"name_norm = {q(normalize(l['name_fr']))}",
+                f"source = {q(l.get('source', 'epub'))}",
+                f"unit = {q(l.get('unit', 'article'))}",
+                f"jurisdiction = {q(l.get('jurisdiction', 'qc'))}"]
 
         # ⚠️ LES DATES DE CONSOLIDATION NE SONT ÉCRASÉES QUE SI LA CONFIG LES DÉCLARE.
         #
@@ -78,25 +81,33 @@ def seed_laws(db, only_laws: set[str] | None = None) -> int:
         # « corrective » était effacée au chargement suivant.
         #
         # Le raisonnement du commentaire ci-dessus reste juste POUR LE QUÉBEC, où la config
-        # porte les dates. Il est exactement faux pour le fédéral, où elle ne les porte pas.
-        if consol.get("fr"):
-            d_fr = q(consol["fr"])
-            sets.append(
-                f"consol_date_fr = CASE WHEN consol_date_fr IS NULL OR consol_date_fr < {d_fr} "
-                f"THEN {d_fr} ELSE consol_date_fr END"
-            )
-        if consol.get("en"):
-            d_en = q(consol["en"])
-            sets.append(
-                f"consol_date_en = CASE WHEN consol_date_en IS NULL OR consol_date_en < {d_en} "
-                f"THEN {d_en} ELSE consol_date_en END"
-            )
+        # porte les dates. Il est exactement faux pour le fédéral et les PDF, où la date
+        # provient de l'ingestion et non de la config.
+        if (l.get("source") or "epub") not in ("lims", "pdf"):
+            if consol.get("fr"):
+                d_fr = q(consol["fr"])
+                sets.append(
+                    f"consol_date_fr = CASE WHEN consol_date_fr IS NULL OR consol_date_fr < {d_fr} "
+                    f"THEN {d_fr} ELSE consol_date_fr END"
+                )
+            if consol.get("en"):
+                d_en = q(consol["en"])
+                sets.append(
+                    f"consol_date_en = CASE WHEN consol_date_en IS NULL OR consol_date_en < {d_en} "
+                    f"THEN {d_en} ELSE consol_date_en END"
+                )
 
         db.run(f"UPDATE laws SET {', '.join(sets)} WHERE id = {q(l['id'])}")
     return len(laws)
 
 
-def validate(db, taxonomy: dict, relations: dict, only_laws: set[str] | None = None) -> list[str]:
+def validate(
+    db,
+    taxonomy: dict,
+    relations: dict,
+    only_laws: set[str] | None = None,
+    accepter_corpus_partiel: bool = False,
+) -> list[str]:
     v: list[str] = []
     law_ids = {r["id"] for r in db.run("SELECT id FROM laws")}
     subject_ids = {s["id"] for s in taxonomy["subjects"]}
@@ -111,6 +122,7 @@ def validate(db, taxonomy: dict, relations: dict, only_laws: set[str] | None = N
     div_laws = {law for (law, _) in div_paths}
 
     seen: set[tuple] = set()
+    absentes_divisions: set[str] = set()
     for m in taxonomy["mappings"]:
         subj, law = m["subject"], m["law"]
         path = m.get("division_path", "") or ""
@@ -128,7 +140,16 @@ def validate(db, taxonomy: dict, relations: dict, only_laws: set[str] | None = N
             if law in div_laws and (law, path) not in div_paths:
                 v.append(f"division_path introuvable dans `divisions` : {law}/{path} (sujet '{subj}')")
             elif law not in div_laws:
-                v.append(f"division_path '{path}' fourni mais aucune division pour '{law}' (sujet '{subj}')")
+                if accepter_corpus_partiel:
+                    absentes_divisions.add(law)
+                else:
+                    v.append(f"division_path '{path}' fourni mais aucune division pour '{law}' (sujet '{subj}')")
+
+    if absentes_divisions:
+        print(
+            f"[{db.name}] ATTENTION (--accepter-corpus-partiel) : "
+            f"divisions absentes en base pour {', '.join(sorted(absentes_divisions))}."
+        )
 
     for s_ in taxonomy["subjects"]:
         for champ in ("label_en", "description_en"):
@@ -175,7 +196,14 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Chargeur des données de découverte.")
     ap.add_argument("--target", default="local", choices=["local", "cloud"])
     ap.add_argument("--persist-to", default=None, help="Répertoire D1 local (--local uniquement).")
+    ap.add_argument(
+        "--accepter-corpus-partiel",
+        action="store_true",
+        help="Tolérer en local l'absence de `divisions` pour les lois non ingérées.",
+    )
     args = ap.parse_args(argv)
+    if args.accepter_corpus_partiel and args.target == "cloud":
+        raise SystemExit("--accepter-corpus-partiel est interdit sur --target cloud.")
     db = make_client(args.target, persist_to=args.persist_to)
 
     taxonomy = _read("taxonomy.json")
@@ -184,7 +212,12 @@ def main(argv: list[str] | None = None) -> int:
     n_seed = seed_laws(db)
     print(f"[{db.name}] lois enregistrées / attributs posés : {n_seed}")
 
-    violations = validate(db, taxonomy, relations)
+    violations = validate(
+        db,
+        taxonomy,
+        relations,
+        accepter_corpus_partiel=args.accepter_corpus_partiel,
+    )
     if violations:
         print(f"\n❌ VALIDATION ÉCHOUÉE — {len(violations)} violation(s) :")
         for x in violations:

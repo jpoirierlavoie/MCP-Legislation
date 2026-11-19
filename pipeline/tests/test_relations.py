@@ -200,8 +200,11 @@ class TestPorteDuCorpusEpub(unittest.TestCase):
     def test_la_premisse_du_corpus_vide_tient(self):
         """Épingle le montage lui-même : sans lui, les deux contrôles suivants sont muets."""
         manquants = R.epubs_manquants(config.load_all_laws())
-        qc = [l for l in config.load_all_laws() if (l.get("jurisdiction") or "qc") == "qc"]
-        self.assertEqual(len(manquants), len(qc),
+        qc_epub = [
+            l for l in config.load_all_laws()
+            if (l.get("jurisdiction") or "qc") == "qc" and (l.get("source") or "epub") == "epub"
+        ]
+        self.assertEqual(len(manquants), len(qc_epub),
                          "le répertoire d'EPUB doit être vu comme VIDE pendant ces contrôles")
 
     def test_arret_avant_toute_ecriture_quand_des_epub_manquent(self):
@@ -222,13 +225,42 @@ class TestPorteDuCorpusEpub(unittest.TestCase):
         self.assertTrue(manquants, "ce test suppose un corpus d'EPUB incomplet en local")
         self.assertIn(manquants[0], str(ctx.exception))
 
-    def test_la_porte_ne_compte_que_les_textes_quebecois(self):
-        """Les 18 textes fédéraux n'ont pas d'EPUB et n'en auront jamais : ils arrivent en
-        XML LIMS. Les compter comme manquants rendrait la porte impossible à franchir."""
+    def test_la_porte_ne_compte_que_les_textes_quebecois_epub(self):
+        """Les textes fédéraux (LIMS) et PDF n'ont pas d'EPUB : les compter comme manquants
+        rendrait la porte impossible à franchir."""
         manquants = R.epubs_manquants(config.load_all_laws())
-        federaux = {l["id"] for l in config.load_all_laws()
-                    if l.get("jurisdiction") == "ca"}
-        self.assertEqual(set(manquants) & federaux, set())
+        non_epub = {
+            l["id"] for l in config.load_all_laws()
+            if l.get("jurisdiction") == "ca" or l.get("source") == "pdf"
+        }
+        self.assertEqual(set(manquants) & non_epub, set())
+
+    def test_pdf_cle_neutre_et_non_reglement(self):
+        pdf_law = {
+            "id": "qccs-dist-mtl", "source": "pdf", "jurisdiction": "qc",
+            "official_cite": "Directives C.S. (District de Montréal)", "fonction": "directive",
+        }
+        self.assertEqual(R.chapitre_de(pdf_law), "qccs-dist-mtl")
+        self.assertEqual(R.cle_de(pdf_law), ("pdf", "qccs-dist-mtl"))
+        self.assertFalse(R._is_regulation(pdf_law))
+        carte = R._carte([pdf_law], root=True, seulement_lois=True)
+        self.assertEqual(carte, {})
+
+    def test_pdf_reglement_amf_resout_v_1_1_et_reglement_de(self):
+        v11 = {"id": "v-1.1", "source": "epub", "jurisdiction": "qc",
+               "official_cite": "RLRQ, c. V-1.1", "fonction": "loi"}
+        reg = {"id": "v-1.1-r.21", "source": "pdf", "jurisdiction": "qc",
+               "official_cite": "RLRQ, c. V-1.1, r. 21", "fonction": "reglement"}
+        ig = {"id": "amf-ig-45-106", "source": "pdf", "jurisdiction": "qc",
+              "official_cite": "Instruction générale 45-106", "fonction": "orientation"}
+        self.assertEqual(R.chapitre_de(reg, root=False), "V-1.1, r. 21")
+        self.assertEqual(R.chapitre_de(reg, root=True), "V-1.1")
+        self.assertEqual(R.cle_de(reg, root=True), ("qc", "v-1.1"))
+        self.assertTrue(R._is_regulation(reg))
+        self.assertFalse(R._is_regulation(ig))
+        self.assertEqual(R.cle_de(ig), ("pdf", "amf-ig-45-106"))
+        by_root = R._carte([v11, reg, ig], root=True, seulement_lois=True)
+        self.assertEqual(by_root, {("qc", "v-1.1"): "v-1.1"})
 
     def test_le_drapeau_explicite_laisse_passer(self):
         """`--accepter-corpus-partiel` doit vraiment ouvrir la porte — sinon on la contourne

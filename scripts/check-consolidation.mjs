@@ -24,7 +24,8 @@
 // Code de sortie : 0 même en cas de dérive (la dérive est le signal attendu, pas une
 // erreur) ; ≠ 0 seulement si le détecteur lui-même n'a rien pu vérifier.
 
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createMcpClient } from "../eval/mcp-client.mjs";
@@ -150,6 +151,195 @@ async function fetchLiveDate(url, extracteur) {
   }
 }
 
+export function isCloudflare403(status, headers, bodyText = "") {
+  if (status !== 403) return false;
+  const cfMitigated = headers?.get?.("cf-mitigated") ?? headers?.["cf-mitigated"] ?? "";
+  if (String(cfMitigated).toLowerCase() === "challenge") return true;
+  return /Just a moment|cf-browser-verification|_cf_chl_opt|cType:\s*['"]managed['"]/i.test(
+    bodyText,
+  );
+}
+
+export function sha256HexBytes(buf) {
+  return createHash("sha256").update(buf).digest("hex");
+}
+
+export function parsePdfHeader(buf) {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  const head = Buffer.from(bytes.subarray(0, 16)).toString("latin1");
+  if (!head.startsWith("%PDF-")) return { valid: false, modDate: null };
+  // /ModDate est lu à titre informatif uniquement (jamais comme date de consolidation, cf. §7.1).
+  const text = Buffer.from(bytes).toString("latin1");
+  const m = text.match(/\/ModDate\s*\(D:(\d{4})(\d{2})(\d{2})/i);
+  const modDate = m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  return { valid: true, modDate };
+}
+
+export function extractPdfIndexDrift(html, { expectedFilename, baseUrl } = {}) {
+  const cleaned = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ");
+  const links = [];
+  const anchorRe = /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let m;
+  while ((m = anchorRe.exec(cleaned)) !== null) {
+    const rawHref = m[1].trim();
+    if (!/\.pdf(?:[?#].*)?$/i.test(rawHref)) continue;
+    let resolved = rawHref;
+    if (baseUrl) {
+      try {
+        resolved = new URL(rawHref, baseUrl).href;
+      } catch {
+        // conserver brut si URL relative invalide
+      }
+    }
+    links.push(resolved);
+  }
+  const plain = cleaned.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const dm = plain.match(/jour au\s*(\d{1,2})\s*(?:er)?\s*([A-Za-zÀ-ÿ]+)\s*(\d{4})/i);
+  let liveDate = null;
+  if (dm && FR_MONTHS[dm[2].toLowerCase()]) {
+    const mm = String(FR_MONTHS[dm[2].toLowerCase()]).padStart(2, "0");
+    const dd = String(Number(dm[1])).padStart(2, "0");
+    liveDate = `${dm[3]}-${mm}-${dd}`;
+  }
+  if (links.length === 0) {
+    return {
+      status: "illisible",
+      links,
+      matchedUrl: null,
+      liveDate,
+      note: "page d'index atteinte (200) mais aucun lien .pdf trouvé",
+    };
+  }
+  if (expectedFilename) {
+    const cible = expectedFilename.toLowerCase();
+    const cleanPaths = links.map((u) => {
+      const rawPath = u.split(/[?#]/)[0];
+      let decoded = rawPath;
+      try {
+        decoded = decodeURIComponent(rawPath);
+      } catch {
+        decoded = rawPath;
+      }
+      return {
+        u,
+        cleanPath: decoded.toLowerCase(),
+      };
+    });
+    const matchedUrl =
+      cleanPaths.find(({ cleanPath }) => cleanPath.endsWith(`/${cible}`) || cleanPath === cible)
+        ?.u ??
+      cleanPaths.find(({ cleanPath }) => cleanPath.includes(cible))?.u ??
+      null;
+    if (!matchedUrl) {
+      return {
+        status: "ok",
+        shaDrift: true,
+        links,
+        matchedUrl: links[0],
+        liveDate,
+        note: `lien PDF attendu (${expectedFilename}) absent ou remplacé sur la page d'index`,
+      };
+    }
+    return { status: "ok", shaDrift: false, links, matchedUrl, liveDate };
+  }
+  return { status: "ok", shaDrift: false, links, matchedUrl: links[0], liveDate };
+}
+
+export function checkPdfBuffer(buf, { expectedSha256, storedDate } = {}) {
+  const { valid, modDate } = parsePdfHeader(buf);
+  if (!valid) {
+    return { status: "illisible", note: "réponse 200 non-PDF (en-tête %PDF- absent)" };
+  }
+  if (!expectedSha256) {
+    return {
+      status: "illisible",
+      date: storedDate ?? null,
+      shaDrift: false,
+      note: "empreinte SHA-256 attendue absente du profil PDF",
+    };
+  }
+  const actual = sha256HexBytes(buf);
+  if (actual !== expectedSha256.toLowerCase()) {
+    return {
+      status: "ok",
+      date: storedDate ?? null,
+      shaDrift: true,
+      note: `empreinte SHA-256 modifiée (${actual.slice(0, 12)}… ≠ ${expectedSha256.slice(0, 12)}…)`,
+    };
+  }
+  return {
+    status: "ok",
+    date: storedDate ?? null,
+    shaDrift: false,
+    note: modDate ? `ModDate PDF : ${modDate}` : null,
+  };
+}
+
+export function loadPdfProfilePins(root = ROOT) {
+  const dir = join(root, "pipeline", "pdf_profiles");
+  const pins = new Map();
+  if (!existsSync(dir)) return pins;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    const prof = JSON.parse(readFileSync(join(dir, name), "utf8"));
+    if (prof?.law_id && prof?.files) pins.set(prof.law_id, prof.files);
+  }
+  return pins;
+}
+
+export async function fetchLivePdf(url, pin, storedDate, fetchImpl = fetch, _depth = 0) {
+  if (!url)
+    return { status: "injoignable", note: "URL de consolidation absente de laws.config.json" };
+  try {
+    const res = await fetchImpl(url, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (res.status === 403) {
+      const bodyText = await res.text().catch(() => "");
+      const cf = isCloudflare403(res.status, res.headers, bodyText);
+      return {
+        status: "injoignable",
+        note: cf ? "Cloudflare 403 (challenge WAF — vérification manuelle requise)" : "HTTP 403",
+      };
+    }
+    if (!res.ok) return { status: "injoignable", note: `HTTP ${res.status}` };
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const ct = (res.headers?.get?.("content-type") ?? "").toLowerCase();
+    const looksHtml =
+      ct.includes("text/html") ||
+      (!url.toLowerCase().split(/[?#]/)[0].endsWith(".pdf") &&
+        !Buffer.from(buf.subarray(0, 8)).toString("latin1").startsWith("%PDF-"));
+    if (looksHtml) {
+      if (_depth >= 1) {
+        return {
+          status: "illisible",
+          note: "réponse 200 HTML/non-PDF après suivi de lien d'index (en-tête %PDF- absent)",
+        };
+      }
+      const html = Buffer.from(buf).toString("utf8");
+      const idx = extractPdfIndexDrift(html, {
+        expectedFilename: pin?.filename,
+        baseUrl: url,
+      });
+      if (idx.status !== "ok" || idx.shaDrift) {
+        return {
+          status: idx.status,
+          date: storedDate ?? null,
+          shaDrift: Boolean(idx.shaDrift),
+          note: idx.note ?? null,
+        };
+      }
+      if (idx.matchedUrl) {
+        return await fetchLivePdf(idx.matchedUrl, pin, storedDate, fetchImpl, _depth + 1);
+      }
+    }
+    return checkPdfBuffer(buf, { expectedSha256: pin?.sha256, storedDate });
+  } catch (e) {
+    return { status: "injoignable", note: e.name === "TimeoutError" ? "délai dépassé" : "réseau" };
+  }
+}
+
 /** Répartit les contrôles (déjà dotés de status/live/stored) en catégories. */
 export function classify(checks) {
   const retard = [],
@@ -164,6 +354,10 @@ export function classify(checks) {
     }
     if (c.status === "illisible") {
       illisible.push(c);
+      continue;
+    }
+    if (c.shaDrift) {
+      retard.push(c);
       continue;
     }
     // status === "ok" : c.live est une date ISO. Comparaison lexicographique valide.
@@ -215,12 +409,17 @@ async function pool(items, size, worker) {
   await Promise.all(runners);
 }
 
-/** Deux publieurs, deux bannières, deux extracteurs. Le seau est porté par le contrôle. */
+/** Trois publieurs, trois modes d'extraction. Le seau est porté par le contrôle. */
 const EXTRACTEURS = {
   legisquebec: extractConsolidation,
   justice: extractConsolidationFederale,
+  pdf: checkPdfBuffer,
 };
-export const NOM_PUBLIEUR = { legisquebec: "LégisQuébec", justice: "Justice Canada" };
+export const NOM_PUBLIEUR = {
+  legisquebec: "LégisQuébec",
+  justice: "Justice Canada",
+  pdf: "Sources PDF (QCCS/QCCQ/AMF)",
+};
 
 /**
  * Répartit les contrôles PAR PUBLIEUR, applique `classify` puis `computeDrift` à CHAQUE
@@ -280,11 +479,14 @@ async function main() {
   const sources = new Map(
     config.laws.map((l) => [
       l.id,
-      l.consolidation_source
-        ? { urls: l.consolidation_source, publieur: "legisquebec" }
-        : { urls: l.official_source || {}, publieur: "justice" },
+      l.source === "pdf"
+        ? { urls: l.consolidation_source || {}, publieur: "pdf" }
+        : l.consolidation_source
+          ? { urls: l.consolidation_source, publieur: "legisquebec" }
+          : { urls: l.official_source || {}, publieur: "justice" },
     ]),
   );
+  const pdfPins = loadPdfProfilePins(ROOT);
 
   // 1) Dates stockées, via l'endpoint MCP public (une seule session).
   const mcp = createMcpClient(MCP_URL);
@@ -329,12 +531,16 @@ async function main() {
     throw new Error("aucun couple (loi, langue) construit — forme de list_laws inattendue ?");
   }
 
-  // 3) Date live pour chaque contrôle, avec l'extracteur de SON publieur.
+  // 3) Date live (ou empreinte SHA-256 PDF) pour chaque contrôle, avec l'extracteur de SON publieur.
   await pool(checks, CONCURRENCY, async (c) => {
-    const { status, date, note } = await fetchLiveDate(c.url, EXTRACTEURS[c.publieur]);
-    c.status = status;
-    c.live = date ?? null;
-    c.note = note ?? null;
+    const res =
+      c.publieur === "pdf"
+        ? await fetchLivePdf(c.url, pdfPins.get(c.id)?.[c.lang], c.stored)
+        : await fetchLiveDate(c.url, EXTRACTEURS[c.publieur]);
+    c.status = res.status;
+    c.live = res.date ?? null;
+    c.note = res.note ?? null;
+    if (res.shaDrift) c.shaDrift = true;
   });
 
   // 4) Classement et dérive, PAR SEAU DE PUBLIEUR — cf. `agregeParSeau`, qui porte le
@@ -434,9 +640,9 @@ function buildReport(d) {
 
   let md = `# Veille de consolidation — ${stamp}\n\n`;
   md += `Détecteur **en lecture seule** : ${laws} lois, ${total} couples (loi, langue) comparés `;
-  md += `entre les dates chargées en D1 (via \`list_laws\`) et les dates « À jour au » `;
-  md += `affichées par leur publieur officiel — LégisQuébec pour le Québec, Justice Canada `;
-  md += `pour le fédéral.\n\n`;
+  md += `entre les dates chargées en D1 (via \`list_laws\`) et les sources officielles `;
+  md += `— LégisQuébec pour le Québec, Justice Canada pour le fédéral et les sources PDF `;
+  md += `(QCCS, QCCQ, AMF).\n\n`;
 
   // Ventilation par publieur. Le seuil de joignabilité s'applique PAR SEAU : agrégé, un
   // blocage total d'un des deux se diluerait sous les 25 % et le job passerait vert.
@@ -468,7 +674,7 @@ function buildReport(d) {
     md += `miroir correspondant est à mettre à jour, DANS SES DEUX MOITIÉS `;
     md += `(\`extractConsolidation\` ↔ \`fetch_consolidation\` pour LégisQuébec ; `;
     md += `\`extractConsolidationFederale\` ↔ \`extrait_consolidation_federale\` pour Justice `;
-    md += `Canada). Ce n'est PAS un problème réseau.\n\n`;
+    md += `Canada ; \`checkPdfBuffer\` / \`extractPdfIndexDrift\` pour les sources PDF). Ce n'est PAS un problème réseau.\n\n`;
     md += `| Loi | Langue | Publieur | Détail |\n|---|---|---|---|\n`;
     md +=
       illisible.map((c) => `| ${c.id} | ${c.lang} | ${pub(c)} | ${c.note ?? "?"} |`).join("\n") +

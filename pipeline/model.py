@@ -1,6 +1,7 @@
 """Modèle de données du pipeline — reflète le schéma D1 (PLAN.md §2 révisé)."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -25,7 +26,8 @@ class Law:
     jurisdiction: str = "qc"              # 'qc' | 'ca'
     in_force: int = 1                     # 0 = édictée mais NON en vigueur (refus d'ingestion)
     last_amended: str | None = None       # « Dernière modification le … » (lims:lastAmendedDate)
-    unit: str = "article"                 # 'article' | 'regle' (Règles des Cours fédérales)
+    unit: str = "article"                 # 'article' | 'regle' (Règles des Cours fédérales) | 'paragraphe'
+    source: str = "epub"                  # 'epub' | 'lims' | 'pdf'
 
 
 @dataclass
@@ -72,6 +74,7 @@ class Article:
     # « introuvable » là où la vraie réponse est « abrogé, art. 11 à 14 » : un faux
     # silencieux sur une question d'abrogation.
     alias_numbers: list[str] = field(default_factory=list)
+    links: str | None = None  # JSON array [{"label": ..., "url": ...}] (migrations/0007_pdf_corpus.sql)
     # rempli au chargement :
     id: int | None = None
     # None (et non 0) pour distinguer « pas encore calculée » de « calculée à 0 ». Le
@@ -82,25 +85,35 @@ class Article:
 
 
 # Clé de tri des pseudo-articles de disposition : APRÈS tout le corpus. Le max d'un article
-# réel = ~3168 * 1000^4 ≈ 3.17e15 (< 2^53), donc une base à 9e15 les place tous après.
+# réel = 270000*13500*2700*864 - 1 = 8_503_055_999_999_999 (< 9e15 < 2^53), donc une base à 9e15 les place tous après.
 DISPOSITION_SORT_BASE = 9_000_000_000_000_000
+
+_SORT_COMP_RE = re.compile(r"^(\d+)([A-Za-z]?)$")
+_SORT_BASES = (13_500, 2_700, 864)       # c1 < 500*27, c2 < 100*27, c3 < 32*27
+_SORT_MAX_NUMS = (9999, 499, 99, 31)     # max = 270000*13500*2700*864 - 1 = 8_503_055_999_999_999 < 9e15
 
 
 def sort_key(number: str) -> int:
-    """Clé de tri 64 bits : packing en base 1000 de l'entier + jusqu'à 4 niveaux décimaux,
-    normalisé à 5 composantes pour un ordre correct (132 < 132.0.1 < 133 ; gère aussi
-    350.52.0.1). Les pseudo-articles de disposition (préliminaire=0, autres via le parseur)
-    encadrent le corpus.
+    """Clé de tri 53 bits : packing mixte à 4 composantes (c0..c3) avec suffixe lettre
+    optionnel A–Z (27 états), strictement < DISPOSITION_SORT_BASE (< 2^53).
     """
-    if number == "préliminaire":
+    if number in ("préliminaire", "preambule", "preamble", "note-preliminaire"):
         return 0
     parts = number.split(".")
-    if not parts[0].isdigit():
+    if not _SORT_COMP_RE.match(parts[0]):
         return DISPOSITION_SORT_BASE  # pseudo-article non numérique (le parseur fixe l'ordre)
-    comps = parts[:5]  # entier + jusqu'à 4 niveaux décimaux
-    key = 0
-    for p in comps:
-        key = key * 1000 + (int(p) if p.isdigit() else 0)
-    for _ in range(5 - len(comps)):
-        key *= 1000  # normaliser la longueur (padding)
+    vals: list[int] = []
+    for i, p in enumerate(parts[:4]):
+        m = _SORT_COMP_RE.match(p)
+        if m:
+            n = min(int(m.group(1)), _SORT_MAX_NUMS[i])
+            let = ord(m.group(2).upper()) - 64 if m.group(2) else 0
+            vals.append(n * 27 + let)
+        else:
+            vals.append(0)
+    while len(vals) < 4:
+        vals.append(0)
+    key = vals[0]
+    for i, b in enumerate(_SORT_BASES):
+        key = key * b + vals[i + 1]
     return key

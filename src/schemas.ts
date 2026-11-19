@@ -25,14 +25,15 @@ export interface DescripteurPublie {
 export const LIST_LAWS: DescripteurPublie = {
   title: titre("list_laws"),
   description:
-    "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, date de consolidation, nombre d'articles, et les attributs de découverte (fonction, forum, matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; pour partir d'un problème concret, préférer find_relevant.",
+    "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, date de consolidation, nombre d'articles, et les attributs de découverte (fonction, forum, matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). Inclut les directives de cour et orientations AMF (source PDF). Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; pour partir d'un problème concret, préférer find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
     additionalProperties: false,
     properties: {
       fonction: {
-        description: "Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement'.",
+        description:
+          "Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement', 'directive', 'orientation'.",
         type: "string",
       },
       forum: {
@@ -100,7 +101,7 @@ export const LIST_SUBJECTS: DescripteurPublie = {
 export const RELATED_LAWS: DescripteurPublie = {
   title: titre("related_laws"),
   description:
-    "Graphe d'interconnexion d'une loi : règlements pris sous son autorité, loi habilitante, renvois vers d'autres textes, et relations curées (met-en-oeuvre, applique, complète…). Signale les cibles NON disponibles au corpus. Ex. : law='cpc' pour voir ses règlements de cour.",
+    "Graphe d'interconnexion d'une loi : règlements pris sous son autorité, loi habilitante, renvois vers d'autres textes, et relations curées (met-en-oeuvre, applique, complète, preseance-sur, interprete…). Signale les cibles NON disponibles au corpus. Ex. : law='cpc' pour voir ses règlements de cour.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -113,7 +114,7 @@ export const RELATED_LAWS: DescripteurPublie = {
       },
       rel_type: {
         description:
-          "Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe'.",
+          "Filtrer par type : 'reglement-de', 'renvoie-a', 'met-en-oeuvre', 'applique', 'complete', 'encadre-par', 'connexe', 'preseance-sur', 'interprete'.",
         type: "string",
       },
       direction: {
@@ -190,7 +191,7 @@ export const FIND_RELEVANT: DescripteurPublie = {
 export const GET_ARTICLE: DescripteurPublie = {
   title: titre("get_article"),
   description:
-    "Retourne le texte officiel verbatim d'un article, avec citation, chemin hiérarchique, date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions se demandent avec article='préliminaire' ou 'finales'. Si la loi pertinente est inconnue, commencer par find_relevant.",
+    "Retourne le texte officiel verbatim d'un article, avec citation, chemin hiérarchique, date de consolidation et historique. Ex. : law='ccq', article='1457'. Les dispositions se demandent avec article='préliminaire' ou 'finales'. Couvre aussi les paragraphes de directives, sections alphanumériques ('2A.1') et annexes ('annexe-1') avec liens et statut normatif. Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -203,7 +204,7 @@ export const GET_ARTICLE: DescripteurPublie = {
       },
       article: {
         type: "string",
-        description: "Numéro d'article, ex. '1457', '2926.1', '132.0.1'.",
+        description: "Numéro d'article, ex. '1457', '2926.1', '132.0.1', '2A.1', 'annexe-1'.",
       },
       lang: {
         default: "fr",
@@ -444,7 +445,7 @@ export const SEARCH_TEXT: DescripteurPublie = {
 export const RESOLVE_REFERENCE: DescripteurPublie = {
   title: titre("resolve_reference"),
   description:
-    "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, ainsi que les abréviations C.c.Q. et C.p.c. Si la loi pertinente est inconnue, commencer par find_relevant.",
+    "Résout une citation en texte libre (ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 ») vers l'article officiel. Reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, ainsi que les abréviations C.c.Q. et C.p.c. Reconnaît aussi par./dir. (directives C.S./C.Q.) et les instructions générales AMF (« IG 45-106, art. 2A.1 »), en refusant toute citation ambiguë. Si la loi pertinente est inconnue, commencer par find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",

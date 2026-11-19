@@ -21,13 +21,13 @@
       "title_en": "Corpus map",
       "groupe": "orientation",
       "page_fr": [
-        "La carte complète du corpus : chaque loi avec son identifiant, ses titres français et anglais, sa citation RLRQ, les langues disponibles, sa date de consolidation et son nombre d'articles.",
-        "S'y ajoutent les attributs de découverte : la fonction du texte (loi, règlement, règles de procédure, tarif), le forum devant lequel il s'applique, les matières auxquelles il est rattaché, et la loi habilitante lorsqu'il s'agit d'un règlement. Pour les deux grands codes, le plan des Livres et de leurs Titres est inclus.",
+        "La carte complète du corpus : chaque texte avec son identifiant, ses titres français et anglais, sa citation officielle (RLRQ, fédérale ou directive/IG), les langues disponibles, sa date de consolidation et son nombre d'articles.",
+        "S'y ajoutent les attributs de découverte : la fonction du texte (loi, règlement, règles de procédure, tarif, directive de pratique judiciaire ou orientation administrative AMF), le forum devant lequel il s'applique, les matières auxquelles il est rattaché, et la loi habilitante lorsqu'il s'agit d'un règlement. Pour les deux grands codes, le plan des Livres et de leurs Titres est inclus.",
         "Trois filtres permettent de restreindre la carte : par fonction, par forum, ou par matière. C'est le point de départ pour explorer le corpus lorsqu'on sait ce qu'on cherche ; pour partir d'un problème concret, l'outil de repérage est plus direct."
       ],
       "page_en": [
-        "The full map of the corpus: each statute with its identifier, French and English titles, RLRQ citation, available languages, consolidation date and article count.",
-        "Discovery attributes come with it: the text's function (statute, regulation, rules of procedure, tariff), the forum it governs, the subjects it belongs to, and the enabling statute where the text is a regulation. For the two major codes, the outline of Books and their Titles is included.",
+        "The full map of the corpus: each text with its identifier, French and English titles, official citation (RLRQ, federal, or directive/policy statement), available languages, consolidation date and article count.",
+        "Discovery attributes come with it: the text's function (statute, regulation, rules of procedure, tariff, court practice directive, or AMF administrative policy statement), the forum it governs, the subjects it belongs to, and the enabling statute where the text is a regulation. For the two major codes, the outline of Books and their Titles is included.",
         "Three filters narrow the map: by function, by forum, or by subject. This is where to start when exploring a known corpus; to start from a concrete problem, the discovery tool is more direct."
       ]
     },
@@ -51,13 +51,13 @@
       "title_en": "Related statutes",
       "groupe": "orientation",
       "page_fr": [
-        "Le graphe d'interconnexion d'une loi : les règlements pris sous son autorité, la loi qui l'habilite, les renvois qu'elle fait vers d'autres textes, et les relations curées à la main lorsqu'un lien juridique mérite d'être qualifié — met en œuvre, applique, complète, encadré par, connexe.",
+        "Le graphe d'interconnexion d'une loi : les règlements pris sous son autorité, la loi qui l'habilite, les renvois qu'elle fait vers d'autres textes, et les relations curées à la main lorsqu'un lien juridique mérite d'être qualifié — met en œuvre, applique, complète, encadré par, connexe, préséance sur (preseance-sur) et interprète (interprete).",
         "Les arêtes peuvent être suivies dans les deux sens, filtrées par type, et limitées en nombre. Chaque relation indique si elle a été dérivée automatiquement ou curée, et les relations curées portent une note expliquant le lien.",
         "L'outil signale explicitement les cibles qui ne sont pas au corpus : un renvoi vers une loi non chargée est affiché comme tel plutôt que passé sous silence. Ces cibles absentes sont autant de candidats d'acquisition.",
         "Les noms de lois suivent la langue demandée. Les notes des relations curées, elles, n'existent qu'en français : sous une demande anglaise elles sont rendues MARQUÉES [fr] plutôt que maquillées en traduction, et l'étiquette voyage aussi dans les données structurées."
       ],
       "page_en": [
-        "A statute's interconnection graph: regulations made under its authority, the statute that enables it, cross-references it makes to other texts, and hand-curated relations where a legal link deserves to be characterized — implements, applies, supplements, governed by, related.",
+        "A statute's interconnection graph: regulations made under its authority, the statute that enables it, cross-references it makes to other texts, and hand-curated relations where a legal link deserves to be characterized — implements, applies, supplements, governed by, related, precedence over (preseance-sur), and interprets (interprete).",
         "Edges can be followed in either direction, filtered by type, and capped in number. Each relation states whether it was derived automatically or curated, and curated relations carry a note explaining the link.",
         "The tool explicitly flags targets that are not in the corpus: a reference to a statute that has not been loaded is shown as such rather than silently dropped. Those absent targets are acquisition candidates.",
         "Statute names follow the requested language. The notes attached to curated relations, however, exist only in French: under an English request they are returned MARKED [fr] rather than passed off as a translation, and the label travels in the structured payload as well."
@@ -68,14 +68,14 @@
       "title_en": "Official text of an article",
       "groupe": "extraction",
       "page_fr": [
-        "Le texte officiel d'un article, restitué verbatim, avec sa citation, sa position dans la hiérarchie du texte, sa date de consolidation et sa ligne d'historique législatif. Les articles abrogés sont rendus et signalés comme tels.",
-        "Les numéros décimaux du Code civil et des lois modernes sont pris en charge, de même que les dispositions qui n'ont pas de numéro — la disposition préliminaire et les dispositions finales se demandent par leur nom.",
+        "Le texte officiel d'un article ou d'un paragraphe de directive, restitué verbatim, avec sa citation, sa position dans la hiérarchie du texte, sa date de consolidation, sa ligne d'historique et, le cas échéant, son statut normatif non législatif (directive ou orientation) et les hyperliens officiels d'annexe. Les articles abrogés sont rendus et signalés comme tels.",
+        "Les numéros décimaux et alphanumériques (ex. '2A.1') sont pris en charge, de même que les dispositions sans numéro ('préliminaire', 'finales') et les annexes ('annexe-1', 'annexe-a'). Lorsqu'un texte PDF n'est publié qu'en français, une demande avec lang='en' le signale explicitement sans deviner ni traduire à la volée.",
         "Si le numéro demandé n'existe pas, l'outil ne devine pas : il propose les articles voisins. Un article manquant est signalé, jamais remplacé par son plus proche parent."
       ],
       "page_en": [
-        "The official text of an article, returned verbatim, with its citation, its position in the text's hierarchy, its consolidation date and its legislative history line. Repealed articles are returned and flagged as such.",
-        "Decimal numbering used by the Civil Code and modern statutes is supported, as are provisions without a number — the preliminary provision and the final provisions are requested by name.",
-        "If the requested number does not exist, the tool does not guess: it offers the neighbouring articles. A missing article is reported, never substituted with its nearest sibling."
+        "The official text of a section or directive paragraph, returned verbatim, with its citation, its position in the text's hierarchy, its consolidation date, its history line and, where applicable, its non-legislative normative status (directive or policy statement) and official annex links. Repealed provisions are returned and flagged as such.",
+        "Decimal and alphanumeric numbering (e.g. '2A.1') is supported, as are unnumbered provisions ('préliminaire', 'finales') and annexes ('annexe-1', 'annexe-a'). Where a PDF text is published in French only, a lang='en' request states this explicitly rather than guessing or translating on the fly.",
+        "If the requested number does not exist, the tool does not guess: it offers the neighbouring provisions. A missing provision is reported, never substituted with its nearest sibling."
       ]
     },
     "get_articles": {
@@ -141,14 +141,14 @@
       "title_en": "Citation resolution",
       "groupe": "extraction",
       "page_fr": [
-        "D'une citation écrite en langage libre vers l'article officiel qu'elle désigne. L'outil reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, ainsi que les abréviations usuelles des deux grands codes.",
+        "D'une citation écrite en langage libre vers l'article ou le paragraphe officiel qu'elle désigne. L'outil reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, les abréviations usuelles des deux grands codes, les paragraphes de directives judiciaires (par./dir., Cour supérieure ou Cour du Québec) et les instructions générales de l'AMF (« IG 45-106, art. 2A.1 », distinctes du Règlement 45-106).",
         "Il indique par quelle voie la citation a été reconnue, ce qui permet de vérifier la résolution plutôt que de la prendre pour acquise.",
-        "Un chapitre RLRQ absent du corpus n'est jamais rabattu sur un chapitre voisin : l'outil refuse explicitement de résoudre plutôt que de rendre l'article d'une autre loi. Dans un outil juridique, un résultat faux rendu en silence est le pire défaut possible."
+        "Un chapitre RLRQ absent du corpus ou une citation ambiguë (ex. « Directives C.S. » sans division ni district, ou « 45-106 » sans préciser règlement ni instruction générale) n'est jamais rabattu sur un voisin : l'outil refuse explicitement de résoudre plutôt que de rendre l'article d'un autre texte. Dans un outil juridique, un résultat faux rendu en silence est le pire défaut possible."
       ],
       "page_en": [
-        "From a citation written in free form to the official article it designates. The tool recognizes the RLRQ chapter of any statute in the corpus, as well as the usual abbreviations of the two major codes.",
+        "From a citation written in free form to the official section or paragraph it designates. The tool recognizes the RLRQ chapter of any statute in the corpus, the usual abbreviations of the two major codes, court practice directive paragraphs (par./dir., Superior Court or Court of Québec), and AMF Policy Statements (« IG 45-106, art. 2A.1 », kept distinct from Regulation 45-106).",
         "It reports how the citation was recognized, which lets you verify the resolution rather than take it on trust.",
-        "An RLRQ chapter absent from the corpus is never rounded to a neighbouring chapter: the tool explicitly declines to resolve rather than return an article from a different statute. In a legal tool, a wrong result delivered silently is the worst possible defect."
+        "An RLRQ chapter absent from the corpus or an ambiguous citation (e.g. « Directives C.S. » without division or district, or « 45-106 » without specifying regulation or policy statement) is never rounded to a neighbour: the tool explicitly declines to resolve rather than return a provision from another text. In a legal tool, a wrong result delivered silently is the worst possible defect."
       ]
     }
   },
@@ -166,13 +166,15 @@
         "Le classement des candidats est une somme de signaux, sans aucun appel de modèle de langue. Le même texte, interrogé deux fois par les mêmes termes, rend le même classement.",
         "La matière pèse le plus lourd : lorsqu'un terme de la requête se retrouve dans le libellé ou la description d'une matière de la taxonomie, toutes les lois rattachées à cette matière deviennent candidates. Viennent ensuite l'intitulé des divisions et le nom des lois, à poids égal. Enfin, un saut dans le graphe des relations ajoute un appoint : une loi voisine d'un bon candidat gagne un point, une seule fois, et seulement par une relation curée ou par un lien de règlement à loi habilitante.",
         "Trois correctifs empêchent ce cumul de dériver. Un terme qui ne touche que quelques textes pèse davantage qu'un terme générique — dans un corpus entièrement juridique, « procédure » ou « contrat » n'apprennent presque rien, tandis que « courtage » ou « expropriation » désignent. Et une même matière ne peut fournir qu'un nombre borné de candidats, faute de quoi une matière riche en textes remplirait à elle seule la liste et en évincerait le code applicable.",
-        "Le troisième correctif pèse la part de la question que le candidat explique réellement. Sans lui, un texte rapproché par un seul mot sur six marquait autant que s'il avait été rapproché par un mot sur deux : le score ne dépendait pas de la question posée, et une loi hors sujet qui partageait un mot avec le libellé d'une matière pouvait devancer le code applicable. Comme la pondération par spécificité, ce correctif est continu et non par seuil — précisément pour que le classement ne bascule pas le jour où une loi de plus est ajoutée au corpus."
+        "Le troisième correctif pèse la part de la question que le candidat explique réellement. Sans lui, un texte rapproché par un seul mot sur six marquait autant que s'il avait été rapproché par un mot sur deux : le score ne dépendait pas de la question posée, et une loi hors sujet qui partageait un mot avec le libellé d'une matière pouvait devancer le code applicable. Comme la pondération par spécificité, ce correctif est continu et non par seuil — précisément pour que le classement ne bascule pas le jour où une loi de plus est ajoutée au corpus.",
+        "Un quatrième correctif applique une pondération normative continue aux textes non législatifs (directives de pratique et orientations administratives AMF) et plafonne leur part en tête de liste, afin qu'ils demeurent repérables sans évincer les codes, lois ou règlements adoptés."
       ],
       "corps_en": [
         "Candidate ranking is a sum of signals, with no language-model call anywhere. The same query, run twice with the same terms, yields the same ranking.",
         "Subject matter carries the most weight: when a query term appears in the label or description of a taxonomy subject, every statute attached to that subject becomes a candidate. Division headings and statute names follow, at equal weight. Finally, one hop through the relations graph adds a small bonus: a statute adjacent to a strong candidate gains a point, once only, and only through a curated relation or a regulation-to-enabling-statute link.",
         "Three corrections keep that accumulation from drifting. A term that touches only a few texts weighs more than a generic one — in a corpus that is entirely legal, “procedure” or “contract” teach almost nothing, whereas “brokerage” or “expropriation” designate. And a single subject may contribute only a bounded number of candidates, failing which a text-rich subject would fill the list on its own and crowd out the governing code.",
-        "The third correction weighs how much of the question a candidate actually accounts for. Without it, a text matched on one word out of six scored exactly as much as if it had been matched on one word out of two: the score did not depend on the question asked, and an off-topic statute sharing a single word with a subject label could outrank the governing code. Like the specificity weighting, this correction is continuous rather than threshold-based — precisely so the ranking does not tip the day one more statute is added to the corpus."
+        "The third correction weighs how much of the question a candidate actually accounts for. Without it, a text matched on one word out of six scored exactly as much as if it had been matched on one word out of two: the score did not depend on the question asked, and an off-topic statute sharing a single word with a subject label could outrank the governing code. Like the specificity weighting, this correction is continuous rather than threshold-based — precisely so the ranking does not tip the day one more statute is added to the corpus.",
+        "A fourth correction applies continuous normative weighting to non-legislative texts (court practice directives and AMF administrative policy statements) and caps their share at the top of the list, so they remain discoverable without displacing enacted codes, statutes, or regulations."
       ],
       "constantes": [
         "S1_SUBJECT",
@@ -181,7 +183,9 @@
         "S4_GRAPH_NEIGHBOUR",
         "MAX_PER_SUBJECT",
         "MAX_SUFFIX",
-        "COVERAGE_FLOOR"
+        "COVERAGE_FLOOR",
+        "FONCTION_WEIGHTS",
+        "MAX_PER_FONCTION_SOUPLE"
       ]
     },
     "echelle": {
@@ -226,12 +230,12 @@
     "titre_en": "Limits",
     "corps_fr": [
       "L'aide au repérage est heuristique. Elle propose où lire ; elle ne détermine pas le droit applicable.",
-      "Le texte des articles est restitué verbatim, sans altération : depuis les EPUB officiels de LégisQuébec pour les textes du Québec, et depuis les XML du ministère de la Justice du Canada pour les textes fédéraux. La version officielle est celle publiée par l'Éditeur officiel du Québec, et pour le fédéral celle publiée par le ministre (art. 31 de la Loi sur la révision et la codification des textes législatifs) : c'est elle qui fait foi. Ce service n'est pas une version officielle. Il contient de l'information publiée sous la Licence du gouvernement ouvert – Canada.",
+      "Le texte des dispositions est restitué verbatim, sans altération : depuis les EPUB officiels de LégisQuébec pour les lois et règlements du Québec, depuis les XML du ministère de la Justice du Canada pour les textes fédéraux, et depuis les PDF officiels des tribunaux du Québec (Cour supérieure, Cour du Québec — directives de pratique) et de l'Autorité des marchés financiers (AMF — règlements 31-103, 45-106 et 51-102 ainsi que leurs instructions générales indicatives, sans force de loi). La version officielle est celle publiée par l'Éditeur officiel du Québec, par le ministre pour le fédéral (art. 31 de la Loi sur la révision et la codification des textes législatifs), ou par le tribunal ou l'AMF compétent : c'est elle qui fait foi. Ce service n'est pas une version officielle. Il contient de l'information publiée sous la Licence du gouvernement ouvert – Canada.",
       "Ce service ne fournit aucun conseil juridique. Les dates de consolidation affichées indiquent l'état du corpus chargé ici, qui peut accuser un retard sur la publication officielle."
     ],
     "corps_en": [
       "The retrieval aid is heuristic. It suggests where to read; it does not determine the applicable law.",
-      "Article text is returned verbatim, unaltered: from the official LégisQuébec EPUBs for Québec texts, and from Department of Justice Canada XML for federal texts. The official version is the one published by the Québec Official Publisher, and for federal texts the one published by the Minister (s. 31, Legislation Revision and Consolidation Act): that version is the authoritative one. This service is not an official version. It contains information licensed under the Open Government Licence – Canada.",
+      "Provision text is returned verbatim, unaltered: from the official LégisQuébec EPUBs for Québec statutes and regulations, from Department of Justice Canada XML for federal texts, and from official PDFs published by Québec courts (Superior Court, Court of Québec — practice directives) and the Autorité des marchés financiers (AMF — Regulations 31-103, 45-106 and 51-102 and their non-binding policy statements). The official version is the one published by the Québec Official Publisher, by the Minister for federal texts (s. 31, Legislation Revision and Consolidation Act), or by the competent court or the AMF: that version is the authoritative one. This service is not an official version. It contains information licensed under the Open Government Licence – Canada.",
       "This service provides no legal advice. The consolidation dates shown reflect the state of the corpus loaded here, which may lag the official publication."
     ]
   }

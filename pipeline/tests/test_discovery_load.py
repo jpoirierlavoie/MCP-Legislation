@@ -103,8 +103,16 @@ class TestSeedLawsNeDetruitPas(unittest.TestCase):
         """`fonction`, `forum`, `name_fr` et `name_norm` viennent bien de la config, pour
         TOUTES les lois — le correctif ne borne que les deux colonnes de date."""
         for lid, sql in self.updates.items():
-            for col in ("fonction =", "forum =", "name_fr =", "name_norm ="):
+            for col in ("fonction =", "forum =", "name_fr =", "name_norm =", "source =", "unit =", "jurisdiction ="):
                 self.assertIn(col, sql, f"{lid} : `{col.strip(' =')}` n'est plus synchronisée")
+
+    def test_un_texte_pdf_ne_voit_pas_sa_date_ecrasee(self):
+        pdfs = [i for i, l in self.laws.items() if l.get("source") == "pdf"]
+        self.assertTrue(pdfs, "aucune entrée PDF en configuration")
+        for lid in pdfs:
+            sql = self.updates.get(lid)
+            self.assertIsNotNone(sql, f"{lid} : aucun UPDATE émis")
+            self.assertNotIn("consol_date_", sql, f"{lid} : seed_laws ne doit pas toucher consol_date_")
 
     def test_chaque_loi_de_la_config_recoit_un_update(self):
         self.assertEqual(set(self.updates), set(self.laws),
@@ -117,15 +125,49 @@ class TestLaConfigFederaleNePorteAucuneDate(unittest.TestCase):
     surtout la date de la config primerait silencieusement sur celle du XML, qui est la
     seule à jour. Mieux vaut que ce test rougisse et qu'on en décide."""
 
-    def test_aucune_entree_federale_ne_declare_de_consolidation(self):
+    def test_aucune_entree_federale_ou_pdf_ne_declare_de_consolidation(self):
         fautives = [l["id"] for l in config.load_all_laws()
-                    if l.get("jurisdiction") == "ca" and l.get("consolidation")]
+                    if (l.get("jurisdiction") == "ca" or l.get("source") == "pdf") and l.get("consolidation")]
         self.assertEqual(
             fautives, [],
-            "des entrées fédérales déclarent une `consolidation` en configuration : elle "
-            "primerait sur la date lue sur la page officielle de Justice Canada, qui "
-            "est la source vivante.",
+            "des entrées fédérales ou PDF déclarent une `consolidation` en configuration : elle "
+            "primerait sur la date lue depuis le texte/site officiel.",
         )
+
+
+class TestValidationCorpusPartiel(unittest.TestCase):
+    def test_validate_rejette_divisions_manquantes_par_defaut_mais_accepte_corpus_partiel(self):
+        class _FakeDb:
+            name = "local"
+
+            def run(self, sql: str):
+                if "FROM laws" in sql:
+                    return [{"id": "ccq"}, {"id": "qccs-dist-mtl"}]
+                if "FROM divisions" in sql:
+                    return [{"law_id": "qccs-dist-mtl", "path": "ph1:1"}]
+                return []
+
+        tax = {
+            "subjects": [
+                {"id": "obligations-contrats", "label_en": "Obligations", "description_en": "Contracts"},
+                {"id": "procedure-civile", "label_en": "Civil procedure", "description_en": "Rules"},
+            ],
+            "mappings": [
+                {"subject": "obligations-contrats", "law": "ccq", "division_path": "ga:l_cinquieme"},
+                {"subject": "procedure-civile", "law": "qccs-dist-mtl", "division_path": "ph1:1"},
+            ],
+        }
+        rels = {"relations": []}
+        v_strict = dload.validate(_FakeDb(), tax, rels)
+        self.assertEqual(len(v_strict), 1)
+        self.assertIn("ccq", v_strict[0])
+
+        v_partiel = dload.validate(_FakeDb(), tax, rels, accepter_corpus_partiel=True)
+        self.assertEqual(v_partiel, [])
+
+    def test_cli_refuse_accepter_corpus_partiel_sur_cloud(self):
+        with self.assertRaises(SystemExit):
+            dload.main(["--target", "cloud", "--accepter-corpus-partiel"])
 
 
 if __name__ == "__main__":

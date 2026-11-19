@@ -42,6 +42,11 @@ ORDRE_ATTENDU = [
     "ca-b-3", "ca-c-36", "ca-d-3.4", "ca-c-44", "ca-c-34", "ca-c-42", "ca-t-13", "ca-l-2",
     "ca-p-8.6", "ca-i-21", "ca-c-5", "ca-f-7", "ca-s-26", "ca-c-50", "ca-i-15", "ca-b-4",
     "ca-dors-98-106", "ca-crc-368",
+    # --- VAGUE 1 PDF (M3) : directives QCCS/QCCQ, règlements AMF et IG AMF, ajoutées EN FIN ---
+    "qccs-dist-mtl", "qccs-div-mtl", "qccs-div-qc",
+    "qccq-regles-simplifiees", "qccq-mtl-prat-civile", "qccq-mtl-prat-admin", "qccq-daa-jurisprudence",
+    "v-1.1-r.10", "v-1.1-r.21", "v-1.1-r.24",
+    "amf-ig-31-103", "amf-ig-45-106", "amf-ig-51-102",
 ]
 
 
@@ -125,6 +130,26 @@ class ConfigTest(unittest.TestCase):
                         f"que le chemin XML (attendu '{attendu}'). C'est exactement ainsi que "
                         f"l'identifiant anglais s'est retrouvé dans le chemin français.",
                     )
+            elif law.get("source") == "pdf":
+                self.assertIn(
+                    law.get("fonction"), ("directive", "orientation", "reglement"),
+                    f"{law['id']} : fonction PDF invalide : {law.get('fonction')!r}",
+                )
+                self.assertNotIn("epub", law, f"{law['id']} : un texte PDF n'a pas d'EPUB")
+                self.assertFalse(
+                    law.get("consolidation"),
+                    f"{law['id']} : un texte PDF ne doit pas déclarer `consolidation` en config",
+                )
+                self.assertIn("pdf", law, f"{law['id']} : champ 'pdf' manquant")
+                self.assertIsInstance(law["pdf"], dict)
+                langs = law.get("langs") or list(law["pdf"].keys())
+                self.assertTrue(langs, f"{law['id']} : aucune langue configurée")
+                for lang in langs:
+                    self.assertTrue(law["pdf"].get(lang), f"{law['id']} : PDF {lang} manquant")
+                self.assertTrue(
+                    (law.get("consolidation_source") or {}).get("fr"),
+                    f"{law['id']} : consolidation_source.fr requis",
+                )
             else:
                 for champ in ("epub", "consolidation", "consolidation_source"):
                     self.assertIn(champ, law, f"{law.get('id')} : champ '{champ}' manquant")

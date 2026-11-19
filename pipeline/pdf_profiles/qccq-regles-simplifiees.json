@@ -1,0 +1,89 @@
+{
+  "$schema_version": 1,
+  "law_id": "qccq-regles-simplifiees",
+  "fonction": "directive",
+  "jurisdiction": "qc",
+  "unit": "paragraphe",
+  "langs": ["fr"],
+  "files": {
+    "fr": {
+      "filename": "ChCivile_DirectiveReglesParticulieres.pdf",
+      "sha256": "7697b867fd52623f56db1b1fa7cf0bc964738f570355aa5247fbdabceea446e2",
+      "page_count": 2,
+      "toc_pages": [],
+      "body_start_page": 1,
+      "consolidation_date": {
+        "pages": [1, 2],
+        "regex": "(?:en\\s+date\\s+du|entre\\s+en\\s+vigueur\\s+le)\\s+(\\d{1,2}(?:\\s*er)?\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4})",
+        "lang": "fr"
+      },
+      "title_blocks": [
+        { "page": 1, "y_max": 225.0, "x0_min": 60.0 }
+      ],
+      "closing_blocks": [
+        { "page": 2, "y_min": 560.0, "x0_max": 250.0 }
+      ],
+      "running_footer": {
+        "y_min": 740.0,
+        "regex": "^\\d+$",
+        "x0_min": 500.0
+      },
+      "toc_parser": {
+        "source": "none"
+      },
+      "body_typography": {
+        "dominant_size_pt": 12.0,
+        "y_line_tolerance_pt": 2.5,
+        "heading_wrap_dy_max_pt": 17.0,
+        "heading_x0_min": 103.0,
+        "heading_x0_max": 110.0,
+        "heading_min_size_pt": 11.5,
+        "heading_require_all_bold": true,
+        "heading_exclude_italic": true,
+        "heading_exclude_numbered_provisions": true,
+        "level1_all_caps": true,
+        "level1_kind": "chapitre",
+        "level2_kind": "section"
+      },
+      "provisions": {
+        "x0_min": 103.0,
+        "x0_max": 110.0,
+        "min_size_pt": 11.5,
+        "allow_bold": true,
+        "allow_alpha_dot_subitems": true,
+        "continuation_x0_min": 122.0,
+        "subitem_x0_min": 122.0,
+        "number_mode": "numeric",
+        "repeal_regex": "^(?:Abrog[ée]\\.?|Abrogation\\.|Repealed\\.?|\\[\\s*(?:…|\\.\\.\\.)\\s*\\])$"
+      },
+      "history": {
+        "prefix_regex": "^(?:Modifications?|Abrogation|Ajouts?)\\s*:",
+        "max_size_pt": 10.5,
+        "allow_bold_italic_any_size": false,
+        "x0_min": 65.0,
+        "x0_max": 140.0
+      },
+      "footnotes": {
+        "y0_min": 700.0,
+        "lead_size_max_pt": 7.5,
+        "body_size_max_pt": 10.5,
+        "x0_min": 65.0,
+        "x0_max": 125.0
+      },
+      "unnumbered_prose_divisions": [],
+      "links": {
+        "allowed_schemes": ["https", "http", "mailto"],
+        "ignore_mailto_without_at_domain": true,
+        "sanitize_email_launch": true,
+        "ignore_zero_area_rect": true
+      },
+      "witness": {
+        "total_spans": 143,
+        "real_articles": 8,
+        "int_min": 1,
+        "int_max": 8,
+        "decimals": 0
+      }
+    }
+  }
+}

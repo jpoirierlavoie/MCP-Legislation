@@ -1,0 +1,98 @@
+{
+  "$schema_version": 1,
+  "law_id": "amf-ig-45-106",
+  "fonction": "orientation",
+  "jurisdiction": "qc",
+  "unit": "article",
+  "langs": ["fr"],
+  "files": {
+    "fr": {
+      "filename": "2023juin09-45-106-ig-vconsolidee-fr.pdf",
+      "sha256": "e57707a04d13e7047d9f22e3873c2ee41b71b210705935b9e13d0a83ab1910ef",
+      "page_count": 58,
+      "toc_pages": [],
+      "body_start_page": 1,
+      "annexe_start_page": null,
+      "consolidation_date": {
+        "pages": [1],
+        "y_max": 115.0,
+        "x0_min": 340.0,
+        "regex": "^le\\s+(\\d{1,2}(?:\\s*er)?\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4})$",
+        "lang": "fr"
+      },
+      "title_blocks": [
+        { "page": 1, "y_max": 170.0, "x0_min": 70.0 }
+      ],
+      "running_footer": {
+        "y_ratio_min": 0.90,
+        "regex": "^(?:Instruction générale relative|au Règlement 45-106\\s+Le\\s+.*PAGE\\s+\\d+)$"
+      },
+      "toc_parser": {
+        "source": "outline",
+        "exclude_numbered_articles": true
+      },
+      "body_typography": {
+        "dominant_size_pt": 12.0,
+        "y_line_tolerance_pt": 2.5,
+        "heading_wrap_dy_max_pt": 17.0,
+        "heading_x0_min": 70.0,
+        "heading_x0_max": 78.0,
+        "heading_min_size_pt": 11.5,
+        "heading_require_all_bold": true,
+        "division_regex": "^(?:PARTIE|SECTION|Section|SOUS-SECTION|Sous-section)\\b",
+        "level1_all_caps": true,
+        "level1_kind": "partie",
+        "level2_kind": "section",
+        "level3_kind": "sous-section",
+        "allow_division_intro_prose": true
+      },
+      "provisions": {
+        "x0_min": 70.0,
+        "x0_max": 78.0,
+        "min_size_pt": 11.5,
+        "require_bold_lead": true,
+        "require_dot_in_number": true,
+        "titled_heading_mode": true,
+        "continuation_x0_min": 70.0,
+        "subitem_x0_min": 70.0,
+        "number_mode": "numeric",
+        "repeal_regex": "^\\(?\\s*(?:Abrog[ée]e?\\.?|Abrogation\\.|Repealed\\.?|\\[\\s*(?:…|\\.\\.\\.)\\s*\\])\\s*\\)?\\.?$"
+      },
+      "history": {
+        "prefix_regex": "^(?:A\\.M\\.|L\\.Q\\.|N\\.I\\.|D\\.)\\s+",
+        "max_size_pt": 9.5,
+        "continue_while_max_size_pt": 9.5,
+        "trailing_log_regex": "^(?:Modifications|Décision\\s+\\d{4}-PDG-|Avis\\s+11-|Bulletin\\s+de\\s+l['’]Autorité)",
+        "trailing_log_max_size_pt": 10.5,
+        "allow_bold_italic_any_size": false,
+        "x0_min": 70.0,
+        "x0_max": 78.0
+      },
+      "footnotes": {
+        "y0_min": 650.0,
+        "lead_size_max_pt": 7.5,
+        "body_size_max_pt": 10.5,
+        "x0_min": 70.0,
+        "x0_max": 125.0
+      },
+      "tables": {
+        "enabled": true,
+        "pages": [34, 35, 36]
+      },
+      "unnumbered_prose_divisions": [],
+      "links": {
+        "allowed_schemes": ["https", "http", "mailto"],
+        "ignore_mailto_without_at_domain": true,
+        "ignore_host_without_dot": true,
+        "sanitize_email_launch": true,
+        "ignore_zero_area_rect": true
+      },
+      "witness": {
+        "total_spans": 3476,
+        "real_articles": 54,
+        "repealed_real": 1,
+        "divisions_pre_annexe": 7
+      }
+    }
+  }
+}

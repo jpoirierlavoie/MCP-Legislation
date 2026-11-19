@@ -2215,6 +2215,308 @@
         "Cour supérieure"
       ],
       "enabling": "ca-b-3"
+    },
+    {
+      "id": "qccs-dist-mtl",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Directives de la Cour supérieure — District de Montréal",
+      "name_en": "Directives de la Cour supérieure — District de Montréal",
+      "official_cite": "Directives C.S. (District de Montréal)",
+      "fonction": "directive",
+      "unit": "paragraphe",
+      "forum": [
+        "Cour supérieure"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2026-02-23_Directives_District_Montreal.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://coursuperieureduquebec.ca/fileadmin/cour-superieure/Districts_judiciaires/Montreal/Directives_et_Annexes_Montreal/2026-02-23_Directives_District_Montreal.pdf"
+      }
+    },
+    {
+      "id": "qccs-div-mtl",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Directives de la Cour supérieure — Division de Montréal",
+      "name_en": "Directives de la Cour supérieure — Division de Montréal",
+      "official_cite": "Directives C.S. (Division de Montréal)",
+      "fonction": "directive",
+      "unit": "paragraphe",
+      "forum": [
+        "Cour supérieure"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "Directives_de_la_division_de_Montreal.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://coursuperieureduquebec.ca/division-de-montreal/directives-et-annexes-en-vigueur"
+      }
+    },
+    {
+      "id": "qccs-div-qc",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Directives de la juge en chef associée pour la division de Québec",
+      "name_en": "Directives de la juge en chef associée pour la division de Québec",
+      "official_cite": "Directives C.S. (Division de Québec)",
+      "fonction": "directive",
+      "unit": "paragraphe",
+      "forum": [
+        "Cour supérieure"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2022-01-31_Directives_concernant_le_fonctionnement_de_la_division_de_Quebec.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://coursuperieureduquebec.ca/fileadmin/cour-superieure/Pdf_Word_par_district/districts/quebec-tous-les-districts/2022-01-31_Directives_concernant_le_fonctionnement_de_la_division_de_Quebec.pdf"
+      }
+    },
+    {
+      "id": "qccq-regles-simplifiees",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Directive concernant la gestion de l’instance régie par les règles simplifiées particulières",
+      "name_en": "Directive concernant la gestion de l’instance régie par les règles simplifiées particulières",
+      "official_cite": "Directive C.Q. (Règles simplifiées particulières)",
+      "fonction": "directive",
+      "unit": "paragraphe",
+      "forum": [
+        "Cour du Québec"
+      ],
+      "numbering": "integer",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "ChCivile_DirectiveReglesParticulieres.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/chambre-civile/ChCivile_DirectiveReglesParticulieres.pdf"
+      }
+    },
+    {
+      "id": "qccq-mtl-prat-civile",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Mode de fonctionnement — Division de pratique civile — District de Montréal (Salles 2.06 et 2.02)",
+      "name_en": "Mode de fonctionnement — Division de pratique civile — District de Montréal (Salles 2.06 et 2.02)",
+      "official_cite": "Mode de fonctionnement C.Q. Montréal (Pratique civile)",
+      "fonction": "directive",
+      "unit": "paragraphe",
+      "forum": [
+        "Cour du Québec"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "MtlCivil_ModeFonctDivPratCivile.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/regions/montreal/MtlCivil_ModeFonctDivPratCivile.pdf"
+      }
+    },
+    {
+      "id": "qccq-mtl-prat-admin",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Mode de fonctionnement — Division de pratique administrative — District de Montréal (Salle 13.09)",
+      "name_en": "Mode de fonctionnement — Division de pratique administrative — District de Montréal (Salle 13.09)",
+      "official_cite": "Mode de fonctionnement C.Q. Montréal (Pratique administrative)",
+      "fonction": "directive",
+      "unit": "paragraphe",
+      "forum": [
+        "Cour du Québec"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "MtlCivil_ModeFonctDivPratAdmin.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/regions/montreal/MtlCivil_ModeFonctDivPratAdmin.pdf"
+      }
+    },
+    {
+      "id": "qccq-daa-jurisprudence",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Directive concernant la liste commune de jurisprudence — Division administrative et d’appel",
+      "name_en": "Directive concernant la liste commune de jurisprudence — Division administrative et d’appel",
+      "official_cite": "Directive C.Q. (DAA — Liste commune de jurisprudence)",
+      "fonction": "directive",
+      "unit": "paragraphe",
+      "forum": [
+        "Cour du Québec"
+      ],
+      "numbering": "integer",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "DAA_DirectiveListeCommuneJuris.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/chambre-civile/DAA_DirectiveListeCommuneJuris.pdf"
+      }
+    },
+    {
+      "id": "v-1.1-r.10",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Règlement 31-103 sur les obligations et dispenses d’inscription et les obligations continues des personnes inscrites",
+      "name_en": "Regulation 31-103 respecting Registration Requirements, Exemptions and Ongoing Registrant Obligations",
+      "official_cite": "RLRQ, c. V-1.1, r. 10",
+      "official_cite_en": "CQLR, c. V-1.1, r. 10",
+      "fonction": "reglement",
+      "unit": "article",
+      "enabling": "v-1.1",
+      "forum": [],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2026juil04-31-103-vofficielle-fr.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/31-103/2026-07-04/2026juil04-31-103-vofficielle-fr.pdf"
+      }
+    },
+    {
+      "id": "v-1.1-r.21",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Règlement 45-106 sur les dispenses de prospectus",
+      "name_en": "Regulation 45-106 respecting Prospectus Exemptions",
+      "official_cite": "RLRQ, c. V-1.1, r. 21",
+      "official_cite_en": "CQLR, c. V-1.1, r. 21",
+      "fonction": "reglement",
+      "unit": "article",
+      "enabling": "v-1.1",
+      "forum": [],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2025sept19-45-106-vofficielle-fr.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/45-106/2025-09-19/2025sept19-45-106-vofficielle-fr.pdf"
+      }
+    },
+    {
+      "id": "v-1.1-r.24",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Règlement 51-102 sur les obligations d’information continue",
+      "name_en": "Regulation 51-102 respecting Continuous Disclosure Obligations",
+      "official_cite": "RLRQ, c. V-1.1, r. 24",
+      "official_cite_en": "CQLR, c. V-1.1, r. 24",
+      "fonction": "reglement",
+      "unit": "article",
+      "enabling": "v-1.1",
+      "forum": [],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2026sept22-51-102-vofficielle-fr.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/51-102/2026-09-22/2026sept22-51-102-vofficielle-fr.pdf"
+      }
+    },
+    {
+      "id": "amf-ig-31-103",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Instruction générale relative au Règlement 31-103 sur les obligations et dispenses d’inscription et les obligations continues des personnes inscrites",
+      "name_en": "Policy Statement to Regulation 31-103 respecting Registration Requirements, Exemptions and Ongoing Registrant Obligations",
+      "official_cite": "Instruction générale 31-103",
+      "official_cite_en": "Policy Statement 31-103",
+      "fonction": "orientation",
+      "unit": "article",
+      "forum": [
+        "Autorité des marchés financiers"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2026juil04-31-103-ig-vconsolidee-fr.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/31-103/2026-07-04/2026juil04-31-103-ig-vconsolidee-fr.pdf"
+      }
+    },
+    {
+      "id": "amf-ig-45-106",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Instruction générale relative au Règlement 45-106 sur les dispenses de prospectus",
+      "name_en": "Policy Statement to Regulation 45-106 respecting Prospectus Exemptions",
+      "official_cite": "Instruction générale 45-106",
+      "official_cite_en": "Policy Statement 45-106",
+      "fonction": "orientation",
+      "unit": "article",
+      "forum": [
+        "Autorité des marchés financiers"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2023juin09-45-106-ig-vconsolidee-fr.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/45-106/2023-06-09/2023juin09-45-106-ig-vconsolidee-fr.pdf"
+      }
+    },
+    {
+      "id": "amf-ig-51-102",
+      "source": "pdf",
+      "jurisdiction": "qc",
+      "name_fr": "Instruction générale relative au Règlement 51-102 sur les obligations d’information continue",
+      "name_en": "Policy Statement to Regulation 51-102 respecting Continuous Disclosure Obligations",
+      "official_cite": "Instruction générale 51-102",
+      "official_cite_en": "Policy Statement 51-102",
+      "fonction": "orientation",
+      "unit": "article",
+      "forum": [
+        "Autorité des marchés financiers"
+      ],
+      "numbering": "decimal",
+      "langs": [
+        "fr"
+      ],
+      "pdf": {
+        "fr": "2026sept22-51-102-ig-vadmin-fr.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/51-102/2026-09-22/2026sept22-51-102-ig-vadmin-fr.pdf"
+      }
     }
   ]
 }

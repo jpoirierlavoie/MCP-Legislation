@@ -1,11 +1,11 @@
 # Lois du Québec et du Canada — serveur MCP
 
 Serveur [MCP](https://modelcontextprotocol.io) donnant aux assistants IA un accès **en
-lecture seule** au texte officiel de **97 lois et règlements** : la législation du Québec
-(dont le Code civil du Québec et le Code de procédure civile) et 18 textes fédéraux que le
+lecture seule** au texte officiel de **110 lois, règlements et directives** : la législation du Québec
+(dont le Code civil du Québec et le Code de procédure civile), 18 textes fédéraux que le
 litige civil québécois convoque — faillite, divorce, sociétés par actions, droit d'auteur,
-preuve, Cours fédérales. En **français et en anglais**, avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres →
-articles) et recherche hybride lexicale + sémantique.
+preuve, Cours fédérales — ainsi que les directives de pratique des tribunaux du Québec (QCCS, QCCQ) et des textes AMF en valeurs mobilières. En **français et en anglais** (les textes PDF de la vague 1 sont publiés en français seulement lorsqu'aucune version officielle anglaise n'existe), avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres →
+articles ou paragraphes) et recherche hybride lexicale + sémantique.
 
 **Page publique :** <https://legislation.poirierlavoie.ca/> — outils, aides au repérage,
 corpus et matières, en français et en anglais, avec les décomptes lus en base.
@@ -15,7 +15,7 @@ et `https://legislation.poirierlavoie.ca/mcp/oauth` (OAuth 2.1 PKCE S256 via
 <https://acces.poirierlavoie.ca>) — **accès réservé aux membres en règle du Barreau du Québec, un jeton individuel par titulaire**.
 
 Source des données : les EPUB officiels de [LégisQuébec](https://www.legisquebec.gouv.qc.ca)
-(Éditeur officiel du Québec) et les fichiers XML du ministère de la Justice du Canada. Le texte des articles est restitué **verbatim** — le serveur
+(Éditeur officiel du Québec), les fichiers XML du ministère de la Justice du Canada, et les PDF officiels publiés par les tribunaux du Québec (Cour supérieure, Cour du Québec) et l'Autorité des marchés financiers (AMF — règlements `V-1.1, r. 10`, `r. 21`, `r. 24` et *Instructions générales*). Le texte des articles et dispositions est restitué **verbatim** — le serveur
 n'altère jamais le contenu officiel.
 
 ## Accès
@@ -76,9 +76,11 @@ Trois réponses de garde à connaître :
 | Catégorie | Textes |
 |---|---|
 | Codes | Code civil du Québec, Code de procédure civile |
-| Lois sectorielles | Charte des droits et libertés, protection du consommateur, normes du travail, renseignements personnels (Loi 25) et accès aux documents publics, valeurs mobilières, assureurs, coopératives de services financiers, police et déontologie policière, bâtiment (Code de construction, Code de sécurité), courtage immobilier, cités et villes, fiscalité et éthique municipales, expropriation, contrats des organismes publics et municipaux, fonction publique, procédure pénale… |
+| Lois sectorielles | Charte des droits et libertés, protection du consommateur, normes du travail, renseignements personnels (Loi 25) et accès aux documents publics, valeurs mobilières (dont `V-1.1, r. 10`, `r. 21` et `r. 24` tirés des PDF officiels de l'AMF, `fonction='reglement'`), assureurs, coopératives de services financiers, police et déontologie policière, bâtiment (Code de construction, Code de sécurité), courtage immobilier, cités et villes, fiscalité et éthique municipales, expropriation, contrats des organismes publics et municipaux, fonction publique, procédure pénale… |
 | Règles de procédure | Règlements des cours (appel, supérieure, Québec), du TAQ, du TAL, du TAMF, de la déontologie policière et de la Régie du bâtiment |
 | Tarifs | Tarif judiciaire, tarifs du TAQ, du TAL et du TAMF |
+| Directives judiciaires | Directives de pratique de la Cour supérieure (Montréal — District et Division — et Québec) et de la Cour du Québec (règles simplifiées, pratique civile et administrative à Montréal, liste commune DAA) — source PDF, non législatives, français seulement |
+| Orientations (AMF) | *Instructions générales* 31-103, 45-106 et 51-102 de l'Autorité des marchés financiers — source PDF, indicatives et sans force de loi, français seulement |
 
 Les décomptes exacts (nombre d'articles par langue, dates de consolidation) sont calculés
 en base et affichés sur la [page publique](https://legislation.poirierlavoie.ca/) ainsi que
@@ -108,18 +110,18 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 | `find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats, avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
 | `list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, loi habilitante, plan des grands codes ; filtres `fonction`/`forum`/`subject` | `fonction=tarif` → les 4 tarifs |
 | `list_subjects` | Les 44 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
-| `related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées | `law=cpc` → ses 6 règlements de cour |
+| `related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées (`preseance-sur`, `interprete`…) | `law=cpc` → ses 6 règlements de cour |
 
 ### Extraction
 
 | Outil | Rôle | Exemple |
 |---|---|---|
-| `get_article` | Un article verbatim, avec citation, hiérarchie, historique, date | `law=ccq, article=1457` |
+| `get_article` | Un article ou paragraphe verbatim, avec citation, hiérarchie, historique, statut normatif, liens d'annexe et date | `law=ccq, article=1457` ou `law=amf-ig-45-106, article=2A.1` |
 | `get_articles` | Plage (`from`/`to`) ou liste (`numbers`) d'articles, paginée | `law=cpc, from=489, to=496` |
 | `get_structure` | L'arbre des divisions, sans texte — pour explorer avant d'extraire | `law=ccq, depth=2` |
 | `get_division` | Une division (Livre/Titre/Chapitre…) : intitulé, sous-divisions, articles | `path=ga:l_cinquieme` |
 | `search_text` | Recherche hybride dans le texte des articles (voir ci-dessous) | `« délai réponse défendeur hors du Québec »` |
-| `resolve_reference` | D'une citation libre vers l'article officiel ; reconnaît les chapitres RLRQ et les abréviations C.c.Q./C.p.c. | `« RLRQ, c. T-16, art. 12 »` |
+| `resolve_reference` | D'une citation libre vers l'article ou paragraphe officiel ; reconnaît chapitres RLRQ, C.c.Q./C.p.c., `par.`/`dir.` (C.S./C.Q.) et `IG 45-106` | `« RLRQ, c. T-16, art. 12 »` |
 
 ## La recherche, en détail
 
@@ -158,18 +160,18 @@ L'aide au repérage (`find_relevant`, taxonomie, relations) est **heuristique** 
 elle ne détermine pas le droit applicable. Toujours vérifier en lisant le texte via
 `get_structure` / `get_division` / `get_article`.
 Ce serveur ne fournit pas de conseil juridique ; en cas de doute, consulter la version
-officielle du publieur (LégisQuébec ou Justice Canada) et un professionnel du droit.
+officielle du publieur (LégisQuébec, Justice Canada, tribunaux du Québec ou AMF — les directives de pratique et *Instructions générales* étant des textes non législatifs) et un professionnel du droit.
 
 ## Pour les développeurs
 
 ```
 src/            Worker Cloudflare (TypeScript) : outils MCP, recherche, D1/Vectorize
-pipeline/       Ingestion Python : EPUB LégisQuébec -> D1 (staging -> validation -> bascule)
+pipeline/       Ingestion Python : EPUB LégisQuébec, XML LIMS Justice Canada et PDF (QCCS/QCCQ/AMF) -> D1 (staging -> validation -> bascule)
 laws.config.json, taxonomy.json, relations.json   Données versionnées (corpus, matières, graphe)
 migrations/     Migrations D1 — s'appliquent PAR-DESSUS schema.sql, qui décrit l'état
                 INITIAL et non l'état courant (procédure complète : CLAUDE.md)
 tests/, eval/   contrôles bout-en-bout + harnais d'évaluation (21 cas, recall@10/MRR)
-docs/           Notes d'architecture, rapports de phase, format EPUB ; archive des plans
+docs/           Notes d'architecture, rapports de phase, formats EPUB/LIMS/PDF ; archive des plans
 ```
 
 Démarrage : `npm install`, puis `npx wrangler dev --var MCP_TOKEN:local-a --var
@@ -214,4 +216,4 @@ Trajectoire mesurée du repérage : recall@10 **40 % → 88 % → 98 %** (`docs/
 ## Sécurité, confidentialité et licence
 
 - **Sécurité, vie privée et secret professionnel :** Aucun texte de requête ni argument d'outil n'est journalisé à l'exécution (journaux d'invocation Cloudflare désactivés, zéro écriture dans `search_log`, télémétrie strictement bornée à `compteur_jour` et `evenement_technique` sans contenu dans `DB_IDENTITE`). Consulter [`SECURITY.md`](SECURITY.md) pour signaler de manière privée et coordonnée toute vulnérabilité ou question de confidentialité / secret professionnel à Jason Poirier Lavoie (`jason@poirierlavoie.ca`), sans ouvrir d'issue publique ni joindre de renseignements confidentiels de clients.
-- **Licence :** Le logiciel, les schémas, le pipeline et la documentation originale sont régis par la licence **Creative Commons Attribution - Pas d'Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International (`CC-BY-NC-SA-4.0`)**, assortie d'une **Autorisation complémentaire de pratique professionnelle du droit** pour les membres en règle du Barreau du Québec (Partie A de [`LICENSE`](LICENSE)). Les textes législatifs servis demeurent soumis aux régimes de l'Éditeur officiel du Québec (LégisQuébec) et de la Licence du gouvernement ouvert – Canada (Justice Canada) (Partie B de [`LICENSE`](LICENSE)).
+- **Licence :** Le logiciel, les schémas, le pipeline et la documentation originale sont régis par la licence **Creative Commons Attribution - Pas d'Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International (`CC-BY-NC-SA-4.0`)**, assortie d'une **Autorisation complémentaire de pratique professionnelle du droit** pour les membres en règle du Barreau du Québec (Partie A de [`LICENSE`](LICENSE)). Les textes servis demeurent soumis aux régimes de l'Éditeur officiel du Québec (LégisQuébec), de la Licence du gouvernement ouvert – Canada (Justice Canada), ainsi que des tribunaux du Québec (Cour supérieure, Cour du Québec) et de l'Autorité des marchés financiers (AMF) (Partie B de [`LICENSE`](LICENSE)).

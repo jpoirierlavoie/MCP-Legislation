@@ -35,7 +35,7 @@ const TABLES =
 
 /** Marqueurs d'un masque POSÉ, qu'il soit écrit dans la requête ou dans la ligne qui la nourrit. */
 const MASQUE =
-  /masqueLawId|masqueAutreBout|clauseJuridiction|jurisdiction\s*=\s*'qc'|jurisdiction\s*<>\s*'qc'/;
+  /masqueLawId|masqueAutreBout|clauseCorpus|clauseJuridiction|jurisdiction\s*=\s*'qc'|jurisdiction\s*<>\s*'qc'/;
 
 /** Déclarations de fonction de premier niveau — bornes de portée pour la résolution. */
 const DECL_FN = /(?:^|\n)(?:export\s+)?(?:async\s+)?function\s+(\w+)/g;
@@ -140,20 +140,63 @@ function portee(src, pos) {
  * Sans cette résolution la garde crierait sur du code correct, et une garde qui crie à tort
  * finit désarmée : c'est le pire des deux mondes.
  */
+const JS_KW = new Set([
+  "const",
+  "let",
+  "var",
+  "if",
+  "else",
+  "return",
+  "await",
+  "async",
+  "function",
+  "true",
+  "false",
+  "null",
+  "undefined",
+  "new",
+  "typeof",
+  "in",
+  "of",
+  "for",
+  "while",
+]);
+
+function declRhses(lignes, id) {
+  const re = new RegExp(`^\\s*(?:(?:const|let|var)\\s+)?${id}(?:\\s*:[^=]+)?\\s*=(?![=>])(.+)$`);
+  const out = [];
+  for (const l of lignes) {
+    const m = l.match(re);
+    if (m) out.push(m[1]);
+  }
+  return out;
+}
+
 function masqueIndirect(src, pos, texte) {
   const lignes = portee(src, pos).split("\n");
+  const nourritDirect = (id) => declRhses(lignes, id).some((rhs) => MASQUE.test(rhs));
   const nourrit = (id) => {
-    const re = new RegExp(`\\b${id}\\b`);
-    return lignes.some((l) => re.test(l) && MASQUE.test(l));
+    if (nourritDirect(id)) return true;
+    const rePush = new RegExp(`\\b${id}\\.push\\((.+)\\)`);
+    for (const l of lignes) {
+      const m = l.match(rePush);
+      if (!m) continue;
+      const arg = m[1].trim();
+      if (MASQUE.test(arg)) return true;
+      for (const m2 of arg.matchAll(/\b([A-Za-z_]\w*)\b/g)) {
+        if (!JS_KW.has(m2[1]) && nourritDirect(m2[1])) return true;
+      }
+    }
+    return false;
   };
   for (const m of texte.matchAll(/\$\{(\w+)\}/g)) {
     const id = m[1];
     if (nourrit(id)) return true;
-    // 2e niveau : suivre les identifiants de la déclaration de `id` (p. ex. `clause` <- `where`).
-    const decl = lignes.find((l) => new RegExp(`\\b(?:const|let)\\s+${id}\\b`).test(l));
-    if (!decl) continue;
-    for (const m2 of decl.matchAll(/\b([A-Za-z_]\w*)\b/g)) {
-      if (m2[1] !== id && nourrit(m2[1])) return true;
+    // 2e niveau : suivre les identifiants du membre droit de la déclaration de `id` (p. ex. `clause` <- `where`).
+    for (const rhs of declRhses(lignes, id)) {
+      for (const m2 of rhs.matchAll(/\b([A-Za-z_]\w*)\b/g)) {
+        if (m2[1] !== id && !JS_KW.has(m2[1]) && nourrit(m2[1])) return true;
+      }
     }
   }
   return false;

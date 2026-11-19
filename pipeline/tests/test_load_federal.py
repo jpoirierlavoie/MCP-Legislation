@@ -37,9 +37,9 @@ class TestColonnes(unittest.TestCase):
         QUÉBÉCOIS : `list_laws(jurisdiction='ca')` rendrait zéro résultat.
         """
         for col in ("official_cite", "official_cite_en", "chapter", "jurisdiction",
-                    "in_force", "last_amended", "unit"):
+                    "in_force", "last_amended", "unit", "source"):
             self.assertIn(col, load._LAW_COLS, f"laws.{col} n'arriverait pas en base")
-        for col in ("marginal_note", "footnotes"):
+        for col in ("marginal_note", "footnotes", "links"):
             self.assertIn(col, load._ART_COLS, f"articles.{col} n'arriverait pas en base")
 
     def test_le_pont_champ_colonne_existe(self):

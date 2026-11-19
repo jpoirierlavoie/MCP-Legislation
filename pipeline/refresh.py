@@ -44,6 +44,7 @@ from .discovery import load as d_load
 from .discovery import migrate as d_migrate
 from .discovery import relations as d_relations
 from .discovery import verify as d_verify
+from .model import DISPOSITION_SORT_BASE, sort_key
 from .parser import opf_metadata, parse_epub
 
 _SAFE_GIT_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
@@ -278,9 +279,10 @@ def acquire_all(
         for cfg_law in selected_cfg:
             law_id = cfg_law["id"]
             is_lims = cfg_law.get("source") == "lims"
+            is_pdf = cfg_law.get("source") == "pdf"
             by_lang: dict[str, ParsedCombo] = {}
 
-            for lang in ("fr", "en"):
+            for lang in ingest._configured_langs(cfg_law):
                 law = ingest._law_from_config(cfg_law)
                 if is_lims:
                     date_ovr: str | None = None
@@ -299,6 +301,16 @@ def acquire_all(
                         law_id, lang, divisions, articles,
                         jurisdiction="ca",
                         numeros_refuses=bilan.numeros_refuses,
+                        allow_witness_drift=True,
+                    )
+                elif is_pdf:
+                    divisions, articles, bilan = ingest._acquiert_pdf(cfg_law, law, lang)
+                    source_sha256 = bilan.source_sha256
+                    load.prepare(law, divisions, articles, id_base=ingest._id_base(law_id, lang))
+                    rep = ingest.validate_pdf_combo(
+                        law_id, lang, divisions, articles, bilan,
+                        jurisdiction=law.jurisdiction,
+                        fonction=cfg_law.get("fonction"),
                         allow_witness_drift=True,
                     )
                 else:
@@ -343,27 +355,28 @@ def acquire_all(
                 combos.append(pc)
                 by_lang[lang] = pc
 
-            # Symétrie FR/EN des numéros réels
-            real_fr = {
-                n
-                for a in by_lang["fr"].articles
-                for n in validate.numeros_effectifs(a)
-                if not validate.is_disposition(n)
-            }
-            real_en = {
-                n
-                for a in by_lang["en"].articles
-                for n in validate.numeros_effectifs(a)
-                if not validate.is_disposition(n)
-            }
-            if real_fr != real_en:
-                msg = (
-                    f"{law_id} : asymétrie FR/EN des articles réels "
-                    f"(FR\\EN={sorted(real_fr - real_en)[:5]}, EN\\FR={sorted(real_en - real_fr)[:5]})"
-                )
-                if law_id in ("ccq", "cpc"):
-                    raise ErreurValidation(msg)
-                warnings.append(msg)
+            # Symétrie FR/EN des numéros réels (textes bilingues uniquement)
+            if "fr" in by_lang and "en" in by_lang:
+                real_fr = {
+                    n
+                    for a in by_lang["fr"].articles
+                    for n in validate.numeros_effectifs(a)
+                    if not validate.is_disposition(n)
+                }
+                real_en = {
+                    n
+                    for a in by_lang["en"].articles
+                    for n in validate.numeros_effectifs(a)
+                    if not validate.is_disposition(n)
+                }
+                if real_fr != real_en:
+                    msg = (
+                        f"{law_id} : asymétrie FR/EN des articles réels "
+                        f"(FR\\EN={sorted(real_fr - real_en)[:5]}, EN\\FR={sorted(real_en - real_fr)[:5]})"
+                    )
+                    if law_id in ("ccq", "cpc"):
+                        raise ErreurValidation(msg)
+                    warnings.append(msg)
     finally:
         config.SAMPLES_DIR = prev_samples
         config.LIMS_REPO = prev_lims_repo
@@ -402,6 +415,7 @@ def _compute_article_deltas(
                 or int(old.get("sort_key") or 0) != int(a.sort_key or 0)
                 or old.get("marginal_note") != a.marginal_note
                 or old.get("footnotes") != a.footnotes
+                or old.get("links") != a.links
             ))
         )
         if changed:
@@ -475,7 +489,7 @@ def diff_combo_d1(
     while True:
         chunk = db.run(
             f"SELECT number, sort_key, division_path, text, html, history, repealed, "
-            f"marginal_note, footnotes FROM articles "
+            f"marginal_note, footnotes, links FROM articles "
             f"WHERE law_id = {d1_api.q(law_id)} AND lang = {d1_api.q(lang)} "
             f"ORDER BY id LIMIT 1000 OFFSET {offset}"
         )
@@ -618,7 +632,7 @@ class McpReadClient:
 def _flatten_structure(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for n in nodes:
-        out.append({"path": n["path"], "heading": n.get("heading")})
+        out.append({"path": n["path"], "heading": n.get("heading"), "kind": n.get("kind")})
         if n.get("children"):
             out.extend(_flatten_structure(n["children"]))
     return out
@@ -678,12 +692,16 @@ def diff_all_mcp(
             continue
 
         # Extraction paginée des articles & structure de la production pour diff détaillé
+        res_s = client.call_tool("get_structure", {"law": c.law_id, "lang": c.lang, "depth": 9})
+        tree = (res_s.get("structuredContent") or {}).get("tree") or [] if not res_s.get("isError") else []
+        stored_divs = _flatten_structure(tree)
+
         stored_arts: list[dict[str, Any]] = []
         offset = 0
         while True:
             res_a = client.call_tool("get_articles", {
                 "law": c.law_id, "lang": c.lang,
-                "from": "préliminaire", "to": "9005",
+                "from": "préliminaire", "to": "annexe",
                 "limit": 200, "offset": offset,
             })
             if res_a.get("isError"):
@@ -698,9 +716,46 @@ def diff_all_mcp(
             if not rows or offset >= total:
                 break
 
-        res_s = client.call_tool("get_structure", {"law": c.law_id, "lang": c.lang, "depth": 9})
-        tree = (res_s.get("structuredContent") or {}).get("tree") or [] if not res_s.get("isError") else []
-        stored_divs = _flatten_structure(tree)
+        prefix_count = len(stored_arts)
+
+        # Les pseudo-articles émis par parser.py / parser_lims.py / parser_pdf.py ont
+        # sort_key = DISPOSITION_SORT_BASE + disp_idx * 1_000_000 (> DISPOSITION_SORT_BASE).
+        # Si `get_articles(..., to="annexe")` n'a pas atteint `stored_count`, compléter via
+        # `get_division` sur les divisions d'annexe/disposition puis, au besoin, les autres.
+        if len(stored_arts) < stored_count and stored_divs:
+            seen_nums = {r["number"] for r in stored_arts}
+            ordered_divs = sorted(
+                stored_divs,
+                key=lambda d: (
+                    0 if d.get("kind") == "annexe"
+                    else 1 if d.get("kind") == "disposition"
+                    else 2
+                ),
+            )
+            for div in ordered_divs:
+                if len(stored_arts) >= stored_count:
+                    break
+                d_path = div.get("path")
+                if not d_path:
+                    continue
+                d_offset = 0
+                while True:
+                    res_d = client.call_tool("get_division", {
+                        "law": c.law_id, "lang": c.lang, "path": d_path,
+                        "include_text": True, "limit": 200, "offset": d_offset,
+                    })
+                    if res_d.get("isError"):
+                        break
+                    dsc = res_d.get("structuredContent") or {}
+                    d_rows = dsc.get("articles") or []
+                    for r in d_rows:
+                        if r["number"] not in seen_nums:
+                            seen_nums.add(r["number"])
+                            stored_arts.append(r)
+                    d_total = int((dsc.get("pagination") or {}).get("total") or 0)
+                    d_offset += len(d_rows)
+                    if not d_rows or d_offset >= d_total:
+                        break
 
         old_by_num = {r["number"]: r for r in stored_arts}
         added_a, removed_a, repealed_a, mod_a = _compute_article_deltas(
@@ -711,18 +766,42 @@ def diff_all_mcp(
         )
         old_div_paths = [r["path"] for r in stored_divs]
         new_div_paths = [d.path for d in c.divisions]
-        old_art_nums = [r["number"] for r in stored_arts]
+        old_prefix_nums = [r["number"] for r in stored_arts[:prefix_count]]
+        old_tail_nums = sorted(r["number"] for r in stored_arts[prefix_count:])
         # `get_articles` en mode plage ouverte (« cle ») trie par `(sort_key, id)`, alors que
         # `c.articles` suit l'ordre d'émission du document (cf. `b-1.1-r.2` où 1.022 < 1.03
-        # dans le document mais sort_key("1.022") > sort_key("1.03")).
-        new_art_nums = [
-            a.number
-            for _, a in sorted(enumerate(c.articles), key=lambda p: (p[1].sort_key or 0, p[0]))
+        # dans le document mais sort_key("1.022") > sort_key("1.03")). Les pseudo-articles
+        # > DISPOSITION_SORT_BASE complétés par `get_division` suivent l'ordre de visite des
+        # divisions (annexes d'abord) et non `(sort_key, id)` : on compare donc le préfixe
+        # `<= DISPOSITION_SORT_BASE` dans l'ordre `(sort_key, id)` et la queue `> DISPOSITION_SORT_BASE`
+        # en multiensemble trié (tout ajout, suppression, édition ou changement de division reste
+        # détecté par `added_a`/`removed_a`/`mod_a` et `old_div_paths != new_div_paths`).
+        sorted_new = [
+            a
+            for _, a in sorted(
+                enumerate(c.articles),
+                key=lambda p: (
+                    p[1].sort_key if p[1].sort_key is not None else sort_key(p[1].number),
+                    p[0],
+                ),
+            )
         ]
+        new_prefix_nums = [
+            a.number
+            for a in sorted_new
+            if (a.sort_key if a.sort_key is not None else sort_key(a.number)) <= DISPOSITION_SORT_BASE
+        ]
+        new_tail_nums = sorted(
+            a.number
+            for a in sorted_new
+            if (a.sort_key if a.sort_key is not None else sort_key(a.number)) > DISPOSITION_SORT_BASE
+        )
 
         if (
             added_a or removed_a or mod_a or added_d or removed_d or mod_d
-            or old_div_paths != new_div_paths or old_art_nums != new_art_nums
+            or old_div_paths != new_div_paths
+            or old_prefix_nums != new_prefix_nums
+            or old_tail_nums != new_tail_nums
         ):
             status = "content_changed"
         elif meta_differs:
@@ -796,6 +875,13 @@ def _sync_discovery_and_relations(
     qc_targeted = {
         lid for lid in known_targets
         if (cfg_by_id[lid].get("jurisdiction") or "qc") == "qc"
+        and (
+            (cfg_by_id[lid].get("source") or "epub") == "epub"
+            or (
+                cfg_by_id[lid].get("source") == "pdf"
+                and cfg_by_id[lid].get("fonction") == "reglement"
+            )
+        )
     }
     if qc_targeted and relations_dirty:
         missing = d_relations.epubs_manquants(
@@ -1025,7 +1111,18 @@ def apply_refresh(
     combined_full_corpus = full_corpus or bool((pending or {}).get("full_corpus"))
     combined_fts_dirty = bool(content_combos) or bool((pending or {}).get("fts_dirty"))
     combined_relations_dirty = (
-        any(c.lang == "fr" and (c.cfg_law.get("jurisdiction") or "qc") == "qc" for c in content_combos)
+        any(
+            c.lang == "fr"
+            and (c.cfg_law.get("jurisdiction") or "qc") == "qc"
+            and (
+                (c.cfg_law.get("source") or "epub") == "epub"
+                or (
+                    c.cfg_law.get("source") == "pdf"
+                    and c.cfg_law.get("fonction") == "reglement"
+                )
+            )
+            for c in content_combos
+        )
         or bool((pending or {}).get("relations_dirty"))
     )
 
@@ -1142,7 +1239,7 @@ def update_laws_config_dates(combos: list[ParsedCombo]) -> bool:
     by_key = {(c.law_id, c.lang): c.law for c in combos}
     changed = False
     for entry in data["laws"]:
-        if entry.get("source") == "lims":
+        if entry.get("source") in ("lims", "pdf"):
             continue
         consol = entry.get("consolidation")
         if not isinstance(consol, dict):

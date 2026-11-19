@@ -4,15 +4,17 @@ Les valeurs témoins du C.c.Q. FR viennent de la phase 0 (docs/phase0-structure-
 """
 from __future__ import annotations
 
+import collections
+import re
 from dataclasses import dataclass, field
 
-import re
-
 from .model import Article, Division
+from .norm import normalize
 
-# Un article « réel » a un numéro numérique (1457, 2926.1). Les pseudo-articles de disposition
-# (préliminaire, finales, annexe-1, formulaire-vi, formules…) ne le sont pas.
-_NUMERIC = re.compile(r"\d+(?:\.\d+)*$")
+# Un article « réel » a un numéro numérique (1457, 2926.1) ou alphanumérique CSA/AMF
+# (2A, 2A.1, 4B.2, 1.1.1A). Les pseudo-articles de disposition (préliminaire, finales,
+# annexe-1, formulaire-vi, formules…) ne le sont pas.
+_NUMERIC = re.compile(r"\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*$")
 
 
 def is_disposition(number: str) -> bool:
@@ -84,9 +86,24 @@ class Report:
             self.lines.append(f"  {'✓' if ok else '✗'} {label}: {got}" + ("" if ok else f"  (attendu {expected})"))
 
 
+def _toc_norm(s: str | None, *, strip_parentheticals: bool = False) -> str:
+    raw = s or ""
+    if strip_parentheticals:
+        raw = re.sub(r"\s*\(art\.?\s*[^)]+\)", "", raw, flags=re.I)
+    n = normalize(raw) or ""
+    n = n.replace("\u2019", "'").replace("\u2018", "'")
+    n = re.sub(r"\s+", " ", n)
+    return n.rstrip(".").strip()
+
+
 def validate(law_id: str, lang: str, divisions: list[Division], articles: list[Article],
              jurisdiction: str = "qc", numeros_refuses: list[str] | None = None,
-             allow_witness_drift: bool = False) -> Report:
+             allow_witness_drift: bool = False,
+             fonction: str | None = None,
+             span_accounting: dict | None = None,
+             toc_titles: list[str] | None = None,
+             toc_exempt_headings: list[str] | set[str] | None = None,
+             toc_strip_parentheticals: bool = False) -> Report:
     """Invariants du corpus. `jurisdiction` est PASSÉE, jamais devinée du préfixe d'id.
 
     Renifler « ca- » au début d'un identifiant serait exactement la chirurgie de chaîne
@@ -192,9 +209,46 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
         r.check("lacunes (fédéral : informatif)",
                 f"{len(manquants)} — non en vigueur (refusés) : {par_refus or 'aucun'} ; "
                 f"retirés de la codification : {par_retrait or 'aucun'}")
+    elif fonction == "orientation":
+        r.check("lacunes (orientation : informatif)",
+                f"{len(gaps)} lacune(s) : {gaps[:12]}" if gaps else "aucune")
     else:
         r.check("lacunes dans la plage entière", gaps if gaps else "aucune", "aucune")
     r.check("doublons d'entiers", dups if dups else "aucun", "aucun")
+
+    if span_accounting is not None:
+        total_sp = int(span_accounting.get("total", span_accounting.get("total_spans", 0)))
+        acc_sp = int(span_accounting.get("accounted", span_accounting.get("accounted_spans", 0)))
+        unclass = int(span_accounting.get("unclassified", 0))
+        r.check("porte 1 : spans non classés", unclass, 0)
+        r.check("porte 1 : bilan complet (comptabilisés == total > 0)",
+                (acc_sp, total_sp > 0), (total_sp, True))
+
+    if toc_titles is not None:
+        exempt = {_toc_norm(h, strip_parentheticals=toc_strip_parentheticals) for h in (toc_exempt_headings or ())}
+        toc_c = collections.Counter(
+            _toc_norm(t, strip_parentheticals=toc_strip_parentheticals)
+            for t in toc_titles
+            if _toc_norm(t, strip_parentheticals=toc_strip_parentheticals)
+        )
+        div_c = collections.Counter(
+            _toc_norm(d.heading, strip_parentheticals=toc_strip_parentheticals)
+            for d in divisions
+            if _toc_norm(d.heading, strip_parentheticals=toc_strip_parentheticals)
+            and _toc_norm(d.heading, strip_parentheticals=toc_strip_parentheticals) not in exempt
+        )
+        missing_in_divs = sorted((toc_c - div_c).elements())
+        extra_in_divs = sorted((div_c - toc_c).elements())
+        r.check(
+            "porte 2 : parité TDM <-> divisions (manquantes)",
+            missing_in_divs if missing_in_divs else "aucune",
+            "aucune",
+        )
+        r.check(
+            "porte 2 : parité TDM <-> divisions (excédentaires)",
+            extra_in_divs if extra_in_divs else "aucune",
+            "aucune",
+        )
 
     # ── UNICITÉ RÉELLE DES CLÉS ────────────────────────────────────────────────────────
     # LE CONTRÔLE CI-DESSUS EST STRUCTURELLEMENT AVEUGLE À UNE FAMILLE ENTIÈRE, et ça a

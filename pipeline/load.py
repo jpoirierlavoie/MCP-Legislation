@@ -58,7 +58,9 @@ _ART_COLS = ["id", "law_id", "lang", "number", "sort_key", "division_id",
              "division_path", "text", "html", "history", "repealed",
              # 0004 : intitulé officiel d'article (hors du texte, art. 14 L.i.) et notes
              # en bas de page (rendues À LA FIN de l'article, étiquetées).
-             "marginal_note", "footnotes"]
+             "marginal_note", "footnotes",
+             # 0007 : annotations de liens extraites des PDF (JSON array [{label, url}]).
+             "links"]
 # name_norm est recalculé ici ; fonction/forum/scope_fr/parent_law_id restent préservés par l'UPSERT.
 #
 # ⚠️ UNE COLONNE ABSENTE DE CES LISTES N'ARRIVE JAMAIS EN BASE, ET EN SILENCE. Les colonnes
@@ -69,7 +71,9 @@ _ART_COLS = ["id", "law_id", "lang", "number", "sort_key", "division_id",
 _LAW_COLS = ["id", "name_fr", "name_en", "official_cite", "consol_date_fr",
              "consol_date_en", "name_norm",
              # 0004
-             "official_cite_en", "chapter", "jurisdiction", "in_force", "last_amended", "unit"]
+             "official_cite_en", "chapter", "jurisdiction", "in_force", "last_amended", "unit",
+             # 0007
+             "source"]
 _NUM_COLS = ["law_id", "lang", "number", "article_id"]
 
 # PONT nom de COLONNE -> nom de CHAMP, pour les cas où les deux diffèrent.
@@ -241,10 +245,10 @@ def to_sql(law: Law, divisions: list[Division], articles: list[Article], lang: s
         "CREATE TABLE _stg_articles  AS SELECT * FROM articles  WHERE 0;",
         "CREATE TABLE _stg_article_numbers AS SELECT * FROM article_numbers WHERE 0;",
     ]
-    stmts += _rows_sql("_stg_divisions", _DIV_COLS, div_rows)
-    # text/html peuvent à eux seuls dépasser 100 Ko (ex. le bloc préliminaire d'un tarif) :
+    stmts += _rows_sql("_stg_divisions", _DIV_COLS, div_rows, big_cols=("history",))
+    # text/html/links/history peuvent dépasser 100 Ko :
     # ces colonnes sont ré-appendables par morceaux si le tuple est trop gros.
-    stmts += _rows_sql("_stg_articles", _ART_COLS, art_rows, big_cols=("text", "html"))
+    stmts += _rows_sql("_stg_articles", _ART_COLS, art_rows, big_cols=("text", "html", "links", "history"))
     if num_rows:
         stmts += _rows_sql("_stg_article_numbers", _NUM_COLS, num_rows)
     # --- bascule (production intouchée tant que le staging n'est pas complet) ---

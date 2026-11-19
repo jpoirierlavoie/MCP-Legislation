@@ -18,14 +18,18 @@
 import catalogue from "../catalogue.json";
 import config from "../laws.config.json";
 import {
+  type CorpusGateEnv,
   citeOf,
   type LawSummary,
   listLaws,
   listSubjects,
   masqueLawId,
+  pdfOuvert,
   type SubjectSummary,
 } from "./lib";
 import {
+  FONCTION_WEIGHTS,
+  MAX_PER_FONCTION_SOUPLE,
   MAX_PER_SUBJECT,
   MAX_SUFFIX,
   RRF_K,
@@ -52,7 +56,12 @@ const LEGISQUEBEC = "https://www.legisquebec.gouv.qc.ca";
  * PAS à partir de la citation, une URL devinée pouvant pointer vers un autre texte.
  */
 const SOURCES = new Map(
-  config.laws.map((l) => [l.id, l.consolidation_source as { fr: string; en: string }]),
+  config.laws.map((l) => [
+    l.id,
+    (l.consolidation_source ?? (l as { official_source?: unknown }).official_source) as
+      | { fr?: string; en?: string }
+      | undefined,
+  ]),
 );
 
 /** Échappement HTML — obligatoire sur TOUT champ venu de D1 (intitulés à apostrophes). */
@@ -83,6 +92,8 @@ const FONCTION: Record<string, [string, string]> = {
   reglement: ["Règlement", "Regulation"],
   "regles-procedure": ["Règles de procédure", "Rules of procedure"],
   tarif: ["Tarif", "Tariff"],
+  directive: ["Directive de pratique", "Practice directive"],
+  orientation: ["Orientation (IG)", "Policy statement"],
 };
 
 const nb = (n: number) => n.toLocaleString("fr-CA").replace(/ /g, " ");
@@ -140,10 +151,7 @@ function h2(id: SectionId): string {
  * surface 5 de la phase 7 ; seuls les DÉCOMPTES sont corrigés ici, parce qu'un décompte se
  * calcule et ne se recopie pas.
  */
-export async function renderSite(
-  db: D1Database,
-  env: { FEDERAL_CORPUS?: string } = {},
-): Promise<string> {
+export async function renderSite(db: D1Database, env: CorpusGateEnv = {}): Promise<string> {
   // lang="fr" DÉLIBÉRÉMENT : listLaws en "en" déclenche translatePaths par loi (N+1) pour
   // un bénéfice nul — la ligne `laws` porte déjà name_fr ET name_en, consol_date_fr ET _en.
   const [laws, subjects, map, counts] = await Promise.all([
@@ -181,7 +189,7 @@ export async function renderSite(
   const RENDU: Record<SectionId, () => string> = {
     outils: () => outils(),
     reperage: () => reperage(),
-    corpus: () => corpus(laws),
+    corpus: () => corpus(laws, pdfOuvert(env)),
     matieres: () => matieres(subjects, parMatiere, parId),
     acces: () => acces(),
   };
@@ -199,7 +207,7 @@ export async function renderSite(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lois du Québec et du Canada — serveur MCP</title>
-<meta name="description" content="Serveur MCP donnant un accès en lecture seule au texte officiel de la législation du Québec et du Canada, en français et en anglais.">
+<meta name="description" content="Serveur MCP donnant un accès en lecture seule au texte officiel de la législation du Québec et du Canada, ainsi qu'aux directives de pratique judiciaire et orientations AMF.">
 <style>${CSS}</style>
 <script>${BOOT}</script>
 </head>
@@ -287,10 +295,10 @@ function entete(): string {
   </div>
   ${biP(
     [
-      "Serveur MCP donnant aux assistants IA un accès en lecture seule au texte officiel de la législation du Québec et des lois fédérales que le litige civil québécois convoque, en français et en anglais. Le texte des articles provient des EPUB officiels de LégisQuébec et des fichiers XML du ministère de la Justice du Canada ; il est restitué verbatim : le serveur n'altère jamais le contenu officiel.",
+      "Serveur MCP donnant aux assistants IA un accès en lecture seule au texte officiel de la législation du Québec et des lois fédérales que le litige civil québécois convoque, ainsi qu'aux directives de pratique judiciaire et aux textes AMF. Les dispositions proviennent des EPUB officiels de LégisQuébec, des fichiers XML du ministère de la Justice du Canada et des PDF officiels des tribunaux du Québec (Cour supérieure, Cour du Québec) et de l'Autorité des marchés financiers (AMF — règlements et instructions générales, certains PDF en français seulement) ; le texte est restitué verbatim, sans altération.",
     ],
     [
-      "An MCP server giving AI assistants read-only access to the official text of Québec legislation and of the federal statutes that Québec civil litigation relies on, in French and English. Article text comes from the official LégisQuébec EPUBs and from the Department of Justice Canada XML files; it is returned verbatim: the server never alters official content.",
+      "An MCP server giving AI assistants read-only access to the official text of Québec legislation and the federal statutes that Québec civil litigation relies on, as well as court practice directives and AMF texts. Provision text comes from official LégisQuébec EPUBs, Department of Justice Canada XML files, and official PDFs published by Québec courts (Superior Court, Court of Québec) and the Autorité des marchés financiers (AMF — regulations and policy statements, some PDFs published in French only); text is returned verbatim without alteration.",
     ],
   )}
 </header>`;
@@ -305,7 +313,7 @@ function chiffres(nLois: number, nMat: number, nArt: number, consol: string): st
 </section>`;
 }
 
-function corpus(laws: LawSummary[]): string {
+function corpus(laws: LawSummary[], pdfActive: boolean): string {
   const lignes = laws
     .map((l) => {
       const [ffr, fen] = FONCTION[l.fonction ?? ""] ?? [l.fonction ?? "", l.fonction ?? ""];
@@ -329,10 +337,10 @@ function corpus(laws: LawSummary[]): string {
   ${h2("corpus")}
   ${biP(
     [
-      "Tous les textes sont chargés dans les deux langues officielles, avec leur hiérarchie complète et leur date de consolidation. Les chiffres de cette page sont lus en base au moment du rendu : ils ne peuvent pas dériver de ce qui est réellement servi. Chaque titre renvoie au texte officiel, sur LégisQuébec ou sur le site Web de la législation (Justice) du Canada.",
+      "Les textes législatifs sont chargés dans les deux langues officielles avec leur hiérarchie complète et leur date de consolidation ; les PDF des directives de cour et de l'AMF ne sont chargés qu'en français lorsqu'aucune version anglaise officielle n'est publiée. Les chiffres de cette page sont lus en base au moment du rendu : ils ne peuvent pas dériver de ce qui est réellement servi. Chaque titre renvoie au texte officiel sur LégisQuébec, sur le site Web de la législation (Justice) du Canada, ou sur le site du tribunal ou de l'AMF compétent.",
     ],
     [
-      "Every text is loaded in both official languages, with its full hierarchy and consolidation date. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text, on LégisQuébec or on the Justice Laws Website of Canada.",
+      "Legislative texts are loaded in both official languages with their full hierarchy and consolidation date; court directive and AMF PDFs are loaded in French only where no official English PDF is published. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text on LégisQuébec, the Justice Laws Website of Canada, or the competent court or AMF page.",
     ],
   )}
   <div class="ctl">
@@ -343,6 +351,12 @@ function corpus(laws: LawSummary[]): string {
       <option value="reglement">Règlement · Regulation</option>
       <option value="regles-procedure">Règles de procédure · Rules</option>
       <option value="tarif">Tarif · Tariff</option>
+      ${
+        pdfActive
+          ? `<option value="directive">Directive de pratique · Practice directive</option>
+      <option value="orientation">Orientation · Policy statement</option>`
+          : ""
+      }
     </select>
     <span id="cpt" class="m"></span>
   </div>
@@ -464,6 +478,8 @@ function reperage(): string {
       `profondeur ${VECTOR_TOP_K}`,
       `depth ${VECTOR_TOP_K}`,
     )}</li>
+    <li>${bi("pondération normative", "normative weighting")} <b>directive ×${FONCTION_WEIGHTS.directive} · orientation ×${FONCTION_WEIGHTS.orientation}</b></li>
+    <li>${bi("plafond fonction souple", "soft-function cap")} <b>${MAX_PER_FONCTION_SOUPLE}</b></li>
   </ul>`;
 
   const sec = (s: { titre_fr: string; titre_en: string; corps_fr: string[]; corps_en: string[] }) =>
@@ -528,10 +544,10 @@ function pied(consol: string): string {
     // celui-ci est désormais une sous-section des aides au repérage, alors que la clause
     // porte sur tout le service. Le pied, lui, est sous chaque écran de la page.
     [
-      `Données : EPUB officiels de LégisQuébec (Éditeur officiel du Québec) et XML du ministère de la Justice du Canada, contenant de l'information publiée sous la Licence du gouvernement ouvert – Canada ; consolidation la plus récente chargée : ${consol}. La version officielle fait foi : celle de l'Éditeur officiel du Québec, et pour le fédéral celle publiée par le ministre (art. 31 de la Loi sur la révision et la codification des textes législatifs). Ce site n'est pas une version officielle. Aucun conseil juridique.`,
+      `Données : EPUB officiels de LégisQuébec (Éditeur officiel du Québec), XML du ministère de la Justice du Canada (Licence du gouvernement ouvert – Canada), ainsi que PDF officiels des tribunaux du Québec (Cour supérieure, Cour du Québec — directives de pratique) et de l'Autorité des marchés financiers (AMF — règlements et instructions générales sans force de loi) ; consolidation la plus récente chargée : ${consol}. La version officielle fait foi : celle de l'Éditeur officiel du Québec, celle publiée par le ministre pour le fédéral (art. 31 de la Loi sur la révision et la codification des textes législatifs), ou celle du tribunal ou de l'AMF compétent. Ce site n'est pas une version officielle. Aucun conseil juridique.`,
     ],
     [
-      `Data: official LégisQuébec EPUBs (Québec Official Publisher) and Department of Justice Canada XML, containing information licensed under the Open Government Licence – Canada; most recent consolidation loaded: ${consol}. The official version prevails: that of the Québec Official Publisher, and for federal texts the one published by the Minister (s. 31, Legislation Revision and Consolidation Act). This is not an official version. No legal advice.`,
+      `Data: official LégisQuébec EPUBs (Québec Official Publisher), Department of Justice Canada XML (Open Government Licence – Canada), and official PDFs from Québec courts (Superior Court, Court of Québec — practice directives) and the Autorité des marchés financiers (AMF — regulations and non-binding policy statements); most recent consolidation loaded: ${consol}. The official version prevails: that of the Québec Official Publisher, that published by the Minister for federal texts (s. 31, Legislation Revision and Consolidation Act), or that of the competent court or the AMF. This is not an official version. No legal advice.`,
     ],
   )}
   <p><a href="${LEGISQUEBEC}" rel="noopener">legisquebec.gouv.qc.ca</a> · <a href="${DEPOT}" rel="noopener">GitHub</a></p>

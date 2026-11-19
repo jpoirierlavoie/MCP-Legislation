@@ -22,7 +22,7 @@ import re
 # Frontière de segment : un `-` SUIVI d'un préfixe de famille connu. Un préfixe inconnu
 # n'ouvre PAS un segment, ce qui protège les slugs (`annexe-a`,
 # `disposition-preliminaire`) et les valeurs à trait d'union (`gc:l_dix-septieme`).
-SEG_SPLIT = re.compile(r"-(?=(?:g[a-z]|fh\d+|fs|fp):)")
+SEG_SPLIT = re.compile(r"-(?=(?:g[a-z]|fh\d+|fs|fp|ph\d+|ps):)")
 
 # Préfixes de la famille LIMS (fédérale).
 _FEDERAL = re.compile(r"^(?:fh\d+|fs|fp):")

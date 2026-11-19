@@ -47,10 +47,13 @@
  * (`annexe-a`, `disposition-preliminaire`) et les valeurs à trait d'union
  * (`gc:l_dix-septieme`). Élargir cette énumération rouvre cette classe de défaut.
  */
-export const SEG_SPLIT = /-(?=(?:g[a-z]|fh\d+|fs|fp):)/;
+export const SEG_SPLIT = /-(?=(?:g[a-z]|fh\d+|fs|fp|ph\d+|ps):)/;
 
 /** Préfixes de la famille LIMS (fédérale). */
 const FEDERAL = /^(?:fh\d+|fs|fp):/;
+
+/** Préfixes positionnels du corpus PDF (`ph<n>:`, `ps:`, `pp:`). */
+const PDF_POSITIONAL = /^(?:ph\d+|ps|pp):/;
 
 /** Segments d'un chemin, dans l'ordre (racine d'abord). */
 export function segmentsOf(path: string): string[] {
@@ -77,6 +80,14 @@ export function truncatePath(path: string, d: number): string {
  */
 export function isFederalPath(path: string): boolean {
   return FEDERAL.test(path);
+}
+
+/**
+ * Vrai pour un chemin positionnel de la famille PDF (`ph<n>:`, `ps:`, `pp:`).
+ * Comme les chemins LIMS, ils sont positionnels et invariants d'une langue à l'autre.
+ */
+export function isPdfPath(path: string): boolean {
+  return PDF_POSITIONAL.test(path);
 }
 
 /**

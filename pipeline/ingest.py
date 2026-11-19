@@ -42,6 +42,13 @@ def _sample_path(law_id: str, lang: str) -> Path:
 _LANGS = ("fr", "en")
 
 
+def _configured_langs(cfg_law: dict) -> tuple[str, ...]:
+    if cfg_law.get("source") == "pdf":
+        langs = cfg_law.get("langs") or list((cfg_law.get("pdf") or {"fr": ""}).keys())
+        return tuple(l for l in _LANGS if l in langs)
+    return _LANGS
+
+
 def _id_base(law_id: str, lang: str) -> int:
     law_ids = [law["id"] for law in config.load_all_laws()]
     combo = law_ids.index(law_id) * len(_LANGS) + _LANGS.index(lang)
@@ -69,6 +76,11 @@ def _law_from_config(cfg_law: dict) -> Law:
         # `rlrq_cite` le temps de la migration (cf. `pipeline/load.py::_CHAMP`).
         rlrq_cite=cfg_law["official_cite"],
         consol_date_fr=consol.get("fr"), consol_date_en=consol.get("en"),
+        official_cite_en=cfg_law.get("official_cite_en"),
+        chapter=cfg_law.get("chapter"),
+        jurisdiction=cfg_law.get("jurisdiction", "qc"),
+        unit=cfg_law.get("unit", "article"),
+        source=cfg_law.get("source", "epub"),
     )
 
 
@@ -266,6 +278,7 @@ def _acquiert_lims(
     setattr(law, "rlrq_cite" if lang == "fr" else "official_cite_en", cite)
     law.chapter = chapitre
     law.jurisdiction = "ca"
+    law.source = "lims"
     law.unit = cfg_law.get("unit", "article")
     law.in_force = parser_lims.derive_in_force(racine)
     law.last_amended = racine.get("{http://justice.gc.ca/lims}lastAmendedDate")
@@ -330,6 +343,67 @@ def _acquiert_lims(
     return divisions, articles, bilan
 
 
+def _acquiert_pdf(cfg_law: dict, law: Law, lang: str, *, out_dir: Path | None = None):
+    """Acquisition + parsing déterministe d'un PDF officiel (import paresseux de parser_pdf)."""
+    from pipeline import parser_pdf
+
+    pdf_files = cfg_law.get("pdf") or {}
+    if lang not in pdf_files:
+        raise FileNotFoundError(f"{law.id}/{lang} : aucun fichier PDF configuré pour '{lang}'.")
+    pdf_path = config.SAMPLES_DIR / pdf_files[lang]
+    if not pdf_path.exists():
+        raise FileNotFoundError(
+            f"{law.id}/{lang} : PDF absent de {pdf_path} (aucun téléchargement sur domaine bloqué)."
+        )
+    profile_path = config.REPO_ROOT / "pipeline" / "pdf_profiles" / f"{law.id}.json"
+    if not profile_path.exists():
+        raise FileNotFoundError(f"{law.id} : profil PDF absent ({profile_path}).")
+
+    law.source = "pdf"
+    law.jurisdiction = cfg_law.get("jurisdiction", "qc")
+    default_unit = "paragraphe" if cfg_law.get("fonction") == "directive" else "article"
+    law.unit = cfg_law.get("unit", default_unit)
+
+    bilan = parser_pdf.PdfBilan()
+    print(f"Parsing PDF {pdf_path.name} ({law.id}/{lang}) …")
+    divisions, articles = parser_pdf.parse_pdf(
+        pdf_path, law, lang, profile_path=profile_path, bilan=bilan
+    )
+    preview_path = parser_pdf.write_preview_md(
+        out_dir or OUT_DIR, law, lang, divisions, articles, bilan
+    )
+    print(f"  bilan des spans : {bilan.as_dict()}")
+    print(f"  aperçu écrit    : {preview_path}")
+    return divisions, articles, bilan
+
+
+def validate_pdf_combo(
+    law_id: str,
+    lang: str,
+    divisions: list[Division],
+    articles: list[Article],
+    bilan,
+    *,
+    jurisdiction: str | None = None,
+    fonction: str | None = None,
+    allow_witness_drift: bool = False,
+):
+    """Validation partagée entre `ingest.py` et `refresh.py` pour les PDF."""
+    return validate.validate(
+        law_id,
+        lang,
+        divisions,
+        articles,
+        jurisdiction=jurisdiction,
+        fonction=fonction,
+        span_accounting=bilan.span_accounting,
+        toc_titles=None if getattr(bilan, "skip_toc_parity", False) else bilan.toc_titles,
+        toc_exempt_headings=bilan.toc_exempt_headings,
+        toc_strip_parentheticals=getattr(bilan, "toc_strip_parentheticals", False),
+        allow_witness_drift=allow_witness_drift,
+    )
+
+
 def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote: bool,
         show: list[str], strict: bool, refresh_dates: bool = False,
         allow_not_in_force: bool = False) -> int:
@@ -343,6 +417,23 @@ def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote:
         load.prepare(law, divisions, articles, id_base=_id_base(law_id, lang))
         rep = validate.validate(law_id, lang, divisions, articles,
                                 jurisdiction="ca", numeros_refuses=_bilan.numeros_refuses)
+        print("\n".join(rep.lines))
+        print(f"\nRésultat des invariants : {'OK ✅' if rep.ok else 'ÉCHEC ❌'}")
+        return _ecrit_et_applique(law_id, lang, law, divisions, articles, rep,
+                                  show, strict, apply_local, apply_remote)
+
+    if cfg_law.get("source") == "pdf":
+        if lang not in _configured_langs(cfg_law):
+            print(f"{law_id}/{lang} : texte PDF unilingue FR uniquement — langue '{lang}' ignorée.")
+            return 0
+        divisions, articles, bilan = _acquiert_pdf(cfg_law, law, lang)
+        load.prepare(law, divisions, articles, id_base=_id_base(law_id, lang))
+        rep = validate_pdf_combo(
+            law_id, lang, divisions, articles, bilan,
+            jurisdiction=law.jurisdiction,
+            fonction=cfg_law.get("fonction"),
+            allow_witness_drift=False,
+        )
         print("\n".join(rep.lines))
         print(f"\nRésultat des invariants : {'OK ✅' if rep.ok else 'ÉCHEC ❌'}")
         return _ecrit_et_applique(law_id, lang, law, divisions, articles, rep,
@@ -421,7 +512,11 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
 
     if a.all:
-        combos = [(law["id"], lang) for law in config.load_all_laws() for lang in _LANGS]
+        combos = [
+            (law["id"], lang)
+            for law in config.load_all_laws()
+            for lang in _configured_langs(law)
+        ]
     else:
         combos = [(a.law, a.lang)]
 

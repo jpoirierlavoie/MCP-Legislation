@@ -1,6 +1,6 @@
 {
-  "_comment": "CE QUE LE SERVEUR SERT. Depuis le 2026-09-14, l interrupteur FEDERAL_CORPUS est OUVERT : les 97 textes de laws.config.json sont servis, quebecois et federaux. Ce fichier a ete cree quand les deux ensembles divergeaient (79 servis, 97 ingeres) ; il reste la source du decompte du README (tests/catalogue.test.mjs) et il redeviendrait utile si l interrupteur etait referme — le rollback R8 est un flip de variable, pas un revert.",
-  "flag": "FEDERAL_CORPUS",
+  "_comment": "CE QUE LE SERVEUR SERT sous PDF_CORPUS. 110 textes de laws.config.json (79 quebecois EPUB, 18 federaux LIMS, 13 QC source='pdf' : directives QCCS/QCCQ, reglements AMF et instructions generales). Ce fichier reste la source du decompte du README (tests/catalogue.test.mjs) ; le rollback R8 reste un flip de variable (FEDERAL_CORPUS / PDF_CORPUS).",
+  "flag": "PDF_CORPUS",
   "ids": [
     "ccq",
     "cpc",
@@ -98,6 +98,19 @@
     "ca-i-15",
     "ca-b-4",
     "ca-dors-98-106",
-    "ca-crc-368"
+    "ca-crc-368",
+    "qccs-dist-mtl",
+    "qccs-div-mtl",
+    "qccs-div-qc",
+    "qccq-regles-simplifiees",
+    "qccq-mtl-prat-civile",
+    "qccq-mtl-prat-admin",
+    "qccq-daa-jurisprudence",
+    "v-1.1-r.10",
+    "v-1.1-r.21",
+    "v-1.1-r.24",
+    "amf-ig-31-103",
+    "amf-ig-45-106",
+    "amf-ig-51-102"
   ]
 }

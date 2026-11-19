@@ -9,6 +9,3 @@
 #   3. Retirer toute exemption dès qu'un correctif amont est publié (un identifiant inutilisé fait
 #      échouer `osv-scanner` et `npm run audit`).
 
-[[IgnoredVulns]]
-id = "GHSA-fc5q-39xc-vjpf"
-reason = "2026-11-18 : ReDoS dans picomatch <= 4.0.7 (CVE-2026-112366), sans version corrigée publiée sur npm (first_patched_version = null) ; dépendance transitive de dev uniquement (vitest/vite/tinyglobby), absente du paquet Worker en production (dependencies = {}) et n'évaluant que des motifs locaux de confiance. À retirer dès publication d'une version corrigée de picomatch."

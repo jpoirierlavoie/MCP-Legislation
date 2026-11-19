@@ -50,15 +50,22 @@ def verify(db, *, allow_witness_drift: bool = False) -> bool:
     # porte des divisions anglaises. Une loi qui la remplit peut encore échouer chemin par
     # chemin — cela se voit à l'éval, par les miroirs anglais de `tests/evals.mjs`.
     sans_en = db.run(
-        "SELECT DISTINCT sm.law_id FROM subject_map sm "
+        "SELECT DISTINCT sm.law_id, l.source, "
+        "EXISTS (SELECT 1 FROM articles a WHERE a.law_id = sm.law_id AND a.lang = 'en') AS has_en "
+        "FROM subject_map sm "
+        "JOIN laws l ON l.id = sm.law_id "
         "WHERE sm.division_path != '' AND NOT EXISTS "
         "(SELECT 1 FROM divisions d WHERE d.law_id = sm.law_id AND d.lang = 'en')"
     )
-    for r in sans_en:
+    blocking_sans_en = [r for r in sans_en if r["source"] != "pdf" or r["has_en"]]
+    pdf_fr_only = [r for r in sans_en if r["source"] == "pdf" and not r["has_en"]]
+    for r in pdf_fr_only:
+        print("   · loi PDF unilingue FR (aucune division EN) :", r["law_id"])
+    for r in blocking_sans_en:
         ok = False
         print("   ✗ AUCUNE division anglaise, chemin mappé inadressable en EN :", r["law_id"])
-    if not sans_en:
-        print("   ✓ toute loi à chemin mappé porte aussi des divisions anglaises")
+    if not blocking_sans_en:
+        print("   ✓ toute loi bilingue à chemin mappé porte aussi des divisions anglaises")
 
     # 3. Non-destruction : comptes dérivés de EXPECTED (R10)
     print("\n  Non-destruction (articles) :")

@@ -892,6 +892,58 @@
     {
       "subject": "pratiques-commerciales-restrictives",
       "law": "ca-c-34"
+    },
+    {
+      "subject": "procedure-civile",
+      "law": "qccs-dist-mtl"
+    },
+    {
+      "subject": "procedure-civile",
+      "law": "qccs-div-mtl"
+    },
+    {
+      "subject": "procedure-civile",
+      "law": "qccs-div-qc"
+    },
+    {
+      "subject": "procedure-civile",
+      "law": "qccq-regles-simplifiees"
+    },
+    {
+      "subject": "procedure-civile",
+      "law": "qccq-mtl-prat-civile"
+    },
+    {
+      "subject": "procedure-civile",
+      "law": "qccq-mtl-prat-admin"
+    },
+    {
+      "subject": "procedure-civile",
+      "law": "qccq-daa-jurisprudence"
+    },
+    {
+      "subject": "valeurs-mobilieres",
+      "law": "v-1.1-r.10"
+    },
+    {
+      "subject": "valeurs-mobilieres",
+      "law": "v-1.1-r.21"
+    },
+    {
+      "subject": "valeurs-mobilieres",
+      "law": "v-1.1-r.24"
+    },
+    {
+      "subject": "valeurs-mobilieres",
+      "law": "amf-ig-31-103"
+    },
+    {
+      "subject": "valeurs-mobilieres",
+      "law": "amf-ig-45-106"
+    },
+    {
+      "subject": "valeurs-mobilieres",
+      "law": "amf-ig-51-102"
     }
   ]
 }

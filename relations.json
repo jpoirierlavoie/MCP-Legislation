@@ -47,6 +47,78 @@
       "to": "c-19",
       "rel_type": "connexe",
       "note": "Régimes municipaux généraux parallèles : le Code municipal régit les municipalités locales et les MRC, la Loi sur les cités et villes régit les cités et villes."
+    },
+    {
+      "from": "qccs-dist-mtl",
+      "to": "qccs-div-mtl",
+      "rel_type": "preseance-sur",
+      "note": "Les directives du district de Montréal complètent celles de la division de Montréal, mais ont préséance sur celles-ci (par. 1)."
+    },
+    {
+      "from": "qccs-div-mtl",
+      "to": "cpc",
+      "rel_type": "met-en-oeuvre",
+      "note": "Directives adoptées en vertu de l'article 63 C.p.c. pour les instances civiles, commerciales et familiales des districts de la division de Montréal (par. 1–2)."
+    },
+    {
+      "from": "qccs-dist-mtl",
+      "to": "c-25.01-r.0.2.2",
+      "rel_type": "complete",
+      "note": "Directives administratives complétant le Règlement de la Cour supérieure du Québec en matière civile et familiale pour le district de Montréal."
+    },
+    {
+      "from": "qccs-div-qc",
+      "to": "cpc",
+      "rel_type": "met-en-oeuvre",
+      "note": "Directives de la juge en chef associée pour la division de Québec prises en application du Code de procédure civile."
+    },
+    {
+      "from": "qccs-div-qc",
+      "to": "c-25.01-r.0.2.3",
+      "rel_type": "complete",
+      "note": "Directives administratives complétant le Règlement de la Cour supérieure du Québec en matière civile pour le district de Québec."
+    },
+    {
+      "from": "qccq-regles-simplifiees",
+      "to": "cpc",
+      "rel_type": "met-en-oeuvre",
+      "note": "Directive régissant la gestion de l'instance et les formulaires applicables sous les règles simplifiées particulières (art. 63, 66, 535.4 à 535.7 et 173 C.p.c.)."
+    },
+    {
+      "from": "qccq-regles-simplifiees",
+      "to": "c-25.01-r.9",
+      "rel_type": "complete",
+      "note": "Directive complétant le Règlement de la Cour du Québec pour le cheminement des dossiers régis par les règles simplifiées particulières (art. 3)."
+    },
+    {
+      "from": "qccq-daa-jurisprudence",
+      "to": "c-25.01-r.9",
+      "rel_type": "met-en-oeuvre",
+      "note": "Directive adoptée en vertu de l'article 39 du Règlement de la Cour du Québec (anciennement RLRQ, c. C-25.01, r. 4) et de l'article 63 C.p.c. pour la liste commune de jurisprudence de la DAA."
+    },
+    {
+      "from": "qccq-daa-jurisprudence",
+      "to": "cpc",
+      "rel_type": "met-en-oeuvre",
+      "note": "Directive prise en vertu de l'article 63 C.p.c. concernant la liste commune de jurisprudence devant la Division administrative et d'appel."
+    },
+    {
+      "from": "amf-ig-31-103",
+      "to": "v-1.1-r.10",
+      "rel_type": "interprete",
+      "note": "L'Instruction générale 31-103 expose l'interprétation et l'application par les ACVM et l'AMF du Règlement 31-103 (RLRQ, c. V-1.1, r. 10)."
+    },
+    {
+      "from": "amf-ig-45-106",
+      "to": "v-1.1-r.21",
+      "rel_type": "interprete",
+      "note": "L'Instruction générale 45-106 expose l'interprétation et l'application par les ACVM et l'AMF du Règlement 45-106 (RLRQ, c. V-1.1, r. 21)."
+    },
+    {
+      "from": "amf-ig-51-102",
+      "to": "v-1.1-r.24",
+      "rel_type": "interprete",
+      "note": "L'Instruction générale 51-102 expose l'interprétation et l'application par les ACVM et l'AMF du Règlement 51-102 (RLRQ, c. V-1.1, r. 24)."
     }
   ]
 }

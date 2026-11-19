@@ -1,6 +1,7 @@
 // Gestionnaires des outils MCP « Lois du Québec et du Canada ». Tous en lecture seule.
 import {
   type ArticleJoined,
+  type ArticleLink,
   type ArticleRow,
   articlesByNumbers,
   articlesByRange,
@@ -19,21 +20,27 @@ import {
   type Lang,
   type LawRow,
   type LawSummary,
+  lawLangs,
+  lawMetas,
   lawNames,
   lawOutlines,
   listLaws,
   listSubjects,
   loadRelevanceData,
+  type NormativeRelation,
   nearestArticles,
+  normativeRelations,
   paginate,
   parseCitation,
+  parseLinks,
   relatedLaws,
   type StructureNode,
   searchText,
   sortKeyOf,
   translateDivisionPath,
+  unitLabel,
 } from "./lib";
-import { rank, tokenize, WEIGHTS } from "./relevance";
+import { FONCTIONS_SOUPLES, MAX_PER_FONCTION_SOUPLE, rank, tokenize, WEIGHTS } from "./relevance";
 
 /**
  * Garde-fou imposé par le plan (§4.4) — repris TEL QUEL, à ne pas reformuler.
@@ -47,6 +54,7 @@ const GARDE_FOU =
 // Libellés de type de division, par langue (l'anglais dit « Division » pour la « Section »).
 const KIND_LABEL: Record<Lang, Record<string, string>> = {
   fr: {
+    partie: "Partie",
     livre: "Livre",
     titre: "Titre",
     chapitre: "Chapitre",
@@ -59,6 +67,7 @@ const KIND_LABEL: Record<Lang, Record<string, string>> = {
     annexe: "Annexe",
   },
   en: {
+    partie: "Part",
     livre: "Book",
     titre: "Title",
     chapitre: "Chapter",
@@ -145,14 +154,81 @@ function divisionLabel(
   return heading ? `${parts} — ${heading}` : parts;
 }
 
-function renderArticle(a: ArticleJoined, loi: LawRow, consol: string | null, lang: Lang): string {
+function frOnlyError(lawId: string, lawRow?: LawRow | null): ToolResult {
+  const cite = lawRow ? citeOf(lawRow) : "";
+  return err(
+    `Law '${lawId}'${cite ? ` (${cite})` : ""} is published in French only (langs: ['fr']). Re-run with lang='fr'.`,
+  );
+}
+
+function normativeNote(law: Pick<LawRow, "fonction">, lang: Lang): string | null {
+  if (law.fonction === "directive") {
+    return lang === "en"
+      ? "Normative status: court practice directive (non-legislative, non-binding, PDF source)."
+      : "Statut normatif : directive de pratique judiciaire (texte non législatif, source PDF).";
+  }
+  if (law.fonction === "orientation") {
+    return lang === "en"
+      ? "Normative status: administrative policy statement (non-legislative, non-binding, no force of law, PDF source)."
+      : "Statut normatif : document d'orientation administrative (texte non législatif, valeur indicative, sans force de loi, source PDF).";
+  }
+  return null;
+}
+
+function formatNormativeRelations(rels: NormativeRelation[], lang: Lang): string {
+  if (!rels.length) return "";
+  return rels
+    .map((r) => {
+      const target = `${r.other_id}${r.other_name ? ` (${r.other_name})` : ""}`;
+      const note = r.note ? ` — ${r.note}${lang === "en" ? " [fr]" : ""}` : "";
+      if (r.rel_type === "preseance-sur") {
+        if (lang === "en") {
+          return r.direction === "out"
+            ? `Precedence (preseance-sur): ${target}${note}`
+            : `Precedence (preseance-sur, linked text: ${target})${note}`;
+        }
+        return r.direction === "out"
+          ? `Préséance (preseance-sur) : ${target}${note}`
+          : `Préséance (preseance-sur, texte lié : ${target})${note}`;
+      }
+      if (lang === "en") {
+        return r.direction === "out"
+          ? `Interprets: ${target}${note}`
+          : `Interpreted by: ${target}${note}`;
+      }
+      return r.direction === "out"
+        ? `Interprète : ${target}${note}`
+        : `Interprété par : ${target}${note}`;
+    })
+    .join("\n");
+}
+
+function formatLinksFooter(links: ArticleLink[], lang: Lang): string {
+  if (!links.length) return "";
+  const titre = lang === "en" ? "Links:" : "Liens :";
+  return `\n\n${titre}\n${links.map((l) => `  • ${l.label} — ${l.url}`).join("\n")}`;
+}
+
+function renderArticle(
+  a: ArticleJoined,
+  loi: LawRow,
+  consol: string | null,
+  lang: Lang,
+  rels: NormativeRelation[] = [],
+  links: ArticleLink[] = [],
+): string {
   const cite = citationOf(loi, a.number, lang);
   const loc = a.d_kind
     ? `\n${divisionLabel(a.d_kind, a.d_number, a.d_heading, lang)} [${a.division_path}]`
     : "";
   const head = `${cite}${consol ? ` (à jour au ${consol})` : ""}${a.repealed ? " — ABROGÉ" : ""}${loc}`;
+  const note = normativeNote(loi, lang);
+  const relsText = formatNormativeRelations(rels, lang);
+  const normLines = [note, relsText].filter(Boolean).join("\n");
+  const normBlock = normLines ? `\n${normLines}` : "";
   const hist = a.history ? `\n\nHistorique : ${a.history}` : "";
-  return `${head}\n\n${a.text}${hist}`;
+  const linksFooter = formatLinksFooter(links, lang);
+  return `${head}${normBlock}\n\n${a.text}${hist}${linksFooter}`;
 }
 
 /** Un gestionnaire d'outil vu du registre : arguments déjà validés, résultat d'outil. */
@@ -509,8 +585,17 @@ export function construireOutils(
       const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
       return err(`Loi '${law}' inconnue. Lois disponibles : ${all || "aucune"}.`);
     }
-    const row = await getArticle(db, law, lang as Lang, article);
+    const [row, normRels] = await Promise.all([
+      getArticle(db, law, lang as Lang, article),
+      normativeRelations(db, [law], lang as Lang, env),
+    ]);
     if (!row) {
+      if (lang === "en") {
+        const langs = await lawLangs(db, law, env);
+        if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+          return frOnlyError(law, lawRow);
+        }
+      }
       const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
       return err(
         `Article ${article} introuvable dans ${law} (${lang}). ` +
@@ -518,7 +603,9 @@ export function construireOutils(
       );
     }
     const consol = consolOf(lawRow, lang as Lang);
-    return ok(renderArticle(row, lawRow, consol, lang as Lang), {
+    const rels = normRels.get(law) ?? [];
+    const links = parseLinks(row.links);
+    return ok(renderArticle(row, lawRow, consol, lang as Lang, rels, links), {
       law,
       number: row.number,
       lang,
@@ -531,6 +618,10 @@ export function construireOutils(
       history: row.history,
       repealed: !!row.repealed,
       text: row.text,
+      source: lawRow.source ?? "epub",
+      fonction: lawRow.fonction ?? null,
+      links,
+      ...(rels.length ? { relations: rels } : {}),
     });
   };
   outils.get_article = H_GET_ARTICLE as Gestionnaire;
@@ -555,7 +646,8 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
-    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const lawRow = await getLaw(db, law, env);
+    if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const useRange = from != null && to != null;
     if (!useRange && !numbers?.length) {
       return err("Fournir soit (from ET to), soit numbers[].");
@@ -590,13 +682,36 @@ export function construireOutils(
       rows = await articlesByNumbers(db, law, lang as Lang, numbers!);
       total = rows.length;
     }
-    if (rows.length === 0) return err("Aucun article dans cette plage/liste.");
-    const body = rows
-      .map((a) => `— art. ${a.number}${a.repealed ? " (abrogé)" : ""} —\n${a.text}`)
-      .join("\n\n");
+    if (rows.length === 0) {
+      if (lang === "en") {
+        const langs = await lawLangs(db, law, env);
+        if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+          return frOnlyError(law, lawRow);
+        }
+      }
+      return err("Aucun article dans cette plage/liste.");
+    }
+    const normRels = await normativeRelations(db, [law], lang as Lang, env);
+    const rels = normRels.get(law) ?? [];
+    const ul = unitLabel(lawRow.unit, lang);
+    const note = normativeNote(lawRow, lang);
+    const relsText = formatNormativeRelations(rels, lang);
+    const normLines = [note, relsText].filter(Boolean).join("\n");
+    const normBlock = normLines ? `${normLines}\n\n` : "";
+    const body =
+      normBlock +
+      rows
+        .map(
+          (a) =>
+            `— ${ul} ${a.number}${a.repealed ? (lang === "en" ? " (repealed)" : " (abrogé)") : ""} —\n${a.text}${formatLinksFooter(parseLinks(a.links), lang)}`,
+        )
+        .join("\n\n");
     return ok(body, {
       law,
       lang,
+      source: lawRow.source ?? "epub",
+      fonction: lawRow.fonction ?? null,
+      ...(rels.length ? { relations: rels } : {}),
       count: rows.length,
       total,
       pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
@@ -614,6 +729,7 @@ export function construireOutils(
         history: a.history,
         division_path: a.division_path,
         repealed: !!a.repealed,
+        links: parseLinks(a.links),
       })),
     });
   };
@@ -633,7 +749,8 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
-    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const lawRow = await getLaw(db, law, env);
+    if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const d = depth ?? 2;
     let tree = await getStructure(db, law, lang as Lang, root_path, d);
     if (tree.length === 0 && root_path) {
@@ -642,13 +759,21 @@ export function construireOutils(
       const t = await translateDivisionPath(db, law, root_path, lang as Lang);
       if (t) tree = await getStructure(db, law, lang as Lang, t.path, d);
     }
-    if (tree.length === 0) return err(`Aucune division${root_path ? ` sous '${root_path}'` : ""}.`);
+    if (tree.length === 0) {
+      if (lang === "en") {
+        const langs = await lawLangs(db, law, env);
+        if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+          return frOnlyError(law, lawRow);
+        }
+      }
+      return err(`Aucune division${root_path ? ` sous '${root_path}'` : ""}.`);
+    }
     const render = (nodes: StructureNode[], level: number): string =>
       nodes
         .map(
           (n) =>
             `${"  ".repeat(level)}${divisionLabel(n.kind, n.number, n.heading, lang as Lang)}` +
-            `${n.repealed ? " (abrogé)" : ""}  [${n.path}]` +
+            `${n.repealed ? (lang === "en" ? " (repealed)" : " (abrogé)") : ""}  [${n.path}]` +
             (n.children.length ? `\n${render(n.children, level + 1)}` : ""),
         )
         .join("\n");
@@ -677,7 +802,8 @@ export function construireOutils(
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const include_text = includeTextArg ?? true;
-    if (!(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const lawRow = await getLaw(db, law, env);
+    if (!lawRow) return err(`Loi '${law}' inconnue.`);
     if (path == null && division_id == null) return err("Fournir path ou division_id.");
     let div = await getDivision(db, law, lang as Lang, { path, id: division_id });
     if (!div && path) {
@@ -685,7 +811,15 @@ export function construireOutils(
       const t = await translateDivisionPath(db, law, path, lang as Lang);
       if (t) div = await getDivision(db, law, lang as Lang, { path: t.path });
     }
-    if (!div) return err(`Division introuvable (${path ?? division_id}).`);
+    if (!div) {
+      if (lang === "en") {
+        const langs = await lawLangs(db, law, env);
+        if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+          return frOnlyError(law, lawRow);
+        }
+      }
+      return err(`Division introuvable (${path ?? division_id}).`);
+    }
     // repli d'intitulé : si la division n'en a pas dans la langue demandée, montrer
     // celui de l'autre langue, marqué (plan v2, 1.5).
     let headingShown = div.heading;
@@ -693,17 +827,19 @@ export function construireOutils(
       const other = await headingInOtherLang(db, law, div.path, lang as Lang);
       if (other) headingShown = `${other} [${lang === "fr" ? "en" : "fr"}]`;
     }
-    const kids = await childDivisions(db, div.id);
     const page = paginate(limit, offset);
-    const { rows, total } = await articlesInDivision(
-      db,
-      law,
-      lang as Lang,
-      div.path,
-      page,
-      include_text,
-    );
-    const header = `${divisionLabel(div.kind, div.number, headingShown, lang as Lang)}${div.repealed ? " (abrogé)" : ""} [${div.path}]`;
+    const [kids, { rows, total }, normRels] = await Promise.all([
+      childDivisions(db, div.id),
+      articlesInDivision(db, law, lang as Lang, div.path, page, include_text),
+      normativeRelations(db, [law], lang as Lang, env),
+    ]);
+    const rels = normRels.get(law) ?? [];
+    const ul = unitLabel(lawRow.unit, lang);
+    const header = `${divisionLabel(div.kind, div.number, headingShown, lang as Lang)}${div.repealed ? (lang === "en" ? " (repealed)" : " (abrogé)") : ""} [${div.path}]`;
+    const note = normativeNote(lawRow, lang);
+    const relsText = formatNormativeRelations(rels, lang);
+    const normLines = [note, relsText].filter(Boolean).join("\n");
+    const normBlock = normLines ? `\n${normLines}` : "";
     const subs = kids.length
       ? `\n\nSous-divisions :\n` +
         kids
@@ -713,12 +849,20 @@ export function construireOutils(
     const arts = rows.length
       ? `\n\nArticles (${page.offset + 1}–${page.offset + rows.length} / ${total}) :\n` +
         rows
-          .map((a) => (include_text ? `\n— art. ${a.number} —\n${a.text}` : `art. ${a.number}`))
+          .map((a) => {
+            const repTag = a.repealed ? (lang === "en" ? " (repealed)" : " (abrogé)") : "";
+            return include_text
+              ? `\n— ${ul} ${a.number}${repTag} —\n${a.text}${formatLinksFooter(parseLinks(a.links), lang)}`
+              : `${ul} ${a.number}${repTag}`;
+          })
           .join(include_text ? "\n" : ", ")
       : "\n\n(aucun article)";
-    return ok(`${header}${subs}${arts}`, {
+    return ok(`${header}${normBlock}${subs}${arts}`, {
       law,
       lang,
+      source: lawRow.source ?? "epub",
+      fonction: lawRow.fonction ?? null,
+      ...(rels.length ? { relations: rels } : {}),
       division: {
         division_id: div.id,
         path: div.path,
@@ -740,6 +884,7 @@ export function construireOutils(
         number: a.number,
         division_path: a.division_path,
         repealed: !!a.repealed,
+        links: parseLinks(a.links),
         ...(include_text ? { text: a.text, history: a.history } : {}),
       })),
       pagination: { limit: page.limit, offset: page.offset, total },
@@ -763,7 +908,8 @@ export function construireOutils(
   }) => {
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
-    if (law && !(await getLaw(db, law, env))) return err(`Loi '${law}' inconnue.`);
+    const lawRow = law ? await getLaw(db, law, env) : null;
+    if (law && !lawRow) return err(`Loi '${law}' inconnue.`);
     // Recherche corpus : viser 12-15 résultats (1.3) ; restreinte : 10 comme avant.
     const page = paginate(limit, offset, law ? 10 : 14, 50);
     let res;
@@ -790,14 +936,56 @@ export function construireOutils(
         env,
       });
       if (!law) {
+        const distinctIds = [...new Set(res.hits.map((h) => h.law_id))];
+        const metaMap = await lawMetas(db, distinctIds, env);
         const perLaw = new Map<string, number>();
+        const perFonction = new Map<string, number>();
         const picked: typeof res.hits = [];
+        const attente: typeof res.hits = [];
+        const maxHardSouple = Math.min(3, Math.max(MAX_PER_FONCTION_SOUPLE, page.limit));
         for (const h of res.hits) {
+          const fn = h.fonction ?? metaMap.get(h.law_id)?.fonction ?? null;
           const n = perLaw.get(h.law_id) ?? 0;
           if (n >= 6) continue;
+          if (
+            fn &&
+            FONCTIONS_SOUPLES.has(fn) &&
+            (perFonction.get(fn) ?? 0) >= MAX_PER_FONCTION_SOUPLE
+          ) {
+            attente.push(h);
+            continue;
+          }
           perLaw.set(h.law_id, n + 1);
+          if (fn && FONCTIONS_SOUPLES.has(fn)) {
+            perFonction.set(fn, (perFonction.get(fn) ?? 0) + 1);
+          }
           picked.push(h);
           if (picked.length >= page.limit) break;
+        }
+        if (picked.length < page.limit && attente.length) {
+          const hasHardNorm = picked.some((h) => {
+            const fn = h.fonction ?? metaMap.get(h.law_id)?.fonction ?? null;
+            return !fn || !FONCTIONS_SOUPLES.has(fn);
+          });
+          for (const h of attente) {
+            if (picked.length >= page.limit) break;
+            const n = perLaw.get(h.law_id) ?? 0;
+            if (n >= 6) continue;
+            const fn = h.fonction ?? metaMap.get(h.law_id)?.fonction ?? null;
+            if (
+              hasHardNorm &&
+              fn &&
+              FONCTIONS_SOUPLES.has(fn) &&
+              (perFonction.get(fn) ?? 0) >= maxHardSouple
+            ) {
+              continue;
+            }
+            perLaw.set(h.law_id, n + 1);
+            if (fn && FONCTIONS_SOUPLES.has(fn)) {
+              perFonction.set(fn, (perFonction.get(fn) ?? 0) + 1);
+            }
+            picked.push(h);
+          }
         }
         res = { ...res, hits: picked };
       }
@@ -823,12 +1011,23 @@ export function construireOutils(
         ? "Note: hybrid vector search is disabled per account preference (lexical FTS5 search only)."
         : "Note : la recherche vectorielle hybride est désactivée selon la préférence du compte (recherche lexicale FTS5 uniquement)."
       : "";
+    let frOnlyLawNotice = "";
+    if (law && lang === "en" && res.hits.every((h) => h.law_id !== law)) {
+      const langs = await lawLangs(db, law, env);
+      if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+        const cite = lawRow ? citeOf(lawRow) : "";
+        frOnlyLawNotice = `Law '${law}'${cite ? ` (${cite})` : ""} is published in French only (langs: ['fr']). Re-run with lang='fr'.`;
+      }
+    }
     // « Aucun résultat » DOIT dire dans quoi on a cherché. Sans ça, un modèle public lit
     // l'absence comme « aucune règle n'existe » et la relaie comme une réponse — une absence
     // présentée comme un fait. Deux causes dominent et se disent en une phrase : le corpus
     // est une sélection fermée, et l'appariement est LEXICAL (aucun stemming français,
     // mesuré : « congédiement » n'attrape pas « congédier »).
-    if (res.hits.length === 0)
+    if (res.hits.length === 0) {
+      if (frOnlyLawNotice) {
+        return err(`${frOnlyLawNotice}${noteHybrideDesactive ? ` ${noteHybrideDesactive}` : ""}`);
+      }
       return err(
         `Aucun résultat trouvé (${lang}). Cela ne signifie pas qu'aucune règle ` +
           "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
@@ -837,6 +1036,7 @@ export function construireOutils(
           "problème plutôt que des mots." +
           (noteHybrideDesactive ? ` ${noteHybrideDesactive}` : ""),
       );
+    }
 
     // 1.3 : fils d'Ariane (résultats auto-explicatifs) + regroupement par loi.
     const semDivRefs = (res.divisions ?? []).map((d) => ({
@@ -844,8 +1044,13 @@ export function construireOutils(
       division_path: d.path,
     }));
     const allRefs = [...res.hits, ...(res.elsewhere?.hits ?? []), ...semDivRefs];
-    const chains = await breadcrumbChains(db, lang as Lang, allRefs);
-    const names = await lawNames(db, [...new Set(allRefs.map((h) => h.law_id))]);
+    const distinctLawIds = [...new Set(allRefs.map((h) => h.law_id))];
+    const [chains, names, metas, normRels] = await Promise.all([
+      breadcrumbChains(db, lang as Lang, allRefs),
+      lawNames(db, distinctLawIds),
+      lawMetas(db, distinctLawIds, env),
+      normativeRelations(db, distinctLawIds, lang as Lang, env),
+    ]);
     const ABBREV: Record<string, string> = { ccq: "C.c.Q.", cpc: "C.p.c." };
     const crumbOf = (h: { law_id: string; division_path: string }): string => {
       const chain = chains.get(`${h.law_id}|${h.division_path}`) ?? [];
@@ -859,11 +1064,35 @@ export function construireOutils(
       if (!kinds) return titled?.heading ?? "";
       return `${kinds}${titled ? ` : ${titled.heading}` : ""}`;
     };
+    const conciseNormLine = (lawId: string): string | null => {
+      const meta = metas.get(lawId);
+      const rels = normRels.get(lawId) ?? [];
+      const parts: string[] = [];
+      if (meta?.fonction === "directive") {
+        parts.push(
+          lang === "en"
+            ? "Practice directive (non-legislative, PDF source)"
+            : "Directive de pratique judiciaire (non législatif, source PDF)",
+        );
+      } else if (meta?.fonction === "orientation") {
+        parts.push(
+          lang === "en"
+            ? "Policy statement (non-legislative, non-binding, PDF source)"
+            : "Orientation administrative (non législatif, valeur indicative, source PDF)",
+        );
+      }
+      for (const r of rels) {
+        parts.push(`${r.rel_type} : ${r.other_id}`);
+      }
+      return parts.length ? `   [${parts.join(" ; ")}]` : null;
+    };
     const line = (h: (typeof res.hits)[number]) => {
       const crumb = crumbOf(h);
+      const ul = unitLabel(metas.get(h.law_id)?.unit, lang as Lang);
+      const frTag = h.hit_lang && h.hit_lang !== lang ? ` [${h.hit_lang}]` : "";
       return (
-        `${ABBREV[h.law_id] ?? h.law_id}${crumb ? ` — ${crumb}` : ""} › art. ${h.number}` +
-        `${h.semantic ? " (repérage sémantique)" : ""}  [${h.division_path}]\n` +
+        `${ABBREV[h.law_id] ?? h.law_id}${crumb ? ` — ${crumb}` : ""} › ${ul} ${h.number}` +
+        `${h.semantic ? " (repérage sémantique)" : ""}${frTag}  [${h.division_path}]\n` +
         `   « ${h.snippet} »`
       );
     };
@@ -882,14 +1111,17 @@ export function construireOutils(
           const nm = names.get(id);
           const title = nm ? (lang === "en" ? nm.name_en : nm.name_fr) : id;
           const shown = hs.slice(0, 6);
+          const normLine = conciseNormLine(id);
           return (
-            `— ${title} (${shown.length}${hs.length > shown.length ? ` / ${hs.length}` : ""} affiché(s)) —\n` +
+            `— ${title} (${shown.length}${hs.length > shown.length ? ` / ${hs.length}` : ""} affiché(s)) —` +
+            `${normLine ? `\n${normLine}` : ""}\n` +
             shown.map(line).join("\n")
           );
         })
         .join("\n\n");
     } else {
-      body = res.hits.map(line).join("\n");
+      const normLine = lawsInHits[0] ? conciseNormLine(lawsInHits[0]) : null;
+      body = `${normLine ? `${normLine}\n` : ""}${res.hits.map(line).join("\n")}`;
     }
     // En-tête étiqueté selon le chemin qui a produit les résultats (R7 : fail open, dit)
     const nTerms = query.trim().split(/\s+/).length;
@@ -904,9 +1136,16 @@ export function construireOutils(
               ? "Aucune correspondance lexicale ; repérage sémantique :"
               : `${res.total} résultat(s) trouvé(s) :`;
     // Recherche restreinte avec résultats : signaler ce que la restriction cache (post-mortem)
+    const seenElsewhereNorm = new Set<string>();
     const elsewhere = res.elsewhere
       ? `\n\nAilleurs au corpus (${res.elsewhere.total} résultat(s) hors ${law}) — aperçu :\n` +
-        res.elsewhere.hits.map(line).join("\n") +
+        res.elsewhere.hits
+          .map((h) => {
+            const nl = seenElsewhereNorm.has(h.law_id) ? null : conciseNormLine(h.law_id);
+            seenElsewhereNorm.add(h.law_id);
+            return nl ? `${nl}\n${line(h)}` : line(h);
+          })
+          .join("\n") +
         "\nRelancer sans `law` pour la vue complète."
       : "";
     const structures = res.divisions?.length
@@ -918,7 +1157,27 @@ export function construireOutils(
           })
           .join("\n")
       : "";
-    const enrich = (h: (typeof res.hits)[number]) => ({ ...h, breadcrumb: crumbOf(h) });
+    const enrich = (h: (typeof res.hits)[number]) => {
+      const meta = metas.get(h.law_id);
+      const rels = normRels.get(h.law_id) ?? [];
+      return {
+        ...h,
+        breadcrumb: crumbOf(h),
+        source: meta?.source ?? null,
+        fonction: h.fonction ?? meta?.fonction ?? null,
+        hit_lang: h.hit_lang ?? lang,
+        ...(rels.length
+          ? {
+              relations: rels.map((r) => ({
+                direction: r.direction,
+                rel_type: r.rel_type,
+                other_id: r.other_id,
+                other_name: r.other_name,
+              })),
+            }
+          : {}),
+      };
+    };
     // Trois décomptes, trois sens distincts — parce qu'UN seul était servi et qu'il était
     // lu pour ce qu'il n'est pas. `total: 1` avec cinq résultats rendus n'est pas une
     // incohérence : c'est un appariement lexical plus quatre voisins sémantiques. Corollaire
@@ -930,10 +1189,12 @@ export function construireOutils(
     // jamais marqué `semantic`, bien que la fusion RRF ait déplacé son rang.
     const nSem = res.hits.filter((h) => h.semantic).length;
     const suffixeHybride = noteHybrideDesactive ? `\n\n${noteHybrideDesactive}` : "";
-    return ok(`${header}\n${body}${structures}${elsewhere}${suffixeHybride}`, {
+    const prefixeFrOnly = frOnlyLawNotice ? `${frOnlyLawNotice}\n` : "";
+    return ok(`${prefixeFrOnly}${header}\n${body}${structures}${elsewhere}${suffixeHybride}`, {
       query,
       lang,
       law: law ?? null,
+      ...(frOnlyLawNotice ? { fr_only_law: true } : {}),
       /** Appariements LEXICAUX au corpus, non paginés. Vaut 0 sur un repli sémantique seul. */
       total: res.total,
       /** Taille de la page réellement rendue, toutes sources confondues. */
@@ -963,6 +1224,16 @@ export function construireOutils(
     const lang: Lang = (langArg ?? "fr") as Lang;
     const all = await listLaws(db, {}, "fr", env);
     const parsed = parseCitation(citation, all);
+    if (parsed.ambigu?.length) {
+      const cands = parsed.ambigu
+        .map((c) => `  • ${c.id} — ${c.official_cite} (${c.name_fr})`)
+        .join("\n");
+      return err(
+        `Citation ambiguë dans « ${citation} » — plusieurs textes correspondent :\n${cands}\n` +
+          "Précisez le texte exact (ex. district/division ou « Règlement » vs « Instruction générale ») " +
+          "ou appelez get_article avec le law= approprié.",
+      );
+    }
     if (!parsed.article) return err(`Aucun numéro d'article détecté dans « ${citation} ».`);
     if (!parsed.law) {
       // Refus NOMMÉ de l'ancien C.p.c. Il passe AVANT le refus générique parce qu'il dit la
@@ -993,19 +1264,39 @@ export function construireOutils(
     }
     const law = parsed.law;
     const article = parsed.article;
-    const row = await getArticle(db, law, lang as Lang, article);
-    if (!row) {
-      const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
-      return err(
-        `Référence « ${citation} » non résolue (loi ${law}, art. ${article}). Proches : ${near.join(", ")}.`,
-      );
-    }
-    const lawRow = await getLaw(db, law, env);
+    const [row, lawRow, normRels] = await Promise.all([
+      getArticle(db, law, lang as Lang, article),
+      getLaw(db, law, env),
+      normativeRelations(db, [law], lang as Lang, env),
+    ]);
     // `parseCitation` n'a reconnu `law` que parmi les lois LUES en base, donc lawRow
     // existe ; le garde est là pour le type, pas pour un cas réel.
     if (!lawRow) return err(`Loi '${law}' inconnue.`);
+    const rels = normRels.get(law) ?? [];
+    if (!row) {
+      if (lang === "en") {
+        const langs = await lawLangs(db, law, env);
+        if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+          return frOnlyError(law, lawRow);
+        }
+      }
+      const near = await nearestArticles(db, law, lang as Lang, sortKeyOf(article));
+      const ul = unitLabel(lawRow.unit, lang);
+      const partner = rels.find((r) => r.rel_type === "interprete" && r.in_corpus);
+      let partnerHint = "";
+      if (partner) {
+        const partnerArt = await getArticle(db, partner.other_id, lang as Lang, article);
+        partnerHint = partnerArt
+          ? ` Texte apparié : ${partner.other_id} (${partner.other_name ?? partner.other_id}) contient ${ul} ${article}.`
+          : ` Texte apparié : ${partner.other_id}${partner.other_name ? ` (${partner.other_name})` : ""}.`;
+      }
+      return err(
+        `Référence « ${citation} » non résolue (loi ${law}, ${ul} ${article}). Proches : ${near.join(", ")}.${partnerHint}`,
+      );
+    }
     const consol = consolOf(lawRow, lang as Lang);
-    return ok(renderArticle(row, lawRow, consol, lang as Lang), {
+    const links = parseLinks(row.links);
+    return ok(renderArticle(row, lawRow, consol, lang as Lang, rels, links), {
       resolved: { law, number: row.number, lang, reconnue_par: parsed.law_source },
       citation: citationOf(lawRow, row.number, lang as Lang),
       division_path: row.division_path,
@@ -1013,6 +1304,10 @@ export function construireOutils(
       history: row.history,
       repealed: !!row.repealed,
       text: row.text,
+      source: lawRow.source ?? "epub",
+      fonction: lawRow.fonction ?? null,
+      links,
+      ...(rels.length ? { relations: rels } : {}),
     });
   };
   outils.resolve_reference = H_RESOLVE_REFERENCE as Gestionnaire;

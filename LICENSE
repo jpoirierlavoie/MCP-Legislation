@@ -593,7 +593,44 @@ inconsistency. A consolidation reprocessed by a third party, such as the one
 served here, therefore does NOT carry that presumption.
 
 --------------------------------------------------------------------------------
-B.3 — AUCUN CONSEIL JURIDIQUE / NO LEGAL ADVICE
+B.3 — TRIBUNAUX DU QUÉBEC ET AUTORITÉ DES MARCHÉS FINANCIERS (AMF) /
+      QUÉBEC COURTS AND AUTORITÉ DES MARCHÉS FINANCIERS (AMF)
+--------------------------------------------------------------------------------
+
+Les directives de pratique judiciaire de la Cour supérieure du Québec
+(coursuperieureduquebec.ca) et de la Cour du Québec (courduquebec.ca), ainsi que
+les règlements officiels (RLRQ, c. V-1.1, r. 10, r. 21, r. 24) et les
+Instructions générales de l'Autorité des marchés financiers (lautorite.qc.ca)
+servis depuis des fichiers PDF (source = 'pdf') demeurent la propriété de leur
+publieur officiel respectif.
+
+Le texte est restitué VERBATIM, sans altération, avec attribution explicite de
+chaque source et mention de son statut normatif (les directives judiciaires et
+Instructions générales sont des textes non législatifs ; les Instructions
+générales ont une valeur purement indicative et sont sans force de loi). Aucune
+affiliation, approbation ni statut officiel n'est revendiqué ni conféré.
+
+Les fichiers PDF sources bruts ne sont pas redistribués dans ce dépôt git
+(pipeline/samples/ est exclu du suivi de version). L'indexation et la
+restitution non commerciales verbatim de ces textes ont été autorisées
+explicitement par le mainteneur le 2026-11-18 après vérification des mentions de
+reproduction de chaque publieur (docs/phase0-structure-pdf.md).
+
+Court practice directives of the Superior Court of Québec and the Court of
+Québec, as well as official PDF regulations (CQLR, c. V-1.1, r. 10, r. 21,
+r. 24) and Policy Statements (Instructions générales) of the Autorité des
+marchés financiers (AMF) served from PDF sources (source = 'pdf') remain the
+property of their respective official publishers. Text is reproduced VERBATIM
+without alteration, with full source attribution and explicit normative-status
+disclosures (practice directives and Policy Statements are non-legislative;
+Policy Statements are non-binding guidance without force of law). Raw source
+PDFs are not committed to this repository (pipeline/samples/ is gitignored).
+Non-commercial verbatim indexing and serving was explicitly authorized by the
+maintainer on 2026-11-18 following the Phase 0 publisher audit
+(docs/phase0-structure-pdf.md).
+
+--------------------------------------------------------------------------------
+B.4 — AUCUN CONSEIL JURIDIQUE / NO LEGAL ADVICE
 --------------------------------------------------------------------------------
 
 Ce logiciel ne fournit aucun conseil juridique. En cas de doute, consulter la

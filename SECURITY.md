@@ -1,6 +1,6 @@
 # Security, Privacy & Professional Secrecy Policy / Politique de sécurité, confidentialité et secret professionnel
 
-> **Français :** Ce dépôt héberge le connecteur MCP **Législation du Québec et du Canada** (`https://legislation.poirierlavoie.ca/mcp` et `https://legislation.poirierlavoie.ca/mcp/oauth`), un Worker Cloudflare en lecture seule servant le texte officiel consolidé des lois et règlements via D1, Vectorize et Workers AI.
+> **Français :** Ce dépôt héberge le connecteur MCP **Législation du Québec et du Canada** (`https://legislation.poirierlavoie.ca/mcp` et `https://legislation.poirierlavoie.ca/mcp/oauth`), un Worker Cloudflare en lecture seule servant le texte officiel consolidé des lois, règlements, directives de pratique et orientations AMF via D1, Vectorize et Workers AI.
 > Pour signaler une **vulnérabilité de sécurité** OU un **enjeu de vie privée, de confidentialité ou de secret professionnel / privilège** (`art. 9` *Charte des droits et libertés de la personne*, `art. 131` *Loi sur le Barreau*), **n'ouvrez jamais d'issue publique sur GitHub**. Écrivez directement au mainteneur :
 > **Jason Poirier Lavoie, avocat (Québec)** — `jason@poirierlavoie.ca` (accusé de réception sous **72 heures**, divulgation coordonnée).
 > **Ne transmettez jamais** de documents clients privilégiés, de noms de parties ou faits confidentiels réels, ni de jetons/secrets actifs dans un premier signalement ; utilisez des requêtes fictives.
@@ -19,7 +19,7 @@ Dans la portée :
 
 Hors portée :
 - Ingénierie sociale, attaques physiques ou déni de service volumétrique sur l'infrastructure Cloudflare ;
-- Données officielles d'origine (LégisQuébec / Éditeur officiel du Québec et ministère de la Justice du Canada) — toute erreur dans un texte officiel relève du publieur officiel.
+- Données officielles d'origine (LégisQuébec / Éditeur officiel du Québec, ministère de la Justice du Canada, Cour supérieure du Québec, Cour du Québec et Autorité des marchés financiers (AMF)) — toute erreur dans un texte officiel relève du publieur officiel.
 
 ---
 

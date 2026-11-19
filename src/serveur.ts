@@ -54,9 +54,9 @@ export const SERVER_INFO = {
  * `tests/catalogue.test.mjs`. Aucun décompte vivant (R10).
  */
 export const PUBLIC_DESCRIPTION =
-  "Texte officiel en lecture seule de lois et règlements du Québec et du Canada " +
-  "(en français et en anglais), hiérarchie complète des divisions et recherche hybride " +
-  "lexicale et sémantique.";
+  "Texte officiel en lecture seule de lois, règlements, directives de pratique et orientations AMF " +
+  "du Québec et du Canada (français et anglais, certains PDF en français seulement), hiérarchie " +
+  "complète des divisions et recherche hybride lexicale et sémantique.";
 
 /**
  * Fiche de découverte HTTP MCP (SEP-2127) — PURE, sans accès à `env` ni à aucun secret.
@@ -119,7 +119,8 @@ export function ressourceProtegeeOAuth(originePortail?: string) {
  */
 export const INSTRUCTIONS =
   "Texte officiel de lois et règlements du QUÉBEC et du CANADA (fédéral) : codes, lois, " +
-  "règles de procédure et tarifs, en français et en anglais. " +
+  "règles de procédure, tarifs, directives de pratique judiciaire (QCCS/QCCQ) et orientations " +
+  "administratives (AMF ; non législatives et parfois en français seulement), en français et en anglais. " +
   "Pour partir d'un problème concret, commencer par find_relevant ; pour explorer " +
   "le corpus, list_laws. Cibler ensuite avec get_structure → " +
   "get_division / get_article. " +

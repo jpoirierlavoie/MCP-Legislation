@@ -61,7 +61,7 @@ const LIVRES_CCQ = [
  * LISTE, il n'empêche pas la matière de grossir. Franchir le seuil doit donc être un acte
  * DÉLIBÉRÉ, vérifié à l'éval — pas une conséquence d'un mappage ajouté en passant.
  */
-const GROSSES_MATIERES = ["batiment-construction", "procedure-civile"];
+const GROSSES_MATIERES = ["batiment-construction", "procedure-civile", "valeurs-mobilieres"];
 
 const entitesParMatiere = () => {
   const n = new Map();

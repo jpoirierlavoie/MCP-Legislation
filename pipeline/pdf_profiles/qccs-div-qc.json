@@ -1,0 +1,107 @@
+{
+  "$schema_version": 1,
+  "law_id": "qccs-div-qc",
+  "fonction": "directive",
+  "jurisdiction": "qc",
+  "unit": "paragraphe",
+  "langs": ["fr"],
+  "files": {
+    "fr": {
+      "filename": "2022-01-31_Directives_concernant_le_fonctionnement_de_la_division_de_Quebec.pdf",
+      "sha256": "6ca850eb6aa59a04ebb86a652f6e4f48be6069413ca4a1b5842a2d1341968051",
+      "page_count": 17,
+      "toc_pages": [1, 2],
+      "body_start_page": 3,
+      "consolidation_date": {
+        "pages": [17],
+        "regex": "(?:Date\\s+d['’]entr[ée]e\\s+en\\s+vigueur\\s*:?)\\s+(\\d{1,2}(?:\\s*er)?\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4})",
+        "lang": "fr"
+      },
+      "title_blocks": [
+        { "page": 1, "y_max": 125.0, "x0_min": 140.0 }
+      ],
+      "closing_blocks": [
+        { "page": 17, "y_min": 540.0, "x0_max": 250.0 }
+      ],
+      "running_footer": {
+        "y_min": 725.0,
+        "regex": "^/\\d+$",
+        "x0_min": 500.0
+      },
+      "toc_parser": {
+        "source": "printed",
+        "strip_parentheticals": true,
+        "level1_x0_max": 75.0,
+        "level2_x0_min": 70.0,
+        "level2_x0_max": 102.0,
+        "require_bold_for_level1": true,
+        "trailing_page_regex": "(?:\\s*\\.{2,}\\s*|\\s+)\\d+\\s*$"
+      },
+      "body_typography": {
+        "dominant_size_pt": 12.0,
+        "y_line_tolerance_pt": 2.5,
+        "heading_wrap_dy_max_pt": 17.0,
+        "heading_x0_min": 70.0,
+        "heading_x0_max": 103.0,
+        "heading_min_size_pt": 10.8,
+        "heading_require_all_bold": true,
+        "heading_exclude_italic": true,
+        "level1_all_caps": true,
+        "level3_max_size_pt": 11.4,
+        "level1_kind": "partie",
+        "level2_kind": "section",
+        "level3_kind": "sous-section"
+      },
+      "provisions": {
+        "x0_min": 98.0,
+        "x0_max": 104.0,
+        "min_size_pt": 11.5,
+        "continuation_x0_min": 130.0,
+        "subitem_x0_min": 130.0,
+        "number_mode": "numeric",
+        "repeal_regex": "^(?:Abrog[ée]\\.?|Abrogation\\.|Repealed\\.?|\\[\\s*(?:…|\\.\\.\\.)\\s*\\])$"
+      },
+      "history": {
+        "prefix_regex": "^(?:Modifications?|Abrogation|Ajouts?)\\s*:",
+        "max_size_pt": 10.5,
+        "allow_bold_italic_any_size": false,
+        "x0_min": 70.0,
+        "x0_max": 140.0
+      },
+      "footnotes": {
+        "y0_min": 650.0,
+        "lead_size_max_pt": 7.5,
+        "body_size_max_pt": 10.5,
+        "x0_min": 70.0,
+        "x0_max": 125.0
+      },
+      "tables": {
+        "enabled": true,
+        "pages": [4, 6, 7],
+        "fallback_article_prefix": "tableau"
+      },
+      "toc_exempt_headings": [
+        "Section I : Règles générales applicables à toute audience",
+        "Section II : Règles additionnelles applicables à l’audience virtuelle ou semi-virtuelle",
+        "Section I : Liste en matière civile",
+        "Section II : Liste en matière familiale"
+      ],
+      "unnumbered_prose_divisions": [
+        { "heading": "Section I : Liste en matière civile", "article_number": "liste-civile" },
+        { "heading": "Section II : Liste en matière familiale", "article_number": "liste-familiale" }
+      ],
+      "links": {
+        "allowed_schemes": ["https", "http", "mailto"],
+        "ignore_mailto_without_at_domain": true,
+        "sanitize_email_launch": true,
+        "ignore_zero_area_rect": true
+      },
+      "witness": {
+        "total_spans": 1219,
+        "real_articles": 86,
+        "decimals": 86,
+        "pseudo_articles": 3
+      }
+    }
+  }
+}

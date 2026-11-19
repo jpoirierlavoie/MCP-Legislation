@@ -42,6 +42,11 @@ TABLE = [
     ("annexe-a", 1),
     ("repeal-schedules", 1),
     ("annexe-abrogative", 1),
+    # PDF : chemins positionnels
+    ("ph1:1", 1),
+    ("ph1:1-ph2:1-ph3:1", 3),
+    ("ps:1", 1),
+    ("ps:1-ph1:1", 2),
 ]
 
 

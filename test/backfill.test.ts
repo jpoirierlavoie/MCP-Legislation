@@ -245,4 +245,46 @@ describe("/admin/backfill-vectors", () => {
       .first<{ n: number }>();
     expect(trackedDivs?.n).toBe(0);
   });
+
+  it("hache les identifiants d'articles dépassant 64 octets UTF-8 (full, incremental et prune)", async () => {
+    const longNum = "annexe-procédure-particulière-avec-accents-très-longue-depassant-64";
+    await db()
+      .prepare(
+        "INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text, repealed) VALUES (?, ?, 'fr', ?, ?, ?, ?, ?, 0)",
+      )
+      .bind(1003, "loi-test", longNum, 9_000_000_000_000_001, 101, "ga:l_i", "Annexe longue.")
+      .run();
+
+    const mocks = makeMocks();
+    const testEnv = {
+      ...env,
+      BACKFILL_TOKEN: "jeton-admin",
+      AI: mocks.AI,
+      VECTORS: mocks.VECTORS,
+    } as unknown as Env;
+
+    const rFull = await post(testEnv, { kind: "articles", law: "loi-test", mode: "full" });
+    expect(rFull.status).toBe(200);
+    expect(await rFull.json()).toMatchObject({ mode: "full", embedded: 3, done: true });
+
+    const longVec = mocks.upserted.find((v) => v.metadata?.article === longNum);
+    expect(longVec).toBeDefined();
+    expect(new TextEncoder().encode(longVec!.id).byteLength).toBeLessThanOrEqual(64);
+    expect(longVec!.id).toMatch(/^art:loi-test:[0-9a-f]{24}$/);
+
+    // Deuxième passage en incremental -> 0 ré-embedding (hash d'id stable dans vector_state)
+    const rInc = await post(testEnv, { kind: "articles", law: "loi-test", mode: "incremental" });
+    expect(await rInc.json()).toMatchObject({ mode: "incremental", embedded: 0, skipped: 3 });
+
+    // Suppression de l'article long -> prune supprime exactement le même id haché
+    await db().prepare("DELETE FROM articles WHERE id = 1003").run();
+    const rPrune = await post(testEnv, { kind: "articles", law: "loi-test", mode: "prune" });
+    expect(await rPrune.json()).toMatchObject({
+      mode: "prune",
+      deleted: 1,
+      deleted_ids: [longVec!.id],
+      done: true,
+    });
+    expect(mocks.deleted).toEqual([longVec!.id]);
+  });
 });

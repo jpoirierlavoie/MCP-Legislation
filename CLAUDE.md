@@ -2,7 +2,7 @@
 
 Directives de développement, contrat de vérité et invariants anti-dérive pour **`mcp-legislation`** (`https://legislation.poirierlavoie.ca/mcp` et `/mcp/oauth`), gouvernant à l'identique Claude et Google Antigravity / Gemini CLI (`CLAUDE.md` et `GEMINI.md` doivent rester identiques octet pour octet et sous **24 000 octets** UTF-8 LF sans BOM ; `gemini-extension.json` déclare `"contextFileName": []` afin de ne jamais injecter ces consignes dans les sessions des usagers finaux).
 
-Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; les données proviennent des EPUB officiels de LégisQuébec et des XML du ministère de la Justice du Canada (Licence du gouvernement ouvert – Canada ; version officielle fédérale publiée par le ministre, art. 31 de la *Loi sur la révision et la codification des textes législatifs*). **C'est un outil juridique : un résultat faux rendu en silence est le pire défaut possible — refuser vaut toujours mieux que deviner.**
+Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; les données proviennent des EPUB officiels de LégisQuébec, des XML du ministère de la Justice du Canada (Licence du gouvernement ouvert – Canada ; version officielle fédérale publiée par le ministre, art. 31 de la *Loi sur la révision et la codification des textes législatifs*), ainsi que des PDF officiels des tribunaux du Québec (QCCS, QCCQ) et de l'AMF (`source = 'pdf'`). **C'est un outil juridique : un résultat faux rendu en silence est le pire défaut possible — refuser vaut toujours mieux que deviner.**
 
 ---
 
@@ -23,7 +23,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 1. Énoncer explicitement l'impact vérifié sur chacune des 6 surfaces (« non touchée » vérifié et motivé, jamais passé sous silence).
 2. Exécuter `npx tsc --noEmit`, `npx biome check .`, `npm run audit` et `npm test` (les deux projets vitest `workerd` et `node`, jamais `node --test`).
 3. Si une surface servie bouge : vérifier `wrangler dev` + `npm run evals` (et `npm run eval` si le repérage change — aucune régression sur les 21 cas).
-4. `docs/` est une **archive datée par défaut** (ne fait pas foi sur l'état courant), à l'exception des références techniques citées par le code (`docs/phase0-structure-epub.md`, `docs/phase0-structure-lims.md`, `docs/archive/PLAN.md`, `docs/archive/plan-couche-decouverte.md`).
+4. `docs/` est une **archive datée par défaut** (ne fait pas foi sur l'état courant), à l'exception des références techniques citées par le code (`docs/phase0-structure-epub.md`, `docs/phase0-structure-lims.md`, `docs/phase0-structure-pdf.md`, `docs/archive/PLAN.md`, `docs/archive/plan-couche-decouverte.md`).
 
 ---
 
@@ -54,7 +54,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 ### Trois morceaux internes
 1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle` `0.8.0`) + 10 outils courts (`list_laws`, `list_subjects`, `related_laws`, `find_relevant`, `get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`), D1 `DB` (`legislation`) + D1 `DB_IDENTITE` (`mcp-identite`), Workers AI (`bge-m3`) + Vectorize (`legislation-articles`). Zéro `dependencies` d'exécution.
-2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours `PYTHONUTF8=1`) — Ingère les EPUB LégisQuébec et XML LIMS Justice Canada par staging → validation → bascule (`pipeline/ingest.py`, `pipeline/refresh.py`).
+2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours `PYTHONUTF8=1`) — Ingère les EPUB LégisQuébec, les XML LIMS Justice Canada et les PDF déclaratifs (`pipeline/parser_pdf.py`, `pipeline/pdf_profiles/*.json`) par staging → validation → bascule (`pipeline/ingest.py`, `pipeline/refresh.py`).
 3. **Données versionnées** — `laws.config.json`, `pipeline/expected/served.json`, `catalogue.json`, `taxonomy.json`, `relations.json`, `schema.sql` + `schema-decouverte.sql` + `migrations/`. Aucun décompte vivant n'est recopié en prose (R10).
 
 ---
@@ -82,24 +82,24 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 - **R2** : Aucun nouvel outil MCP sans approbation explicite (enrichir les 10 existants).
 - **R3** : Delta de description d'outil ≤ 2 phrases ; consigner le delta de tokens.
-- **R4** : Ne jamais altérer le texte officiel ni son rendu ; toute aide éditoriale est visiblement étiquetée non officielle (`GARDE_FOU` imposé mot pour mot sur `find_relevant`). **Corollaire structuré (décision 001) :** toute étiquette qui borne un résultat voyage dans `structuredContent` comme champ obligatoire, jamais en prose seule (`outputSchema` reste absent de `tools/list`).
+- **R4** : Ne jamais altérer le texte officiel ni son rendu ; toute aide éditoriale est visiblement étiquetée non officielle (`GARDE_FOU` imposé mot pour mot sur `find_relevant`). Les textes non législatifs (`fonction`: `'directive'` en `paragraphe`, `'orientation'` en `article`) affichent explicitement leur statut normatif, `articles.links` et leurs arêtes `'preseance-sur'` / `'interprete'`. **Corollaire structuré (décision 001) :** toute étiquette qui borne un résultat voyage dans `structuredContent` comme champ obligatoire, jamais en prose seule (`outputSchema` reste absent de `tools/list`).
 - **R7** : *Fail open* toujours annoncé explicitement (étiquettes d'élargissement, relaxation et repérage sémantique).
-- **R8** : Chemins risqués derrière variables d'env (`RELAX_SEARCH`, `HYBRID_SEARCH`, `FEDERAL_CORPUS`) — rollback = flip de variable, sans `wrangler rollback` (bloqué par la suppression Durable Object `v2: QclawMCP`).
+- **R8** : Chemins risqués derrière variables d'env (`RELAX_SEARCH`, `HYBRID_SEARCH`, `FEDERAL_CORPUS`, `PDF_CORPUS`) — rollback = flip de variable, sans `wrangler rollback` (bloqué par la suppression Durable Object `v2: QclawMCP`).
 - **R9** : Réponse de recherche ~≤ 800 tokens en régime normal.
 - **R10** : Une vérité, cinq surfaces locales + inter-dépôts (`tests/catalogue.test.mjs`) ; aucun fait vivant (lois, matières, articles, seuils de calibration) écrit à la main en prose.
 
 ---
 
-## 4. Les 18 invariants critiques (chacun a déjà cassé quelque chose)
+## 4. Les 19 invariants critiques (chacun a déjà cassé quelque chose)
 
 1. **Ordre porteur de `laws.config.json`** : `_id_base()` dérive les plages d'ID de la position de chaque loi. Réordonner écrase les articles d'autres lois en silence. Toujours ajouter **en fin de liste** (`pipeline/tests/test_config.py`).
-2. **Miroir exact `sortKeyOf()` (`src/lib.ts`) ↔ `sort_key()` (`pipeline/model.py`)** : Indexe `articles.sort_key` (`test/ranges.test.mjs`). Les bornes de plage sont lues en base (`boundKey`).
+2. **Miroir exact `sortKeyOf()` (`src/lib.ts`) ↔ `sort_key()` (`pipeline/model.py`)** : Indexe `articles.sort_key` (`test/ranges.test.mjs`), y compris les numéros alphanumériques (`2A.1`, `4B.2`) et `kind='annexe'` (`>= DISPOSITION_SORT_BASE`). Les bornes de plage sont lues en base (`boundKey`).
 3. **Chargement monolingue sans écrasement** : L'UPSERT de `laws` préserve l'autre langue (`name_<autre>`, `consol_date_<autre>`, `official_cite_en`) ; `name_norm` et `heading_norm` sont calculés au chargement.
-4. **Chemins Irosoft propres à la langue** (`ga:l_cinquieme` FR / `ga:l_five` EN) : Toute traversée inter-langues passe par le pont des numéros d'articles (`translateDivisionPath` / `translatePaths`).
+4. **Chemins propres à la langue et miroir `SEG_SPLIT`** : Les identifiants Irosoft (`ga:l_cinquieme` FR / `ga:l_five` EN) traversent par le pont des numéros d'articles (`translateDivisionPath` / `translatePaths`) ; `pipeline/paths.py` et `src/paths.ts` partagent un `SEG_SPLIT` identique couvrant `ph<level>:<rank>` et `ps:<n>` (PDF).
 5. **Aucun `LIKE`/`GLOB` sur `divisions.path`** : `_` est un joker `LIKE` et D1 plafonne la complexité des motifs ; employer l'intervalle lexicographique `[path+'-', path+'.')` (`subtreeClause`).
 6. **Plafond D1 ≤ 100 Ko UTF-8 et export/migrations** : Lots SQL plafonnés en octets UTF-8 ; lignes géantes via `INSERT` court + `UPDATE … ||` (`pipeline/load.py`). `wrangler d1 export` global échoue sur `articles_fts` (employer Time Travel avant `--remote`, ou `--table <t> --no-schema` en gérant les lignes > 100 Ko et `divisions.parent_id > id`). Toute migration destructive (`DROP`) se répète d'abord sur une D1 distante jetable provisionnée avec `schema.sql` + `migrations/` + `schema-decouverte.sql`.
 7. **Échelle de recherche et plancher `RELAX_MIN_LOO_TOTAL = 2`** : Ordre calibré : exact → élargissement corpus → leave-one-out (arrêt seulement si `total >= Math.min(2, limit)`) → OU+bm25, puis RRF avec Vectorize, puis sémantique seul sous `SEMANTIC_MIN_SCORE = 0,40` (`test/repere-echelle.test.ts`).
-8. **Vectorize** : Identifiants ≤ 64 octets (chemins hachés SHA-256/24 hex) ; index de métadonnées créés avant insertion ; scission récursive des lots d'embeddings sur erreur `3030`.
+8. **Vectorize** : Identifiants ≤ 64 octets UTF-8 (`divVectorId` et `artVectorId` hachés SHA-256/24 hex au-delà de 64 octets) ; index de métadonnées créés avant insertion ; scission récursive des lots d'embeddings sur erreur `3030`.
 9. **WAF de zone** : Bloque les rafales de `POST` de backfill sur le domaine personnalisé (`workers_dev: true` temporaire seulement pendant un backfill supervisé).
 10. **Sessions MCP** : Une session par lot dans `eval/mcp-client.mjs` ; transport serveur 100 % sans état.
 11. **Windows / Git Bash** : Les heredocs bash mangent un niveau de `\` ; toujours passer par un fichier script écrit proprement.
@@ -110,6 +110,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 16. **Vérité terrain (`eval/cases.json`) ⛔** : Ne jamais modifier `eval/cases.json` ni le contenu éditorial (`taxonomy.json`, `curation/`) sans décision explicite de Jason (`--refresh-paths` revalide uniquement le cache dérivé `eval/cases.resolved.json`).
 17. **Corpus fédéral (`pipeline/parser_lims.py`)** : 16 lois + 2 règlements depuis `justicecanada/laws-lois-xml` (Code criminel, LIR et lois constitutionnelles exclus). Descendre explicitement `Body` puis `Schedule` — **jamais** `.//Section` (qui ingérerait `RelatedOrNotInForce` / `AmendedText`). `consol_date_*` provient obligatoirement du `<p id="assentedDate">` de la page Justice Canada (jamais de `lims:current-date` ni de `LastConsolidationDate`).
 18. **Libellé (`label`) de matière = motif de justification servi** : Vérifier l'étendue réelle de la division rattachée (`louage` général vs `louage résidentiel`, gardé par `tests/taxonomie.test.mjs`).
+19. **Corpus PDF (`pipeline/parser_pdf.py`, `docs/phase0-structure-pdf.md`)** : Vague 1 de 13 PDF `fr`-only (`laws.config.json[97..109]`), incluant `v-1.1-r.10`, `v-1.1-r.21` et `v-1.1-r.24` (`source='pdf', fonction='reglement'`) parce que leurs EPUB LégisQuébec sont des renvois d'une page vers l'AMF. Zéro LLM, zéro OCR (`ScannedPdfError`), zéro contournement WAF/403 ; Gate 1 exige `0` span non classé ; la date de consolidation vient du texte du PDF (jamais de `/ModDate`) ; tout accès reste verrouillé derrière `PDF_CORPUS === "1"`.
 
 ---
 
@@ -118,7 +119,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 - **Interdiction absolue** de lire, afficher, copier ou commiter : `cf.token`, `mcp.token`, `mcp-veille.token`, `backfill.token`, `*.token`, `mcp.url`, `.dev.vars`, `.env*`, `~/.gemini/config/*`.
 - **Interdiction absolue** d'exécuter `wrangler d1 delete` ou `wrangler deploy` seul (employer `npm run deploy` / `scripts/deployer.mjs`).
 - **`src/site.ts`** : Mise en forme Biome avec `complexity.noUselessStringRaw` désarmé intentionnellement sur `BOOT`/`JS` ; en dev local, vider `.wrangler/state/v3/cache` (jamais `d1`) pour observer un changement de page mis en cache sous `CACHE_KEY`.
-- **Veille mensuelle (`scripts/check-consolidation.mjs`)** : Lecture seule avec deux miroirs bornés (LégisQuébec + Justice Canada) et seuil de joignabilité évalué **par publieur** (`agregeParSeau`).
+- **Veille mensuelle (`scripts/check-consolidation.mjs`)** : Lecture seule avec trois seaux par publieur (LégisQuébec + Justice Canada + PDF QCCS/QCCQ/AMF : en-tête `%PDF-`, SHA-256 contre `pipeline/pdf_profiles/*.json`, page d'index et classement propre des `403` Cloudflare en `injoignable`) et seuil de joignabilité évalué **par publieur** (`agregeParSeau`).
 
 ```powershell
 npx.cmd wrangler types

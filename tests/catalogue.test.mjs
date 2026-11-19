@@ -259,7 +259,7 @@ test("README : les décomptes dérivables des JSON versionnés sont exacts", () 
   // et produite par un test épinglé. Le README parle à un LECTEUR, donc il dit ce qui est
   // servi.
   const attendus = [
-    [/\*\*(\d+) lois et règlements\*\*/, served.ids.length, "nombre de lois SERVIES"],
+    [/\*\*(\d+) lois, règlements et directives\*\*/, served.ids.length, "nombre de lois SERVIES"],
     [
       /les (\d+) tarifs/,
       laws.filter((l) => l.fonction === "tarif" && served.ids.includes(l.id)).length,
@@ -295,10 +295,9 @@ test("served.json est un SOUS-ENSEMBLE cohérent de laws.config.json", () => {
     "served.json déclare servis des textes absents de laws.config.json",
   );
   assert.equal(new Set(served.ids).size, served.ids.length, "doublon dans served.ids");
-  assert.equal(
-    served.flag,
-    "FEDERAL_CORPUS",
-    "l'interrupteur nommé par served.json doit être celui de wrangler.jsonc",
+  assert.ok(
+    ["FEDERAL_CORPUS", "PDF_CORPUS"].includes(served.flag),
+    "l'interrupteur nommé par served.json doit être un drapeau de corpus reconnu de wrangler.jsonc",
   );
 
   // Si TOUT le corpus est déclaré servi, l'interrupteur doit être ouvert — sinon le README
@@ -310,6 +309,16 @@ test("served.json est un SOUS-ENSEMBLE cohérent de laws.config.json", () => {
       federauxServis.length,
       federaux.length,
       "servir une PARTIE du fédéral n'est pas un état prévu : l'interrupteur est global",
+    );
+  }
+
+  const pdfs = laws.filter((l) => l.source === "pdf").map((l) => l.id);
+  const pdfsServis = pdfs.filter((id) => served.ids.includes(id));
+  if (pdfsServis.length) {
+    assert.equal(
+      pdfsServis.length,
+      pdfs.length,
+      "servir une PARTIE du corpus PDF n'est pas un état prévu : l'interrupteur est global",
     );
   }
 });

@@ -80,7 +80,14 @@ def chapitre_de(law: dict, root: bool = False) -> str | None:
 
     Pour un texte fédéral, `chapter` est la seule source — et sa forme racine est
     elle-même (il n'y a pas de « , r. N » fédéral à retrancher).
+    Pour un texte PDF (`source == 'pdf'`), l'identifiant neutre sert de repli, sauf
+    pour un règlement RLRQ sans EPUB (`fonction == 'reglement'`) dont le chapitre est lu
+    dans `official_cite` afin de résoudre sa loi habilitante (`parent_law_id`).
     """
+    if law.get("source") == "pdf":
+        if law.get("fonction") == "reglement":
+            return _chapter(law.get("official_cite"), root=root)
+        return law.get("chapter") or law["id"]
     declare = _chapter_declare(law)
     if declare:
         return declare
@@ -107,6 +114,8 @@ def cle_de(law: dict, root: bool = False) -> tuple[str, str]:
 
     La juridiction fait PARTIE de la clé — cf. le point 2 de l'en-tête.
     """
+    if law.get("source") == "pdf" and law.get("fonction") != "reglement":
+        return ("pdf", _key(chapitre_de(law, root=root)))
     return (law.get("jurisdiction") or "qc", _key(chapitre_de(law, root=root)))
 
 
@@ -117,7 +126,11 @@ def _is_regulation(law: dict) -> bool:
     elle couvre règlements, règles de procédure et tarifs, tous cités sous « , r. ».
     Fédéral : la citation ne porte aucune marque (« DORS/98-106 », « C.R.C., ch. 368 »), donc
     on lit `fonction`, qui est déclarée.
+    PDF : seuls les règlements RLRQ sans EPUB (`fonction == 'reglement'`) résolvent
+    automatiquement `reglement-de` ; directives et orientations passent par `relations.json`.
     """
+    if law.get("source") == "pdf":
+        return law.get("fonction") == "reglement" and ", r." in (law.get("official_cite") or "")
     if (law.get("jurisdiction") or "qc") != "qc":
         return (law.get("fonction") or "loi") != "loi"
     return ", r." in (law.get("official_cite") or "")
@@ -161,7 +174,7 @@ class CleEnCollision(RuntimeError):
 def _carte(laws: list[dict], root: bool, seulement_lois: bool) -> dict[tuple[str, str], str]:
     out: dict[tuple[str, str], str] = {}
     for l in laws:
-        if seulement_lois and _is_regulation(l):
+        if seulement_lois and (l.get("source") == "pdf" or _is_regulation(l)):
             continue
         k = cle_de(l, root=root)
         if not k[1]:
@@ -182,10 +195,11 @@ def _carte(laws: list[dict], root: bool, seulement_lois: bool) -> dict[tuple[str
 
 
 def epubs_manquants(laws: list[dict], samples_dir: Path | None = None) -> list[str]:
-    """Textes québécois dont l'EPUB FR n'est pas sur le disque (donc dont les renvois ne
+    """Textes québécois EPUB dont l'EPUB FR n'est pas sur le disque (donc dont les renvois ne
     seront PAS moissonnés)."""
     return [l["id"] for l in laws
             if (l.get("jurisdiction") or "qc") == "qc"
+            and (l.get("source") or "epub") == "epub"
             and not _fr_epub_path(l["id"], samples_dir).exists()]
 
 
@@ -202,7 +216,10 @@ def build(
     # reconstruction « réussit » en ne recréant presque rien.
     manquants = epubs_manquants(target_laws, samples_dir=samples_dir)
     if manquants and not accepter_corpus_partiel:
-        attendus = sum(1 for l in target_laws if (l.get("jurisdiction") or "qc") == "qc")
+        attendus = sum(
+            1 for l in target_laws
+            if (l.get("jurisdiction") or "qc") == "qc" and (l.get("source") or "epub") == "epub"
+        )
         dossier = samples_dir if samples_dir is not None else config.SAMPLES_DIR
         raise CorpusEpubIncomplet(
             f"{len(manquants)} EPUB FR sur {attendus} absents de {dossier} : "
@@ -238,7 +255,7 @@ def build(
     # convention, un fichier XML partirait dans un lecteur de zip. Et surtout, la moisson
     # de renvois LIMS n'est pas écrite : la déclarer ici serait mentir sur la couverture.
     for l in target_laws:
-        if (l.get("jurisdiction") or "qc") != "qc":
+        if (l.get("jurisdiction") or "qc") != "qc" or (l.get("source") or "epub") != "epub":
             continue
         epub = _fr_epub_path(l["id"], samples_dir)
         if not epub.exists():

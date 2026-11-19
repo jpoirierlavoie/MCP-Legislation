@@ -200,6 +200,15 @@ jobs:
           npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('refresh_state')" \
             | grep -q '"n": *3' || { echo "refresh_state absente ou incomplète"; exit 1; }
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='source'" \
+            | grep -q '"n": *1' || { echo "laws.source absente après 0007"; exit 1; }
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('articles') WHERE name='links'" \
+            | grep -q '"n": *1' || { echo "articles.links absente après 0007"; exit 1; }
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT name AS n FROM pragma_table_info('articles_fts') WHERE cid=0" \
+            | grep -q '"n": *"text"' || { echo "articles_fts : text pas en position 0"; exit 1; }
           rm -rf "$T"
 
       - name: Paquet de déploiement (à blanc)

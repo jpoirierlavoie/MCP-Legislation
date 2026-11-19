@@ -9,11 +9,18 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import {
   agregeParSeau,
+  checkPdfBuffer,
   classify,
   computeDrift,
   extractConsolidation,
   extractConsolidationFederale,
+  extractPdfIndexDrift,
+  fetchLivePdf,
+  isCloudflare403,
+  loadPdfProfilePins,
   NOM_PUBLIEUR,
+  parsePdfHeader,
+  sha256HexBytes,
   UNREACHABLE_ALERT_RATIO,
 } from "./check-consolidation.mjs";
 
@@ -338,4 +345,195 @@ test("agregeParSeau : une loi sans langue reste actionnable, DANS SON seau", () 
   assert.equal(r.drift, true);
   assert.equal(r.seaux.get("justice").drift, true);
   assert.equal(r.seaux.get("legisquebec").drift, false);
+});
+
+// ---------------------------------------------------------------------------------------
+// TROISIÈME SEAU : SOURCES PDF (QCCS / QCCQ / AMF) — hors ligne
+// ---------------------------------------------------------------------------------------
+
+test("parsePdfHeader & checkPdfBuffer : valide %PDF-, rejette soft-404 HTML, détecte dérive SHA-256", () => {
+  const pdfBytes = Buffer.from("%PDF-1.7\n1 0 obj << /ModDate (D:20260223120000-05'00') >>\n%%EOF");
+  const hdr = parsePdfHeader(pdfBytes);
+  assert.equal(hdr.valid, true);
+  assert.equal(hdr.modDate, "2026-02-23");
+
+  const expected = sha256HexBytes(pdfBytes);
+  const okRes = checkPdfBuffer(pdfBytes, { expectedSha256: expected, storedDate: "2026-02-23" });
+  assert.equal(okRes.status, "ok");
+  assert.equal(okRes.shaDrift, false);
+
+  const driftRes = checkPdfBuffer(pdfBytes, {
+    expectedSha256: "0".repeat(64),
+    storedDate: "2026-02-23",
+  });
+  assert.equal(driftRes.status, "ok");
+  assert.equal(driftRes.shaDrift, true);
+
+  const htmlSoft404 = Buffer.from("<!doctype html><html><body>Introuvable</body></html>");
+  const badRes = checkPdfBuffer(htmlSoft404, {
+    expectedSha256: expected,
+    storedDate: "2026-02-23",
+  });
+  assert.equal(badRes.status, "illisible");
+
+  const missingPin = checkPdfBuffer(pdfBytes, {
+    expectedSha256: undefined,
+    storedDate: "2026-02-23",
+  });
+  assert.equal(missingPin.status, "illisible");
+  assert.match(missingPin.note, /SHA-256/i);
+});
+
+test("extractPdfIndexDrift : page d'index qccs-div-mtl (match, renommage, aucun lien)", () => {
+  const baseUrl =
+    "https://coursuperieureduquebec.ca/division-de-montreal/directives-et-annexes-en-vigueur";
+  const htmlOk = `<p>À jour au 1<sup>er</sup> janvier 2026</p><a href="/fileadmin/Directives_de_la_division_de_Montreal.pdf">Directives</a>`;
+  const rOk = extractPdfIndexDrift(htmlOk, {
+    expectedFilename: "Directives_de_la_division_de_Montreal.pdf",
+    baseUrl,
+  });
+  assert.equal(rOk.status, "ok");
+  assert.equal(rOk.shaDrift, false);
+  assert.equal(rOk.liveDate, "2026-01-01");
+  assert.equal(
+    rOk.matchedUrl,
+    "https://coursuperieureduquebec.ca/fileadmin/Directives_de_la_division_de_Montreal.pdf",
+  );
+
+  const htmlRenamed = `<a href="/fileadmin/Directives_de_la_division_de_Montreal_2026_11.pdf">Nouveau</a>`;
+  const rDrift = extractPdfIndexDrift(htmlRenamed, {
+    expectedFilename: "Directives_de_la_division_de_Montreal.pdf",
+    baseUrl,
+  });
+  assert.equal(rDrift.status, "ok");
+  assert.equal(rDrift.shaDrift, true);
+
+  const rEmpty = extractPdfIndexDrift("<html><body>Aucun document</body></html>", {
+    expectedFilename: "Directives_de_la_division_de_Montreal.pdf",
+    baseUrl,
+  });
+  assert.equal(rEmpty.status, "illisible");
+
+  const rEncoded = extractPdfIndexDrift(
+    '<a href="/fileadmin/Directives%20de%20la%20division%20de%20Montreal.pdf">Directives</a>',
+    {
+      expectedFilename: "Directives de la division de Montreal.pdf",
+      baseUrl,
+    },
+  );
+  assert.equal(rEncoded.status, "ok");
+  assert.equal(rEncoded.shaDrift, false);
+});
+
+test("fetchLivePdf : classe Cloudflare 403 en injoignable et suit page d'index vers PDF", async () => {
+  assert.equal(isCloudflare403(403, new Headers({ "cf-mitigated": "challenge" }), ""), true);
+  assert.equal(
+    isCloudflare403(403, new Headers(), "<html><title>Just a moment...</title></html>"),
+    true,
+  );
+
+  const r403 = await fetchLivePdf(
+    "https://courduquebec.ca/fileadmin/test.pdf",
+    { filename: "test.pdf", sha256: "a".repeat(64) },
+    "2026-01-01",
+    async () =>
+      new Response("<html>Just a moment...</html>", {
+        status: 403,
+        headers: { "cf-mitigated": "challenge" },
+      }),
+  );
+  assert.equal(r403.status, "injoignable");
+  assert.match(r403.note, /Cloudflare 403/);
+
+  const pdfBytes = Buffer.from("%PDF-1.7\ncontenu\n%%EOF");
+  const expectedSha = sha256HexBytes(pdfBytes);
+  const indexHtml = '<a href="/files/Directives_de_la_division_de_Montreal.pdf">Directives</a>';
+  const rIdx = await fetchLivePdf(
+    "https://coursuperieureduquebec.ca/division-de-montreal/directives-et-annexes-en-vigueur",
+    { filename: "Directives_de_la_division_de_Montreal.pdf", sha256: expectedSha },
+    "2026-01-01",
+    async (u) => {
+      if (String(u).endsWith(".pdf")) {
+        return new Response(pdfBytes, {
+          status: 200,
+          headers: { "content-type": "application/pdf" },
+        });
+      }
+      return new Response(indexHtml, { status: 200, headers: { "content-type": "text/html" } });
+    },
+  );
+  assert.equal(rIdx.status, "ok");
+  assert.equal(rIdx.shaDrift, false);
+});
+
+test("agregeParSeau : isole le 3e seau 'pdf' et classe shaDrift en retard", () => {
+  const checks = [
+    ...Array.from({ length: 13 }, () =>
+      ctl("pdf", "injoignable", {
+        note: "Cloudflare 403 (challenge WAF — vérification manuelle requise)",
+      }),
+    ),
+    ...Array.from({ length: 158 }, () => ctl("legisquebec", "ok")),
+    ...Array.from({ length: 36 }, () => ctl("justice", "ok")),
+  ];
+  const r = agregeParSeau(checks);
+  assert.equal(r.unreachableAlert, true);
+  assert.equal(r.drift, false);
+  assert.deepEqual(r.bloquees, [NOM_PUBLIEUR.pdf]);
+  assert.equal(r.seaux.size, 3);
+  assert.equal(r.seaux.get("legisquebec").unreachableAlert, false);
+  assert.equal(r.seaux.get("justice").unreachableAlert, false);
+
+  const driftChecks = [
+    ctl("pdf", "ok", { shaDrift: true, note: "empreinte SHA-256 modifiée" }),
+    ctl("legisquebec", "ok"),
+  ];
+  const rDrift = agregeParSeau(driftChecks);
+  assert.equal(rDrift.drift, true);
+  assert.equal(rDrift.seaux.get("pdf").retard.length, 1);
+});
+
+test("loadPdfProfilePins : charge les 13 empreintes SHA-256 des profils PDF", () => {
+  const pins = loadPdfProfilePins(RACINE);
+  assert.equal(pins.size, 13);
+  assert.ok(pins.get("qccs-div-mtl")?.fr?.sha256);
+  assert.equal(pins.get("qccs-div-mtl")?.fr?.filename, "Directives_de_la_division_de_Montreal.pdf");
+});
+
+test("extractPdfIndexDrift : le nom de fichier exact prime sur un préfixe antérieur (Annexe_<cible>.pdf)", () => {
+  const baseUrl =
+    "https://coursuperieureduquebec.ca/division-de-montreal/directives-et-annexes-en-vigueur";
+  const html =
+    '<a href="/fileadmin/Annexe_Directives_de_la_division_de_Montreal.pdf">Annexe</a>' +
+    '<a href="/fileadmin/Directives_de_la_division_de_Montreal.pdf">Directives</a>';
+  const r = extractPdfIndexDrift(html, {
+    expectedFilename: "Directives_de_la_division_de_Montreal.pdf",
+    baseUrl,
+  });
+  assert.equal(r.status, "ok");
+  assert.equal(r.shaDrift, false);
+  assert.equal(
+    r.matchedUrl,
+    "https://coursuperieureduquebec.ca/fileadmin/Directives_de_la_division_de_Montreal.pdf",
+  );
+});
+
+test("fetchLivePdf : borne le suivi d'index à 1 saut et classe une boucle HTML 200 en illisible", async () => {
+  let calls = 0;
+  const htmlLoop =
+    '<html><body><a href="/fileadmin/Directives_de_la_division_de_Montreal.pdf">Directives</a></body></html>';
+  const r = await fetchLivePdf(
+    "https://coursuperieureduquebec.ca/division-de-montreal/directives-et-annexes-en-vigueur",
+    { filename: "Directives_de_la_division_de_Montreal.pdf", sha256: "a".repeat(64) },
+    "2026-01-01",
+    async () => {
+      calls += 1;
+      return new Response(htmlLoop, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      });
+    },
+  );
+  assert.ok(calls <= 2, `attendu <= 2 appels fetch, obtenu ${calls}`);
+  assert.equal(r.status, "illisible");
 });

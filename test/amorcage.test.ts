@@ -60,6 +60,23 @@ describe("la base de test porte le schéma de production", () => {
       .prepare("SELECT name, cid FROM pragma_table_info('articles_fts')")
       .all<{ name: string; cid: number }>();
     expect(results.find((r) => r.cid === 0)?.name).toBe("text");
+    expect(results.map((r) => r.name)).not.toContain("links");
+  });
+
+  it("la migration 0007 ajoute laws.source (défaut 'epub') et articles.links sans reconstruire FTS", async () => {
+    const lawCols = (
+      await db()
+        .prepare("SELECT name, dflt_value FROM pragma_table_info('laws')")
+        .all<{ name: string; dflt_value: string | null }>()
+    ).results;
+    const sourceCol = lawCols.find((c) => c.name === "source");
+    expect(sourceCol).toBeDefined();
+    expect(sourceCol?.dflt_value).toBe("'epub'");
+
+    const artCols = (
+      await db().prepare("SELECT name FROM pragma_table_info('articles')").all<{ name: string }>()
+    ).results;
+    expect(artCols.map((c) => c.name)).toContain("links");
   });
 
   it("une écriture puis une lecture fonctionnent — la base est UTILISABLE", async () => {
@@ -68,10 +85,11 @@ describe("la base de test porte le schéma de production", () => {
       .bind("essai", "Loi d'essai", "Test Act", "RLRQ, c. E-1")
       .run();
     const l = await db()
-      .prepare("SELECT name_fr FROM laws WHERE id = ?")
+      .prepare("SELECT name_fr, source FROM laws WHERE id = ?")
       .bind("essai")
-      .first<{ name_fr: string }>();
+      .first<{ name_fr: string; source: string }>();
     expect(l?.name_fr).toBe("Loi d'essai");
+    expect(l?.source).toBe("epub");
   });
 
   it("chaque fichier de test repart d'une base NEUVE", async () => {

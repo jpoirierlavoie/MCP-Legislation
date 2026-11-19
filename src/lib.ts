@@ -4,6 +4,7 @@
 import {
   depthOf,
   isFederalPath,
+  isPdfPath,
   segmentsOf,
   subtreeBinds,
   subtreeClause,
@@ -13,12 +14,26 @@ import type { DivisionLite, LawLite, RelationLite, SubjectLite, SubjectMapLite }
 import {
   DIVISION_MATCH_MAX,
   DIVISION_MATCH_MIN_SCORE,
+  FONCTION_WEIGHTS,
+  fonctionWeight,
   normalize,
   RELAX_MIN_LOO_TOTAL,
   RRF_K,
   SEMANTIC_MIN_SCORE,
   VECTOR_TOP_K,
 } from "./relevance";
+
+export type LawSource = "epub" | "lims" | "pdf";
+
+export type LawFonction =
+  | "loi"
+  | "reglement"
+  | "regles-procedure"
+  | "tarif"
+  | "directive"
+  | "orientation";
+
+export type CorpusGateEnv = { FEDERAL_CORPUS?: string; PDF_CORPUS?: string };
 
 export interface LawRow {
   id: string;
@@ -50,6 +65,13 @@ export interface LawRow {
   official_cite_en?: string | null;
   consol_date_fr: string | null;
   consol_date_en: string | null;
+  /** Provenance d'ingestion ('epub' | 'lims' | 'pdf', migration 0007). */
+  source?: LawSource;
+  chapter?: string | null;
+  jurisdiction?: string;
+  in_force?: number;
+  last_amended?: string | null;
+  unit?: Unit | string | null;
   // colonnes de la couche découverte (schema-decouverte.sql)
   fonction: string | null;
   forum: string | null; // multi-valeurs jointes par ' ; '
@@ -80,6 +102,28 @@ export interface DivisionRow {
  * assertion que rien ne vérifie. `html` reste écrite par le pipeline ; `sort_key` sert aux
  * `ORDER BY` et aux bornes de plage, jamais à la sortie.
  */
+export interface ArticleLink {
+  label: string;
+  url: string;
+}
+
+export function parseLinks(raw: string | null | undefined): ArticleLink[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (x): x is ArticleLink =>
+        !!x &&
+        typeof x === "object" &&
+        typeof (x as ArticleLink).label === "string" &&
+        typeof (x as ArticleLink).url === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
 export interface ArticleRow {
   id: number;
   law_id: string;
@@ -89,6 +133,7 @@ export interface ArticleRow {
   text: string;
   history: string | null;
   repealed: number;
+  links: string | null;
 }
 
 export type Lang = "fr" | "en";
@@ -101,24 +146,44 @@ export type Lang = "fr" | "en";
  */
 export const DISPOSITION_SORT_BASE = 9_000_000_000_000_000;
 
+const SORT_COMP_RE = /^(\d+)([A-Za-z]?)$/;
+const SORT_BASES = [13_500, 2_700, 864] as const;
+const SORT_MAX_NUMS = [9999, 499, 99, 31] as const;
+
 /**
- * Clé de tri — MIROIR EXACT de sort_key() dans pipeline/model.py : packing en base 1000
- * de l'entier et de jusqu'à 4 niveaux décimaux, normalisé à 5 composantes
- * (132 < 132.0.1 < 133, et gère 350.52.0.1).
+ * Clé de tri — MIROIR EXACT de sort_key() dans pipeline/model.py : packing mixte à 4 composantes
+ * (c0..c3) avec suffixe lettre optionnel A–Z (27 états), strictement < DISPOSITION_SORT_BASE.
  *
  * ⚠️ Cette fonction et sa jumelle Python DOIVENT rester alignées : elles indexent la même
  * colonne `articles.sort_key`. Une divergence d'échelle rend les plages silencieusement
  * vides (le mode from/to ne trouve plus rien).
- * Max ≈ 3168 * 1000^4 ≈ 3.17e15 < 2^53 : exact en nombre JS.
+ * Max = 270000*13500*2700*864 - 1 = 8_503_055_999_999_999 < 9e15 < 2^53 : exact en nombre JS.
  */
 export function sortKeyOf(article: string): number {
-  if (article === "préliminaire") return 0;
+  if (
+    article === "préliminaire" ||
+    article === "preambule" ||
+    article === "preamble" ||
+    article === "note-preliminaire"
+  )
+    return 0;
   const parts = article.split(".");
-  if (!/^\d+$/.test(parts[0])) return DISPOSITION_SORT_BASE;
-  const comps = parts.slice(0, 5);
-  let key = 0;
-  for (const p of comps) key = key * 1000 + (/^\d+$/.test(p) ? parseInt(p, 10) : 0);
-  for (let i = comps.length; i < 5; i++) key *= 1000;
+  if (!SORT_COMP_RE.test(parts[0])) return DISPOSITION_SORT_BASE;
+  const comps = parts.slice(0, 4);
+  const vals: number[] = [];
+  for (let i = 0; i < comps.length; i++) {
+    const m = SORT_COMP_RE.exec(comps[i]);
+    if (m) {
+      const n = Math.min(parseInt(m[1], 10), SORT_MAX_NUMS[i]);
+      const letCode = m[2] ? m[2].toUpperCase().charCodeAt(0) - 64 : 0;
+      vals.push(n * 27 + letCode);
+    } else {
+      vals.push(0);
+    }
+  }
+  while (vals.length < 4) vals.push(0);
+  let key = vals[0];
+  for (let i = 0; i < SORT_BASES.length; i++) key = key * SORT_BASES[i] + vals[i + 1];
   return key;
 }
 
@@ -137,19 +202,26 @@ export function citeOf(l: Pick<LawRow, "rlrq_cite" | "official_cite">): string {
 
 /**
  * Unité de numérotation d'un texte. Les *Règles des Cours fédérales* se citent par
- * RÈGLE, non par article — « règle 400 R.C.F. », et `rule 400` en anglais.
+ * RÈGLE, les directives judiciaires par PARAGRAPHE (`par.` / `para.`), et le reste par ARTICLE.
  */
-export type Unit = "article" | "regle";
+export type Unit = "article" | "regle" | "paragraphe";
 
 /** Le mot d'unité, par langue. Table EXPLICITE : une règle de dérivation mentirait. */
 const MOT_UNITE: Record<Unit, Record<Lang, string>> = {
   article: { fr: "art.", en: "s." },
   regle: { fr: "règle", en: "rule" },
+  paragraphe: { fr: "par.", en: "para." },
 };
+
+export function unitLabel(unit: string | null | undefined, lang: Lang = "fr"): string {
+  const u: Unit = unit === "regle" ? "regle" : unit === "paragraphe" ? "paragraphe" : "article";
+  return MOT_UNITE[u][lang];
+}
 
 /** Pseudo-articles, par langue. Table explicite pour la même raison. */
 const MOT_PSEUDO: Record<string, Record<Lang, string>> = {
   préliminaire: { fr: "disposition préliminaire", en: "preliminary provision" },
+  "note-preliminaire": { fr: "note préliminaire", en: "preliminary note" },
   finales: { fr: "dispositions finales", en: "final provisions" },
   preambule: { fr: "préambule", en: "preamble" },
   preamble: { fr: "préambule", en: "preamble" },
@@ -182,7 +254,8 @@ export function citationOf(
   const cite = citeEn || citeOf(law);
   const pseudo = MOT_PSEUDO[article];
   if (pseudo) return `${cite}, ${pseudo[langueDeSortie]}`;
-  const unite: Unit = law.unit === "regle" ? "regle" : "article";
+  const unite: Unit =
+    law.unit === "regle" ? "regle" : law.unit === "paragraphe" ? "paragraphe" : "article";
   return `${cite}, ${MOT_UNITE[unite][langueDeSortie]} ${article}`;
 }
 
@@ -232,18 +305,20 @@ export function paginate(limit?: number, offset?: number, def = 50, max = 200): 
 export async function getLaw(
   db: D1Database,
   lawId: string,
-  env: { FEDERAL_CORPUS?: string } = {},
+  env: CorpusGateEnv = {},
 ): Promise<LawRow | null> {
-  const masque = federalOuvert(env) ? "" : " AND jurisdiction = 'qc'";
+  const c = clauseCorpus(env, "");
+  const masque = c ? ` AND ${c}` : "";
   return db.prepare(`SELECT * FROM laws WHERE id = ?${masque}`).bind(lawId).first<LawRow>();
 }
 
 /**
  * Clause de masquage pour une colonne portant un `law_id` (FTS, subject_map, relations…).
- * Vide quand l'interrupteur est ouvert.
+ * Vide quand les deux interrupteurs sont ouverts.
  */
-export function masqueLawId(env: { FEDERAL_CORPUS?: string }, col: string): string {
-  return federalOuvert(env) ? "" : `AND ${col} IN (SELECT id FROM laws WHERE jurisdiction = 'qc')`;
+export function masqueLawId(env: CorpusGateEnv, col: string): string {
+  const c = clauseCorpus(env, "");
+  return c ? `AND ${col} IN (SELECT id FROM laws WHERE ${c})` : "";
 }
 
 /**
@@ -254,7 +329,7 @@ export function masqueLawId(env: { FEDERAL_CORPUS?: string }, col: string): stri
  * aucune ligne dans `laws`. Le `IN (SELECT id FROM laws …)` de `masqueLawId` les supprimerait
  * toutes — ce serait une régression québécoise causée par l'interrupteur fédéral. On exige
  * donc l'inverse : on ne retire une arête que si son autre bout est une loi PRÉSENTE en base
- * et NON québécoise.
+ * et masquée (non québécoise ou source PDF quand l'interrupteur correspondant est fermé).
  *
  * Mesuré en production le 2026-09-11 : 0 arête concernée aujourd'hui, parce que
  * `discovery/relations.py` n'a pas encore été rejoué depuis l'ingestion d'`ca-i-15`. Ce
@@ -262,10 +337,13 @@ export function masqueLawId(env: { FEDERAL_CORPUS?: string }, col: string): stri
  * qui l'arme. « Comme si le texte n'était pas chargé » veut dire ici que l'arête n'existe
  * pas : avant l'ingestion, aucune arête ne référençait un id `ca-*`.
  */
-export function masqueAutreBout(env: { FEDERAL_CORPUS?: string }, col: string): string {
-  return federalOuvert(env)
-    ? ""
-    : `AND NOT EXISTS (SELECT 1 FROM laws WHERE id = ${col} AND jurisdiction <> 'qc')`;
+export function masqueAutreBout(env: CorpusGateEnv, col: string): string {
+  const excl: string[] = [];
+  if (!federalOuvert(env)) excl.push("jurisdiction <> 'qc'");
+  if (!pdfOuvert(env)) excl.push("source = 'pdf'");
+  return excl.length
+    ? `AND NOT EXISTS (SELECT 1 FROM laws WHERE id = ${col} AND (${excl.join(" OR ")}))`
+    : "";
 }
 
 export interface MappedDivision {
@@ -328,24 +406,33 @@ export interface LawFilters {
  * puis expliquées, jamais ignorées. Les 17 textes restants ajoutent ~6 800 articles (+13,8 %),
  * donc ces bascules seront plus fréquentes, pas moins.
  */
-export function federalOuvert(env: { FEDERAL_CORPUS?: string }): boolean {
+export function federalOuvert(env: CorpusGateEnv): boolean {
   return env.FEDERAL_CORPUS === "1";
 }
 
-/** Clause SQL de masquage, à coller dans un WHERE. Vide quand l'interrupteur est ouvert. */
-export function clauseJuridiction(env: { FEDERAL_CORPUS?: string }, alias = "l"): string {
-  return federalOuvert(env) ? "" : `${alias}.jurisdiction = 'qc'`;
+/** L'interrupteur du corpus PDF (R8 : fermé par défaut tant qu'il ne vaut pas "1"). */
+export function pdfOuvert(env: CorpusGateEnv): boolean {
+  return env.PDF_CORPUS === "1";
+}
+
+/** Clause SQL de masquage combinée (fédéral + PDF), à coller dans un WHERE. Vide si tout ouvert. */
+export function clauseCorpus(env: CorpusGateEnv, alias = "l"): string {
+  const p = alias ? `${alias}.` : "";
+  const conds: string[] = [];
+  if (!federalOuvert(env)) conds.push(`${p}jurisdiction = 'qc'`);
+  if (!pdfOuvert(env)) conds.push(`${p}source <> 'pdf'`);
+  return conds.join(" AND ");
 }
 
 export async function listLaws(
   db: D1Database,
   filters: LawFilters = {},
   lang: Lang = "fr",
-  env: { FEDERAL_CORPUS?: string } = {},
+  env: CorpusGateEnv = {},
 ): Promise<LawSummary[]> {
   const where: string[] = [];
   const binds: unknown[] = [];
-  const masque = clauseJuridiction(env);
+  const masque = clauseCorpus(env);
   if (masque) where.push(masque);
   if (filters.jurisdiction) {
     where.push("l.jurisdiction = ?");
@@ -526,7 +613,7 @@ export async function translateDivisionPath(
   // pont par les numéros d'articles rendrait ici une division DESCENDANTE — une réponse
   // fausse, pas vide. Le no-op est donc EXPLICITE, au lieu d'être espéré d'une
   // segmentation juste.
-  if (isFederalPath(path)) {
+  if (isFederalPath(path) || isPdfPath(path)) {
     return (
       (await db
         .prepare("SELECT path, heading FROM divisions WHERE law_id = ? AND lang = ? AND path = ?")
@@ -652,7 +739,7 @@ export interface SubjectSummary {
 
 export async function listSubjects(
   db: D1Database,
-  env: { FEDERAL_CORPUS?: string } = {},
+  env: CorpusGateEnv = {},
 ): Promise<SubjectSummary[]> {
   // Le masque va dans le ON du LEFT JOIN, PAS dans le WHERE : au WHERE, une matière mappée
   // uniquement à des textes masqués DISPARAÎTRAIT de la taxonomie, alors qu'au ON elle reste
@@ -700,7 +787,7 @@ export async function relatedLaws(
   relType: string | undefined,
   direction: "out" | "in" | "both",
   lang: Lang = "fr",
-  env: { FEDERAL_CORPUS?: string } = {},
+  env: CorpusGateEnv = {},
 ): Promise<RelationEdge[]> {
   const typeClause = relType ? "AND rel_type = ?" : "";
   // Le bout SUJET est déjà gardé : `related_laws` passe par `getLaw(db, law, env)` et
@@ -892,7 +979,7 @@ export async function boundRef(
  * article ABROGÉ pour en vigueur (`!!undefined === false`). Le seul garde réel est du côté
  * des évals : trois contrôles de tests/evals.mjs inspectent la FORME de la sortie.
  */
-const ARTICLE_COLS = "id, law_id, lang, number, division_path, text, history, repealed";
+const ARTICLE_COLS = "id, law_id, lang, number, division_path, text, history, repealed, links";
 
 /**
  * Articles d'une plage. DEUX chemins, et la réponse DIT lequel a servi (`resolution`) —
@@ -1025,8 +1112,8 @@ export async function articlesInDivision(
     .bind(lawId, lang, ...subBinds)
     .first<{ n: number }>())!.n;
   const cols = includeText
-    ? "number, division_path, text, history, repealed"
-    : "number, division_path, repealed";
+    ? "number, division_path, text, history, repealed, links"
+    : "number, division_path, repealed, links";
   const rows = (
     await db
       .prepare(
@@ -1120,6 +1207,12 @@ function pruneDepth(nodes: StructureNode[], depth: number): void {
 
 // --- analyse d'une citation libre (resolve_reference) -------------------
 
+export interface AmbiguousLaw {
+  id: string;
+  official_cite: string;
+  name_fr: string;
+}
+
 export interface ParsedCitation {
   law: string | null;
   article: string | null;
@@ -1132,6 +1225,8 @@ export interface ParsedCitation {
    * Aujourd'hui une seule valeur : « C-25 », l'ANCIEN Code de procédure civile.
    */
   hors_corpus: string | null;
+  /** Candidats multiples quand la citation est ambiguë (ex. « Directives C.S. », « 45-106 »). */
+  ambigu: AmbiguousLaw[] | null;
 }
 
 /**
@@ -1149,55 +1244,176 @@ function chapterRegex(chapter: string): RegExp {
     .filter((c) => !/\s/.test(c))
     .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("\\s*");
-  return new RegExp(`(?<![A-Za-z0-9-])${esc}(?![A-Za-z0-9-])(?!\\.\\d)`, "i");
+  const regGuard = /,\s*r\./i.test(chapter) ? "" : "(?!\\s*(?:,|\\s)\\s*r\\.\\s*[0-9])";
+  return new RegExp(`(?<![A-Za-z0-9-])${esc}(?![A-Za-z0-9-])(?!\\.\\d)${regGuard}`, "i");
 }
 
-/** Mention explicite de chapitre (« c. B-1.1 », « chapitre T-16 »), pour refuser en le nommant. */
+/** Mention explicite de chapitre (« c. B-1.1 », « ch. B-3 », « chapitre T-16 »), pour refuser en le nommant. */
 const CHAPITRE_EXPLICITE =
-  /\b(?:c\.|chapitres?|chapters?)\s*([A-Za-z]{1,6}-[0-9][0-9.]*(?:\s*,\s*r\.\s*[0-9][0-9.]*)?)/i;
+  /\b(?:c\.|ch\.|chapitres?|chapters?)\s*([A-Za-z]{1,6}-[0-9][0-9.]*(?:(?:\s*,\s*|\s+)r\.\s*[0-9][0-9.]*)?)/i;
 
 /**
- * Numéro d'article, introduit par un marqueur. « a. » est la forme courante au Québec, et
- « s. » la forme anglaise — leur absence faisait reprendre le NUMÉRO DU CHAPITRE comme
- * numéro d'article (« (chapitre T-16), a. 12 » rendait l'article 16).
+ * Numéro d'article/paragraphe/règle (y compris alphanumérique CSA/AMF : 2A.1, 4B.2),
+ * introduit par un marqueur. « a. » est la forme courante au Québec, et « s. » la forme
+ * anglaise — ancrées pour ne pas mordre sur « C.S. 115 ».
  */
-const MARQUEUR_ARTICLE = /(?:\barticles?\b|\barts?\.|\ba\.|\bs\.)\s*(\d+(?:\.\d+)*)/i;
+const MARQUEUR_ARTICLE =
+  /(?:(?:\barticles?\b|\barts?\.|\bparagraphes?\b|\bpara\.|\bpar\.|\bdir\.|\br[eè]gles?\b|\brules?\b|(?<![A-Za-zÀ-ÿ0-9.])a\.|(?<![A-Za-zÀ-ÿ0-9.])s\.)\s*|§\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*(?![A-Za-z0-9]))/i;
+
+const AMF_PAIRS: Record<string, { regId: string; igId: string }> = {
+  "31-103": { regId: "v-1.1-r.10", igId: "amf-ig-31-103" },
+  "45-106": { regId: "v-1.1-r.21", igId: "amf-ig-45-106" },
+  "51-102": { regId: "v-1.1-r.24", igId: "amf-ig-51-102" },
+};
+const AMF_REG_IDS = new Set(Object.values(AMF_PAIRS).map((p) => p.regId));
+
+/** Districts, villes et régions administratives du Québec non couverts par un texte QCCS/QCCQ ingéré. */
+const AUTRES_DISTRICTS_QC =
+  /\b(?:laval|longueuil|sherbrooke|gatineau|trois[- ]rivieres|rimouski|saguenay|chicoutimi|alma|terrebonne|joliette|saint[- ]jerome|st[- ]jerome|saint[- ]hyacinthe|st[- ]hyacinthe|drummond|drummondville|granby|victoriaville|shawinigan|valleyfield|salaberry|sorel|thetford(?:[- ]mines)?|roberval|sept[- ]iles|baie[- ]comeau|val[- ]d['’ ]?or|val[- ]dor|amos|rouyn(?:[- ]noranda)?|abitibi|outaouais|estrie|mauricie|laurentides|lanaudiere|monteregie|bas[- ]saint[- ]laurent|gaspe|gaspesie|bonaventure|charlevoix|beauce|frontenac|megantic|lac[- ]megantic|arthabaska|richelieu|iberville|bedford|saint[- ]francois|st[- ]francois|kamouraska|mingan|labelle|hull|pontiac|temiscamingue|chaudiere|appalaches|beauharnois|mont[- ]laurier|cowansville|la\s+malbaie|malbaie|perce|montmagny|riviere[- ]du[- ]loup|matane|chibougamau|amqui|new\s+carlisle|campbell['’]?s\s+bay|havre[- ]saint[- ]pierre|havre[- ]st[- ]pierre|sainte[- ]anne[- ]des[- ]monts|ste[- ]anne[- ]des[- ]monts|saint[- ]jean[- ]sur[- ]richelieu|st[- ]jean[- ]sur[- ]richelieu|saint[- ]joseph[- ]de[- ]beauce|st[- ]joseph[- ]de[- ]beauce|saint[- ]maurice|st[- ]maurice|la\s+tuque|ville[- ]marie|iles[- ]de[- ]la[- ]madeleine|chandler|dolbeau|jonquiere|brossard|repentigny|blainville|saint[- ]eustache|st[- ]eustache|magog)\b/i;
+
+const DISTRICT_NON_MTL =
+  /\bdistrict(?:\s+(?:judiciaire|judicial))?\s+(?:de\s+l['’]|de\s+la\s+|de\s+|du\s+|des\s+|d['’]|of\s+)(?!montreal\b|mtl\b)[a-z]/i;
+const DIVISION_QCCS_NON_INGERE =
+  /\bdivision\s+(?:de\s+l['’]|de\s+la\s+|de\s+|du\s+|des\s+|d['’]|of\s+)(?!montreal\b|mtl\b|quebec\b|qc\b|pratique\b|famille\b|civile?\b|criminel(?:le)?\b|commerciale?\b|faillite\b|administrat|appel\b|jeunesse\b)[a-z]/i;
+
+/** Pseudo-articles / annexes nommés (captés avant l'extraction de chiffre nu). */
+const PSEUDO_ANNEXE_TIRETS = /\b(annexe(?:-[a-z0-9]+)+|formulaire(?:-[a-z0-9]+)+)\b/i;
+const ANNEXE_PREPS = "(?:de|du|des|d['’]|au|aux|a|sur|la|le|les|l['’])";
+const ANNEXE_LAW_NOUNS =
+  "(?:loi|code|reglements?|regulations?|act|policy|directives?|mode|cour|court|qccs|qccq|qcca|rlrq|cqlr|lrq|rsq|lrc|cpc|ccq|c\\.|ch\\.|instruction\\s+generale|instructions?\\s+generales?\\s+(?:31-103|45-106|51-102|relati))";
+const ANNEXE_STOP_COMMON = `(?:de|du|des|au|aux|a|sur)\\s+(?:la\\s+|le\\s+|les\\s+|l['’]\\s*)?${ANNEXE_LAW_NOUNS}|(?:de|du|des|d['’]|au|aux|a)\\s+l['’]\\s*(?:instruction|act|amf|article|annexe)|(?:la|le|les)\\s+${ANNEXE_LAW_NOUNS}|${ANNEXE_PREPS}(?=(?:\\s+${ANNEXE_PREPS})*\\s*(?:[,;.)\\]]|$))|d['’](?:instruction|act|amf|une?\\s+(?:loi|reglement|directive))|l['’](?:instruction|act|amf|autorite)|et|and|of|in|for|from|by|on|to|the|relati(?:f|ve)|pris|en|art|par|para|regle|rule|dir|sous|avec|dans|directives?|reglements?|regulations?|instruction\\s+generale|policy|mode|cour|court|qccs|qccq|partie|part|rubrique|item|appendice|appendix`;
+const ANNEXE_STOP_MOTS = `${ANNEXE_STOP_COMMON}|instructions\\s+generales(?=\\s*(?:31-103|45-106|51-102|relati(?:f|ve)s?)\\b)`;
+const ANNEXE_STOP_MOTS_IG = `${ANNEXE_STOP_COMMON}|instructions?\\s+generales?`;
+const ANNEXE_MOT = "[a-z0-9]+(?:-[a-z0-9]+)*(?:['’][a-z0-9]+)?";
+function buildPseudoAnnexeEspace(stopMots: string): RegExp {
+  const stop = `(?:${stopMots})\\b`;
+  const subdiv = `(?:(?:\\s*,\\s*|\\s+)(?:partie|part|rubrique|item|appendice|appendix)\\s+[a-z0-9]+|\\s*,\\s*(?:indications?|instructions?(?!\\s+generales?\\s*(?:31-103|45-106|51-102|relati)|\\s+generale\\b)(?:\\s+generales?)?)(?:\\s+(?:a\\s+l['’]\\s*)?(?!${stop})${ANNEXE_MOT})*(?:\\s+\\d+)?|\\s*,\\s*[a-z]\\.\\s+(?!c\\.|ch\\.|r\\.|${stop})[a-z]{2,}[a-z0-9]*(?:\\s+(?:[–—-]\\s+)?(?:a\\s+l['’]\\s*)?(?!${stop})${ANNEXE_MOT})*)*`;
+  const corps = `(?:(?:division|district)\\s+[a-z0-9]+|${ANNEXE_MOT}(?:\\s+(?:a\\s+l['’]\\s*)?(?!${stop})${ANNEXE_MOT})*)${subdiv}`;
+  return new RegExp(`\\b(annexe|schedule|formulaire)\\s+(${corps})\\b`, "i");
+}
+const PSEUDO_ANNEXE_ESPACE = buildPseudoAnnexeEspace(ANNEXE_STOP_MOTS);
+const PSEUDO_ANNEXE_ESPACE_IG = buildPseudoAnnexeEspace(ANNEXE_STOP_MOTS_IG);
+const PSEUDO_NOTE_PRELIM = /\bnote[- ]pr[ée]liminaire\b/i;
+const PSEUDO_PRELIM = /\b(?:dispositions?\s+pr[ée]liminaires?|pr[ée]liminaire)\b/i;
+const PSEUDO_FINALES = /\b(?:dispositions?\s+finales?|finales)\b/i;
+const PSEUDO_PREAMBULE = /\b(pr[ée]ambule|preamble)\b/i;
+const STRIP_PSEUDO_NORM = new RegExp(
+  `\\b(?:(?:annexe|formulaire)(?:-[a-z0-9]+)+|${PSEUDO_ANNEXE_ESPACE.source}|note[- ]preliminaire|dispositions?[- ]preliminaires?|dispositions?[- ]finales?)\\b`,
+  "gi",
+);
+
+function extractPseudoArticle(rest: string, isIG = false): string | null {
+  const restNorm = rest.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const mTirets = restNorm.match(PSEUDO_ANNEXE_TIRETS);
+  if (mTirets) return mTirets[1].toLowerCase();
+  const mEspace = restNorm.match(isIG ? PSEUDO_ANNEXE_ESPACE_IG : PSEUDO_ANNEXE_ESPACE);
+  if (mEspace) {
+    const prefix = mEspace[1].toLowerCase() === "schedule" ? "annexe" : mEspace[1].toLowerCase();
+    const corps = mEspace[2]
+      .toLowerCase()
+      .replace(/\ba\s+l['’]\s*/g, "")
+      .replace(/\s*[–—]\s*/g, "-")
+      .replace(/\.\s+/g, "-")
+      .replace(/['’]/g, "-")
+      .replace(/\s*,\s*/g, "-")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    return `${prefix}-${corps}`;
+  }
+  if (PSEUDO_NOTE_PRELIM.test(restNorm)) return "note-preliminaire";
+  if (PSEUDO_PRELIM.test(restNorm)) return "préliminaire";
+  if (PSEUDO_FINALES.test(restNorm)) return "finales";
+  const mPreamb = restNorm.match(PSEUDO_PREAMBULE);
+  if (mPreamb) return mPreamb[1].toLowerCase() === "preamble" ? "preamble" : "preambule";
+  return null;
+}
+
+const STRIP_DATES_ET_SALLES = [
+  /\b(?:(?:R\.?\s*L\.?\s*R\.?\s*Q\.?|L\.?\s*R\.?\s*Q\.?|R\.?\s*S\.?\s*Q\.?|C\.?\s*Q\.?\s*L\.?\s*R\.?|RLRQ|CQLR)(?:\s*,)?\s+)?(?:c\.|ch\.|chapitres?|chapters?)\s*[A-Za-z]{1,6}-[0-9][0-9.]*(?:(?:\s*,\s*|\s+)r\.\s*[0-9.]+)?/gi,
+  /(?<![A-Za-z0-9-])(?:31-103|45-106|51-102)(?![A-Za-z0-9-])/gi,
+  /\(\s*(?:Salles?|Rooms?)\s+\d+(?:\.\d+)?(?:(?:\s*,\s*|\s+(?:et|and)\s+)\d+(?:\.\d+)?)*\s*\)/gi,
+  /\b(?:Salles|Rooms)\s+\d+(?:\.\d+)?(?:(?:\s*,\s*\d+(?:\.\d+)?)*\s+(?:et|and)\s+\d+(?:\.\d+)?|(?:\s*,\s*\d+(?:\.\d+)?)*(?=\s*(?:[,;—–-])\s*(?:\d|par|dir|art|r[eè]gle|rule|annexe|formulaire|schedule|§)))?/gi,
+  /\b(?:Salle|Room)\s+\d+(?:\.\d+)?\b/gi,
+  /\b\d{1,2}\s*(?:er|\u1d49\u02b3|re|\u02b3\u1d49|e|\u1d49)?\s+(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)\s+(?:19|20)\d{2}\b/gi,
+  /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*(?:19|20)\d{2}\b/gi,
+  /\b(?:19|20)\d{2}-\d{2}-\d{2}\b/g,
+  /\(\s*(?:19|20)\d{2}\s*\)/g,
+];
+
+const toAmbiguous = (l: LawRow): AmbiguousLaw => ({
+  id: l.id,
+  official_cite: citeOf(l),
+  name_fr: l.name_fr,
+});
+
+function citesInstructionGenerale(norm: string): boolean {
+  if (
+    /\b(?:i\.?\s*g\.?|ig|policy\s+statements?|companion\s+polic(?:y|ies))\b/i.test(norm) ||
+    /\b(?:31-103|45-106|51-102)\s*cp\b/i.test(norm)
+  ) {
+    return true;
+  }
+  const m = norm.match(/\binstructions?\s+generales?\b/i);
+  if (!m || m.index === undefined) return false;
+  const before = norm.slice(0, m.index);
+  const after = norm.slice(m.index + m[0].length);
+  if (!/\b(?:annexe|schedule|formulaire)\b/i.test(before)) return true;
+  return (
+    /(?:de\s+l['’]\s*|des\s+|l['’]\s*)$/i.test(before) ||
+    /^\s*(?:31-103|45-106|51-102|relati(?:f|ve)s?)\b/i.test(after)
+  );
+}
 
 /**
- * Analyse « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 », « article 25 C.p.c. »…
+ * Analyse « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 », « Directives C.S. Montréal, par. 12 »,
+ * « IG 45-106, art. 4B.2 »…
  *
  * Deux pièges que la version naïve (« premier nombre trouvé », « défaut ccq ») ne gérait
  * pas, et qui faisaient rendre SILENCIEUSEMENT le mauvais article de la mauvaise loi :
- *  1. le chapitre contient des chiffres (« c. T-16 » -> article « 16 ») : on retire donc
- *     d'abord le chapitre reconnu, puis on privilégie un numéro introduit par « art. » ;
- *  2. toute citation non reconnue retombait sur le C.c.Q. : on préfère ne rien affirmer.
+ *  1. le chapitre ou la directive contient des chiffres (« c. T-16 », « (2026) », « 45-106 ») :
+ *     on retire d'abord la mention de texte reconnue et les années parenthésées ;
+ *  2. toute citation non reconnue ou ambiguë (ex. « Directives C.S. » ou « 45-106 » nu) est
+ *     refusée plutôt que devinée.
  */
 export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation {
-  // chapitre RLRQ le PLUS LONG présent comme unité complète (« C-25.01, r. 9 » avant « C-25.01 »)
+  const norm = normalize(citation);
+  const amfMatch = norm.match(/(?<![0-9-])(31-103|45-106|51-102)(?![0-9-])/);
+  const isIG = citesInstructionGenerale(norm);
+  const isReg =
+    /\b(?:reglements?|regl\b\.?|regulations?|reg\b\.?|national\s+instruments?|multilateral\s+instruments?|normes?\s+(?:canadiennes?|multilaterales?)|ni|rlrq|cqlr|lrq|rsq)\b|\b(?:r\.?\s*l\.?\s*r\.?\s*q\.?|l\.?\s*r\.?\s*q\.?|r\.?\s*s\.?\s*q\.?|c\.?\s*q\.?\s*l\.?\s*r\.?|n\.?\s*i\.)(?=\s|,|\)|$)/i.test(
+      norm,
+    );
+  const citesV11Act = /\b(?:loi\s+sur\s+les\s+valeurs\s+mobilieres|securities\s+act)\b/i.test(norm);
+
+  // 1) Citation officielle (FR ou EN) la PLUS LONGUE présente comme unité complète
   let law: string | null = null;
   let lawSource: ParsedCitation["law_source"] = null;
   let bestLen = 0;
   let motif: RegExp | null = null;
   for (const l of laws) {
-    const chap = citeOf(l)
-      .replace(/^RLRQ,\s*c\.\s*/i, "")
-      .trim();
-    if (!chap || chap.length <= bestLen) continue;
-    const re = chapterRegex(chap);
-    if (re.test(citation)) {
-      bestLen = chap.length;
-      law = l.id;
-      lawSource = "chapitre";
-      motif = re;
+    // Une citation explicite d'Instruction générale / Policy Statement mentionnant entre
+    // parenthèses le règlement d'accompagnement (« ... (RLRQ, c. V-1.1, r. 21) ») ne doit
+    // pas être détournée par le chapitre RLRQ du règlement à l'étape 1.
+    if (isIG && AMF_REG_IDS.has(l.id)) continue;
+    // Une citation AMF explicite (« Règlement 45-106 … », « IG 45-106 … ») ou mentionnant
+    // la loi habilitante (« RLRQ, c. V-1.1 », « c. V-1.1 », « (V-1.1) ») ne doit pas être
+    // capturée par v-1.1 à l'étape 1, même si elle nomme la Loi sur les valeurs mobilières.
+    if (amfMatch && (!citesV11Act || isIG || isReg) && l.id === "v-1.1") continue;
+    const cands = [citeOf(l), l.official_cite_en ?? ""];
+    for (const rawCite of cands) {
+      const chap = rawCite.replace(/^(?:RLRQ|CQLR),\s*c\.\s*/i, "").trim();
+      if (!chap || chap.length <= bestLen) continue;
+      const re = chapterRegex(chap);
+      if (re.test(citation)) {
+        bestLen = chap.length;
+        law = l.id;
+        lawSource = "chapitre";
+        motif = re;
+      }
     }
   }
-  // L'ANCIEN Code de procédure civile (C-25) EST NOMMÉ, PAS RABATTU. Mesuré en production le
-  // 2026-09-17 : « art. 2 ancien C.p.c. » rendait `RLRQ, c. C-25.01, art. 2` — l'abréviation
-  // « C.p.c. » appariait et le mot « ancien » était ignoré. Or la recodification de 2016 a
-  // TOUT renuméroté : l'article N de l'ancien code n'est pas l'article N du nouveau. C'était
-  // donc une réponse FAUSSE et ASSURÉE, la pire espèce — pire qu'un silence, parce qu'elle
-  // cite une disposition réelle et à jour, qui n'a simplement rien à voir avec la demande.
-  // Un refus circonstancié vaut mieux : le corpus ne porte que C-25.01.
+  // 2) L'ANCIEN Code de procédure civile (C-25) EST NOMMÉ, PAS RABATTU.
   const ancienCpc =
     !law &&
     /c\.?\s*p\.?\s*c\.?|\bcpc\b|code\s+de\s+proc[ée]dure\s+civile|code\s+of\s+civil\s+procedure|\bc\.?\s*c\.?\s*p\.?\b/i.test(
@@ -1205,10 +1421,172 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     ) &&
     /\bancien(?:ne)?s?\b|\bold\b|\bformer\b|\b1965\b/i.test(citation);
 
-  // abréviations usuelles, seulement si aucun chapitre du corpus n'a été reconnu — et JAMAIS
-  // quand la citation désigne explicitement l'ancien code.
+  // 3) Abréviations usuelles & désambiguïsation dynamique sur `laws`
+  let ambigu: AmbiguousLaw[] | null = null;
+  let extraStrip: RegExp | null = null;
   if (!law && !ancienCpc) {
-    if (/c\.?\s*p\.?\s*c\.?|cpc/i.test(citation)) {
+    const byId = new Map(laws.map((l) => [l.id, l]));
+
+    let igFromRegCite: string | null = null;
+    if (isIG && !amfMatch) {
+      for (const pair of Object.values(AMF_PAIRS)) {
+        const regRow = byId.get(pair.regId);
+        if (!regRow) continue;
+        for (const rawCite of [citeOf(regRow), regRow.official_cite_en ?? ""]) {
+          const chap = rawCite.replace(/^(?:RLRQ|CQLR),\s*c\.\s*/i, "").trim();
+          const re = chap ? chapterRegex(chap) : null;
+          if (re?.test(citation)) {
+            igFromRegCite = pair.igId;
+            motif = re;
+            break;
+          }
+        }
+        if (igFromRegCite) break;
+      }
+    }
+
+    if (amfMatch) {
+      const pair = AMF_PAIRS[amfMatch[1]];
+      extraStrip = /(?<![A-Za-z0-9-])(?:31-103|45-106|51-102)(?![A-Za-z0-9-])/gi;
+      if (isIG) {
+        if (byId.has(pair.igId)) {
+          law = pair.igId;
+          lawSource = "abreviation";
+        }
+      } else if (isReg) {
+        if (byId.has(pair.regId)) {
+          law = pair.regId;
+          lawSource = "abreviation";
+        }
+      } else {
+        const cands = [byId.get(pair.regId), byId.get(pair.igId)].filter((x): x is LawRow =>
+          Boolean(x),
+        );
+        if (cands.length > 1) ambigu = cands.map(toAmbiguous);
+        else if (cands.length === 1) {
+          law = cands[0].id;
+          lawSource = "abreviation";
+        }
+      }
+    } else if (igFromRegCite) {
+      if (byId.has(igFromRegCite)) {
+        law = igFromRegCite;
+        lawSource = "abreviation";
+      }
+    } else if (
+      /\b(?:directives?\s+(?:de\s+la\s+)?(?:c\.?\s*s\.?|cour\s+superieure|juge\s+en\s+chef\s+associee)|directives?\s+(?:of\s+(?:the\s+)?)?superior\s+court|superior\s+court(?:\s+of\s+quebec)?\s+directives?|superior\s+court\s+of\s+quebec|dir\.?\s+c\.?\s*s\.?|s\.?\s*c\.?\s*directives?|directives?\s+(?:du\s+)?district\s+de\s+montreal|directives?\s+(?:de\s+la\s+)?division\s+de\s+(?:montreal|quebec)|qccs)\b/i.test(
+        norm,
+      )
+    ) {
+      const qccsLaws = laws.filter((l) => l.id.startsWith("qccs-"));
+      if (qccsLaws.length > 0) {
+        const normSansCour = norm
+          .replace(STRIP_PSEUDO_NORM, " ")
+          .replace(/\bcour\s+superieure\s+du\s+quebec\b/g, "cour superieure")
+          .replace(/\bsuperior\s+court\s+of\s+quebec\b/g, "superior court")
+          .replace(
+            /\b(?:directives?\s+(?:of\s+(?:the\s+)?)?superior\s+court|superior\s+court\s+directives?)\b/g,
+            " ",
+          )
+          .replace(/\bc\.?\s*s\.?\s+du\s+quebec\b/g, "c.s.")
+          .replace(/\bs\.?\s*c\.?\s+of\s+quebec\b/g, "s.c.");
+        if (
+          AUTRES_DISTRICTS_QC.test(normSansCour) ||
+          DISTRICT_NON_MTL.test(normSansCour) ||
+          DIVISION_QCCS_NON_INGERE.test(normSansCour)
+        ) {
+          // District/division explicite hors Montréal/Québec : refuser plutôt que rabattre
+          law = null;
+        } else {
+          const hasDist = /\bdistrict\b/.test(normSansCour);
+          const hasDiv = /\bdivision\b/.test(normSansCour);
+          const hasMtl = /\bmontreal\b|\bmtl\b/.test(normSansCour);
+          const hasQc = /\bquebec\b|\bqc\b/.test(normSansCour);
+          const hasJugeAssociee = /\bjuge\s+en\s+chef\s+associee\b/.test(normSansCour);
+          let cands = qccsLaws;
+          if (hasMtl) {
+            cands = cands.filter((l) =>
+              /montreal|mtl/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+            );
+          }
+          if (hasQc) {
+            cands = cands.filter((l) =>
+              /quebec|\bqc\b/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+            );
+          }
+          if (hasDist) {
+            cands = cands.filter((l) =>
+              /district|\bdist\b/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+            );
+          }
+          if (hasDiv) {
+            cands = cands.filter((l) =>
+              /division|\bdiv\b/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+            );
+          }
+          if (hasJugeAssociee && !hasMtl) {
+            cands = cands.filter((l) =>
+              /juge\s+en\s+chef\s+associee/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+            );
+          }
+          if (cands.length === 1) {
+            law = cands[0].id;
+            lawSource = "abreviation";
+          } else if (cands.length > 1) {
+            ambigu = cands.map(toAmbiguous);
+          }
+        }
+      }
+    } else if (
+      /\b(?:(?:directives?|dir\.?)\s+(?:de\s+la\s+)?(?:c\.?\s*q\.?|cour\s+du\s+quebec)|mode\s+de\s+fonctionnement(?:\s+(?:de\s+la\s+)?(?:c\.?\s*q\.?|cour\s+du\s+quebec))?(?=.*(?:division\s+de\s+pratique|pratique\s+(?:civile|admin)|salles?\s+(?:2\.06|2\.02|13\.09)))|mode\s+de\s+fonctionnement\s+(?:de\s+la\s+)?(?:c\.?\s*q\.?|cour\s+du\s+quebec)|qccq|liste\s+commune\s+de\s+jurisprudence|(?:c\.?\s*q\.?\s+|cour\s+du\s+quebec\s+)?regles\s+simplifiees(?:\s+particulieres)?)\b/i.test(
+        norm,
+      )
+    ) {
+      const qccqLaws = laws.filter((l) => l.id.startsWith("qccq-"));
+      if (qccqLaws.length > 0) {
+        const normSansCourQccq = norm
+          .replace(STRIP_PSEUDO_NORM, " ")
+          .replace(/\bcour\s+du\s+quebec\b/g, "cour")
+          .replace(/\bcourt\s+of\s+quebec\b/g, "court")
+          .replace(/\bc\.?\s*q\.?\s+du\s+quebec\b/g, "c.q.")
+          .replace(/\bc\.?\s*q\.?\s+of\s+quebec\b/g, "c.q.");
+        if (AUTRES_DISTRICTS_QC.test(normSansCourQccq) || DISTRICT_NON_MTL.test(normSansCourQccq)) {
+          law = null;
+        } else {
+          let cands = qccqLaws;
+          const narrow = (re: RegExp) => {
+            cands = cands.filter((l) =>
+              re.test(
+                normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`).replace(
+                  /\bcour\s+du\s+quebec\b/g,
+                  "cour",
+                ),
+              ),
+            );
+          };
+          if (/regles\s+simplifiees|particulieres/.test(normSansCourQccq))
+            narrow(/simplifiees|particulieres/);
+          if (
+            /daa|jurisprudence|liste\s+commune|division\s+administrative\s+et\s+d['’]?\s*appel/.test(
+              normSansCourQccq,
+            )
+          )
+            narrow(/daa|jurisprudence|division\s+administrative\s+et\s+d['’]?\s*appel/);
+          if (/pratique\s+civile|prat\.?\s*civile|2\.06|2\.02/.test(normSansCourQccq))
+            narrow(/prat.*civile|2\.06|2\.02/);
+          if (/pratique\s+admin|prat\.?\s*admin|13\.09/.test(normSansCourQccq))
+            narrow(/prat.*admin|13\.09/);
+          if (/\bmontreal\b|\bmtl\b/.test(normSansCourQccq)) narrow(/montreal|mtl/);
+          if (/\bquebec\b|\bqc\b/.test(normSansCourQccq)) narrow(/quebec|\bqc\b/);
+          if (cands.length === 1) {
+            law = cands[0].id;
+            lawSource = "abreviation";
+          } else if (cands.length > 1) {
+            ambigu = cands.map(toAmbiguous);
+          }
+        }
+      }
+    } else if (/c\.?\s*p\.?\s*c\.?|cpc/i.test(citation)) {
       law = "cpc";
       lawSource = "abreviation";
     } else if (/c\.?\s*c\.?\s*q\.?|ccq/i.test(citation)) {
@@ -1217,21 +1595,31 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     }
   }
 
-  // On retire le chapitre reconnu AVANT de chercher le numéro d'article : sans quoi les
-  // chiffres du chapitre (« T-16 ») sont pris pour l'article.
-  const rest = motif ? citation.replace(motif, " ") : citation;
-  const article = rest.match(MARQUEUR_ARTICLE)?.[1] ?? rest.match(/(\d+(?:\.\d+)*)/)?.[1] ?? null;
+  // 4) Extraction du numéro d'article/paragraphe après retrait du texte reconnu, dates et salles
+  let rest = motif ? citation.replace(motif, " ") : citation;
+  if (extraStrip) rest = rest.replace(extraStrip, " ");
+  for (const stripRe of STRIP_DATES_ET_SALLES) rest = rest.replace(stripRe, " ");
+  const article =
+    rest.match(MARQUEUR_ARTICLE)?.[1] ??
+    extractPseudoArticle(rest, isIG) ??
+    rest.match(/(?<![A-Za-z0-9.-])(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*(?![A-Za-z0-9-]))/)?.[1] ??
+    null;
 
-  // Chapitre explicitement cité mais inconnu du corpus : on le NOMME au lieu de retomber
-  // sur une loi voisine (« c. B-1.1 » n'est pas « c. B-1 »).
-  const explicite = law ? null : (citation.match(CHAPITRE_EXPLICITE)?.[1]?.trim() ?? null);
+  // 5) Chapitre explicitement cité mais inconnu du corpus (jamais déclenché si ambigu)
+  let explicite = law || ambigu ? null : (citation.match(CHAPITRE_EXPLICITE)?.[1]?.trim() ?? null);
+  if (
+    amfMatch &&
+    (!citesV11Act || isIG || isReg) &&
+    explicite &&
+    /^V-1\.1$/i.test(explicite) &&
+    laws.some((l) => l.id === "v-1.1")
+  ) {
+    explicite = null;
+  }
 
-  // Le chapitre C-25 cité SOUS N'IMPORTE QUELLE FORME — « RLRQ, c. C-25 » comme « art. 110
-  // C-25 », qui ne porte pas le « c. » qu'exige CHAPITRE_EXPLICITE. On réutilise
-  // `chapterRegex` plutôt qu'une comparaison de chaîne : c'est lui qui porte l'ancrage
-  // empêchant C-25 de mordre sur C-25.01 (même défaut que « c. B-1 » ⊂ « c. B-1.1 »), et le
-  // vérifier deux fois de deux façons finirait par diverger.
-  const horsCorpus = law ? null : ancienCpc || chapterRegex("C-25").test(citation) ? "C-25" : null;
+  // Le chapitre C-25 cité SOUS N'IMPORTE QUELLE FORME
+  const horsCorpus =
+    law || ambigu ? null : ancienCpc || chapterRegex("C-25").test(citation) ? "C-25" : null;
 
   return {
     law,
@@ -1239,6 +1627,7 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     law_source: law ? lawSource : null,
     chapitre_inconnu: horsCorpus ? null : explicite,
     hors_corpus: horsCorpus,
+    ambigu,
   };
 }
 
@@ -1266,14 +1655,16 @@ export async function loadRelevanceData(
   db: D1Database,
   tokens: string[],
   lang: Lang,
-  env: { FEDERAL_CORPUS?: string } = {},
+  env: CorpusGateEnv = {},
 ): Promise<RelevanceData> {
   // Le masque de l'interrupteur, posé sur CHAQUE source du routeur. `find_relevant` ne
   // passe par aucun `getLaw`, donc le point d'étranglement ne le couvre pas : mesuré, il
   // rendait des candidats fédéraux pendant que `list_laws` annonçait 79 lois.
   const mLaw = masqueLawId(env, "law_id");
-  const mId = federalOuvert(env) ? "" : "WHERE jurisdiction = 'qc'";
+  const cLaws = clauseCorpus(env, "");
+  const mId = cLaws ? `WHERE ${cLaws}` : "";
   const mFrom = masqueLawId(env, "from_law_id");
+  const mTo = masqueAutreBout(env, "to_law_id");
   const [subjects, subjectMap, laws, relations] = await Promise.all([
     db
       .prepare(
@@ -1290,13 +1681,17 @@ export async function loadRelevanceData(
     db
       .prepare(`SELECT subject_id, law_id, division_path FROM subject_map WHERE 1=1 ${mLaw}`)
       .all<SubjectMapLite>(),
-    db
-      .prepare(`SELECT id, name_fr, name_en, name_norm FROM laws ${mId}`)
-      .all<{ id: string; name_fr: string; name_en: string; name_norm: string | null }>(),
+    db.prepare(`SELECT id, name_fr, name_en, name_norm, fonction FROM laws ${mId}`).all<{
+      id: string;
+      name_fr: string;
+      name_en: string;
+      name_norm: string | null;
+      fonction: string | null;
+    }>(),
     db
       .prepare(
         `SELECT from_law_id, to_law_id, rel_type, source, in_corpus, note FROM law_relations ` +
-          `WHERE (source = 'cure' OR rel_type = 'reglement-de') ${mFrom}`,
+          `WHERE (source = 'cure' OR rel_type = 'reglement-de') ${mFrom} ${mTo}`,
       )
       .all<RelationLite>(),
   ]);
@@ -1355,6 +1750,7 @@ export async function loadRelevanceData(
     id: l.id,
     name_fr: lang === "en" ? l.name_en || l.name_fr : l.name_fr,
     name_norm: lang === "en" ? normalize(l.name_en || l.name_fr) : l.name_norm,
+    fonction: l.fonction,
   }));
 
   // S1 apparie le libellé ET la description : sans leur version anglaise, le signal le plus
@@ -1423,6 +1819,22 @@ export async function breadcrumbChains(
       ).results;
       for (const r of rows) nodes.set(`${law}|${r.path}`, r);
     }
+    if (lang === "en") {
+      const missing = list.filter((p) => !nodes.has(`${law}|${p}`));
+      for (let i = 0; i < missing.length; i += 90) {
+        const chunk = missing.slice(i, i + 90);
+        const frRows = (
+          await db
+            .prepare(
+              `SELECT path, kind, number, heading FROM divisions
+             WHERE law_id = ? AND lang = ? AND path IN (${chunk.map(() => "?").join(",")})`,
+            )
+            .bind(law, "fr", ...chunk)
+            .all<CrumbNode>()
+        ).results;
+        for (const r of frRows) nodes.set(`${law}|${r.path}`, r);
+      }
+    }
   }
   const out = new Map<string, CrumbNode[]>();
   for (const r of refs) {
@@ -1454,6 +1866,147 @@ export async function lawNames(
   return new Map(rows.map((r) => [r.id, { name_fr: r.name_fr, name_en: r.name_en }]));
 }
 
+export async function lawLangs(
+  db: D1Database,
+  lawId: string,
+  env: CorpusGateEnv = {},
+): Promise<Lang[]> {
+  const rows = (
+    await db
+      .prepare(
+        `SELECT DISTINCT lang FROM articles WHERE law_id = ? ${masqueLawId(env, "law_id")} ORDER BY lang`,
+      )
+      .bind(lawId)
+      .all<{ lang: Lang }>()
+  ).results;
+  return rows.map((r) => r.lang);
+}
+
+export interface LawMeta {
+  id: string;
+  name_fr: string;
+  name_en: string;
+  source: LawSource;
+  fonction: string | null;
+  unit: string | null;
+}
+
+export async function lawMetas(
+  db: D1Database,
+  ids: string[],
+  env: CorpusGateEnv = {},
+): Promise<Map<string, LawMeta>> {
+  if (!ids.length) return new Map();
+  const rows = (
+    await db
+      .prepare(
+        `SELECT id, name_fr, name_en, source, fonction, unit FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) ` +
+          `${masqueLawId(env, "id")}`,
+      )
+      .bind(...ids)
+      .all<LawMeta>()
+  ).results;
+  return new Map(rows.map((r) => [r.id, r]));
+}
+
+export interface NormativeRelation {
+  direction: "out" | "in";
+  other_id: string;
+  other_name: string | null;
+  rel_type: "preseance-sur" | "interprete";
+  in_corpus: boolean;
+  note: string | null;
+  note_lang: "fr" | null;
+}
+
+export async function normativeRelations(
+  db: D1Database,
+  lawIds: string[],
+  lang: Lang = "fr",
+  env: CorpusGateEnv = {},
+): Promise<Map<string, NormativeRelation[]>> {
+  const out = new Map<string, NormativeRelation[]>();
+  if (!lawIds.length) return out;
+  const ph = lawIds.map(() => "?").join(",");
+  const [outRows, inRows] = await Promise.all([
+    db
+      .prepare(
+        `SELECT from_law_id, to_law_id, rel_type, in_corpus, note FROM law_relations ` +
+          `WHERE rel_type IN ('preseance-sur', 'interprete') AND from_law_id IN (${ph}) ` +
+          `${masqueLawId(env, "from_law_id")} ${masqueAutreBout(env, "to_law_id")}`,
+      )
+      .bind(...lawIds)
+      .all<{
+        from_law_id: string;
+        to_law_id: string;
+        rel_type: "preseance-sur" | "interprete";
+        in_corpus: number;
+        note: string | null;
+      }>(),
+    db
+      .prepare(
+        `SELECT from_law_id, to_law_id, rel_type, in_corpus, note FROM law_relations ` +
+          `WHERE rel_type IN ('preseance-sur', 'interprete') AND to_law_id IN (${ph}) ` +
+          `${masqueLawId(env, "to_law_id")} ${masqueAutreBout(env, "from_law_id")}`,
+      )
+      .bind(...lawIds)
+      .all<{
+        from_law_id: string;
+        to_law_id: string;
+        rel_type: "preseance-sur" | "interprete";
+        in_corpus: number;
+        note: string | null;
+      }>(),
+  ]);
+  const otherIds = new Set<string>();
+  for (const r of outRows.results) if (r.in_corpus) otherIds.add(r.to_law_id);
+  for (const r of inRows.results) if (r.in_corpus) otherIds.add(r.from_law_id);
+  const names = new Map<string, string>();
+  if (otherIds.size) {
+    const oids = [...otherIds];
+    const nameRows = (
+      await db
+        .prepare(
+          `SELECT id, name_fr, name_en FROM laws WHERE id IN (${oids.map(() => "?").join(",")}) ` +
+            `${masqueLawId(env, "id")}`,
+        )
+        .bind(...oids)
+        .all<{ id: string; name_fr: string; name_en: string | null }>()
+    ).results;
+    for (const r of nameRows) {
+      names.set(r.id, (lang === "en" ? r.name_en : r.name_fr) || r.name_fr);
+    }
+  }
+  const pushRel = (lawId: string, rel: NormativeRelation) => {
+    const arr = out.get(lawId);
+    if (arr) arr.push(rel);
+    else out.set(lawId, [rel]);
+  };
+  for (const r of outRows.results) {
+    pushRel(r.from_law_id, {
+      direction: "out",
+      other_id: r.to_law_id,
+      other_name: names.get(r.to_law_id) ?? null,
+      rel_type: r.rel_type,
+      in_corpus: !!r.in_corpus,
+      note: r.note,
+      note_lang: r.note ? "fr" : null,
+    });
+  }
+  for (const r of inRows.results) {
+    pushRel(r.to_law_id, {
+      direction: "in",
+      other_id: r.from_law_id,
+      other_name: names.get(r.from_law_id) ?? null,
+      rel_type: r.rel_type,
+      in_corpus: !!r.in_corpus,
+      note: r.note,
+      note_lang: r.note ? "fr" : null,
+    });
+  }
+  return out;
+}
+
 // --- journal des recherches retiré à l'exécution (Phase 3 — S13, S14, G9) ---
 // Aucune écriture dans `search_log` n'a plus lieu à l'exécution : seuls les compteurs agrégés
 // (`compteur_jour`) et événements techniques sans contenu (`evenement_technique`) sont tenus
@@ -1471,6 +2024,10 @@ export interface SearchHit {
   score?: number;
   /** Résultat issu du seul chemin vectoriel (repérage sémantique). */
   semantic?: boolean;
+  /** Fonction normative de la loi (pour pondération et plafond de diversité). */
+  fonction?: string | null;
+  /** Langue effective du brief matérialisé (ex. 'fr' en repli sur une requête 'en'). */
+  hit_lang?: Lang;
 }
 
 /**
@@ -1546,7 +2103,7 @@ async function runMatch(
   scope: MatchScope,
   page: Page,
   withScore = false,
-  env: { FEDERAL_CORPUS?: string } = {},
+  env: CorpusGateEnv = {},
 ): Promise<{ hits: SearchHit[]; total: number }> {
   const clauses: string[] = [];
   // MATCH BORNÉ À LA COLONNE `text`, et c'est une décision de calibration, pas un détail.
@@ -1589,15 +2146,22 @@ async function runMatch(
     .prepare(`SELECT COUNT(*) AS n FROM articles_fts WHERE ${where}`)
     .bind(...binds)
     .first<{ n: number }>();
-  const scoreCol = withScore ? ", bm25(articles_fts) AS score" : "";
+  const weightExpr =
+    `(CASE l.fonction WHEN 'directive' THEN ${FONCTION_WEIGHTS.directive} ` +
+    `WHEN 'orientation' THEN ${FONCTION_WEIGHTS.orientation} ELSE 1.0 END)`;
+  const weightedBm25 =
+    `(CASE WHEN bm25(articles_fts) < 0 THEN bm25(articles_fts) * ${weightExpr} ` +
+    `ELSE bm25(articles_fts) / ${weightExpr} END)`;
+  const scoreCol = withScore ? `, ${weightedBm25} AS score` : "";
   const hits = (
     await db
       .prepare(
-        `SELECT a.law_id, a.number, a.division_path,
+        `SELECT a.law_id, a.number, a.division_path, l.fonction AS fonction,
               snippet(articles_fts, 0, '[', ']', '…', 30) AS snippet${scoreCol}
        FROM articles_fts JOIN articles a ON a.id = articles_fts.rowid
+       LEFT JOIN laws l ON l.id = a.law_id
        WHERE ${where}
-       ORDER BY rank LIMIT ? OFFSET ?`,
+       ORDER BY ${weightedBm25} LIMIT ? OFFSET ?`,
       )
       .bind(...binds, page.limit, page.offset)
       .all<SearchHit>()
@@ -1700,16 +2264,15 @@ async function queryVectors(
 async function filtreVecteurs(
   db: D1Database,
   vec: VectorHits | null,
-  env: { FEDERAL_CORPUS?: string },
+  env: CorpusGateEnv,
 ): Promise<VectorHits | null> {
-  if (!vec || federalOuvert(env)) return vec;
+  const c = clauseCorpus(env, "");
+  if (!vec || !c) return vec;
   const ids = [...new Set([...vec.arts.map((a) => a.law), ...vec.divs.map((d) => d.law_id)])];
   if (!ids.length) return vec;
   const rows = (
     await db
-      .prepare(
-        `SELECT id FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) AND jurisdiction = 'qc'`,
-      )
+      .prepare(`SELECT id FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) AND ${c}`)
       .bind(...ids)
       .all<{ id: string }>()
   ).results;
@@ -1720,6 +2283,23 @@ async function filtreVecteurs(
     arts: vec.arts.filter((a) => permis.has(a.law)),
     divs: vec.divs.filter((d) => permis.has(d.law_id)),
   };
+}
+
+async function loadLawFonctions(
+  db: D1Database,
+  ids: string[],
+  env: CorpusGateEnv,
+): Promise<Map<string, string | null>> {
+  if (!ids.length) return new Map();
+  const rows = (
+    await db
+      .prepare(
+        `SELECT id, fonction FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) ${masqueLawId(env, "id")}`,
+      )
+      .bind(...ids)
+      .all<{ id: string; fonction: string | null }>()
+  ).results;
+  return new Map(rows.map((r) => [r.id, r.fonction]));
 }
 
 /** Matérialise des (law, number) en SearchHit dans la LANGUE DEMANDÉE (extrait ~240 car.). */
@@ -1753,15 +2333,46 @@ async function articleBriefs(
         division_path: r.division_path,
         snippet: r.len > 240 ? `${r.t}…` : r.t,
         semantic: true,
+        hit_lang: lang,
       });
+    }
+    if (lang === "en") {
+      const missing = numbers.filter((n) => !out.has(`${law}|${n}`));
+      if (missing.length) {
+        const frRows = (
+          await db
+            .prepare(
+              `SELECT law_id, number, division_path, substr(text, 1, 240) AS t, length(text) AS len
+             FROM articles WHERE lang = ? AND law_id = ? AND number IN (${missing.map(() => "?").join(",")})`,
+            )
+            .bind("fr", law, ...missing)
+            .all<{
+              law_id: string;
+              number: string;
+              division_path: string;
+              t: string;
+              len: number;
+            }>()
+        ).results;
+        for (const r of frRows) {
+          out.set(`${r.law_id}|${r.number}`, {
+            law_id: r.law_id,
+            number: r.number,
+            division_path: r.division_path,
+            snippet: r.len > 240 ? `${r.t}…` : r.t,
+            semantic: true,
+            hit_lang: "fr",
+          });
+        }
+      }
     }
   }
   return out;
 }
 
 /**
- * Fusion RRF (k = RRF_K) des listes FTS et vectorielle. Les résultats absents du FTS
- * sont matérialisés depuis D1 dans la langue demandée et marqués `semantic`.
+ * Fusion RRF (k = RRF_K) des listes FTS et vectorielle, pondérée par `fonctionWeight`.
+ * Les résultats absents du FTS sont matérialisés depuis D1 (avec repli `[fr]`) et marqués `semantic`.
  */
 async function fuseHybrid(
   db: D1Database,
@@ -1769,26 +2380,45 @@ async function fuseHybrid(
   fts: { hits: SearchHit[]; total: number },
   vec: VectorHits,
   limit: number,
+  env: CorpusGateEnv = {},
 ): Promise<SearchHit[]> {
   interface Entry {
+    lawId: string;
     ftsRank?: number;
     vecRank?: number;
     hit?: SearchHit;
   }
   const entries = new Map<string, Entry>();
-  fts.hits.forEach((h, i) => entries.set(`${h.law_id}|${h.number}`, { ftsRank: i + 1, hit: h }));
+  const fonctionByLaw = new Map<string, string | null>();
+  fts.hits.forEach((h, i) => {
+    entries.set(`${h.law_id}|${h.number}`, { lawId: h.law_id, ftsRank: i + 1, hit: h });
+    if (h.fonction !== undefined) fonctionByLaw.set(h.law_id, h.fonction);
+  });
   vec.arts.forEach((a, i) => {
     const k = `${a.law}|${a.number}`;
-    const e = entries.get(k) ?? {};
+    const e = entries.get(k) ?? { lawId: a.law };
     e.vecRank = i + 1;
     entries.set(k, e);
   });
+  const missingLawIds = [...new Set(vec.arts.map((a) => a.law))].filter(
+    (id) => !fonctionByLaw.has(id),
+  );
+  if (missingLawIds.length) {
+    const loaded = await loadLawFonctions(db, missingLawIds, env);
+    for (const [id, fn] of loaded) fonctionByLaw.set(id, fn);
+  }
   const scored = [...entries.entries()]
-    .map(([k, e]) => ({
-      k,
-      e,
-      score: (e.ftsRank ? 1 / (RRF_K + e.ftsRank) : 0) + (e.vecRank ? 1 / (RRF_K + e.vecRank) : 0),
-    }))
+    .map(([k, e]) => {
+      const w = fonctionWeight(fonctionByLaw.get(e.lawId));
+      const rrfWeight = 1 - 0.15 * (1 - w);
+      return {
+        k,
+        e,
+        score:
+          ((e.ftsRank ? 1 / (RRF_K + e.ftsRank) : 0) + (e.vecRank ? 1 / (RRF_K + e.vecRank) : 0)) *
+          rrfWeight,
+      };
+    })
     .sort((a, b) => b.score - a.score);
   const missing = scored.filter((s) => !s.e.hit).map((s) => s.k);
   const briefs = missing.length
@@ -1801,7 +2431,9 @@ async function fuseHybrid(
     const h = s.e.hit ?? briefs.get(s.k);
     if (h) {
       const cos = cosOf.get(s.k);
-      hits.push(cos !== undefined && h.semantic ? { ...h, score: cos } : h);
+      const fn = h.fonction ?? fonctionByLaw.get(h.law_id);
+      const enriched = fn !== undefined ? { ...h, fonction: fn } : h;
+      hits.push(cos !== undefined && h.semantic ? { ...enriched, score: cos } : enriched);
     }
     if (hits.length >= limit) break;
   }
@@ -1814,7 +2446,7 @@ export async function searchText(
   lang: Lang,
   lawId: string | undefined,
   page: Page,
-  opts: { relax?: boolean; vector?: VectorBackend; env?: { FEDERAL_CORPUS?: string } } = {},
+  opts: { relax?: boolean; vector?: VectorBackend; env?: CorpusGateEnv } = {},
 ): Promise<SearchOutcome> {
   const env = opts.env ?? {};
   const match = toFtsQuery(query);
@@ -1834,9 +2466,17 @@ export async function searchText(
     qVec ? await queryVectors(opts.vector!, qVec, lawId) : null,
     env,
   );
-  const semDivs = (vec?.divs ?? [])
-    .filter((d) => d.score >= DIVISION_MATCH_MIN_SCORE)
-    .slice(0, DIVISION_MATCH_MAX);
+  const rawSemDivs = (vec?.divs ?? []).filter((d) => d.score >= DIVISION_MATCH_MIN_SCORE);
+  let semDivs = rawSemDivs;
+  if (rawSemDivs.length > 1) {
+    const divFns = await loadLawFonctions(db, [...new Set(rawSemDivs.map((d) => d.law_id))], env);
+    semDivs = [...rawSemDivs].sort(
+      (a, b) =>
+        b.score * fonctionWeight(divFns.get(b.law_id)) -
+        a.score * fonctionWeight(divFns.get(a.law_id)),
+    );
+  }
+  semDivs = semDivs.slice(0, DIVISION_MATCH_MAX);
   // vecteurs corpus entier (embedding réutilisé), pour les barreaux élargis — paresseux
   let vecWideCache: Awaited<ReturnType<typeof queryVectors>> | undefined;
   const vecWide = async () => {
@@ -1853,7 +2493,7 @@ export async function searchText(
   const fuse = async (
     fts: { hits: SearchHit[]; total: number },
     v: Awaited<ReturnType<typeof queryVectors>>,
-  ) => (v?.arts.length ? await fuseHybrid(db, lang, fts, v, page.limit) : fts.hits);
+  ) => (v?.arts.length ? await fuseHybrid(db, lang, fts, v, page.limit, env) : fts.hits);
 
   // ÉCHELLE (décision 2.4, tranchée par l'éval) : dérouler le LEXICAL jusqu'à sa meilleure
   // liste, PUIS fusionner avec les vecteurs. Le sémantique seul n'est que l'ultime barreau :
@@ -1968,7 +2608,7 @@ export async function searchText(
   // 5) repérage sémantique SEUL (au-dessus du plancher) : portée demandée, puis corpus
   for (const v of [vec, lawId ? await vecWide() : null]) {
     if (v?.arts.length) {
-      const hits = await fuseHybrid(db, lang, { hits: [], total: 0 }, v, page.limit);
+      const hits = await fuseHybrid(db, lang, { hits: [], total: 0 }, v, page.limit, env);
       if (hits.length) {
         return {
           hits,

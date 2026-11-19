@@ -1,0 +1,125 @@
+{
+  "$schema_version": 1,
+  "law_id": "qccs-div-mtl",
+  "fonction": "directive",
+  "jurisdiction": "qc",
+  "unit": "paragraphe",
+  "langs": ["fr"],
+  "files": {
+    "fr": {
+      "filename": "Directives_de_la_division_de_Montreal.pdf",
+      "sha256": "aa876ce7d11539f5fad47b2d04456490fcb077530d5f386ca0964541684621de",
+      "page_count": 40,
+      "toc_pages": [1, 2, 3],
+      "body_start_page": 4,
+      "annexe_start_page": 40,
+      "consolidation_date": {
+        "pages": [1],
+        "regex": "(?:À\\s+jour\\s+au|A\\s+jour\\s+au)\\s+(\\d{1,2}(?:\\s*er)?\\s+[A-Za-zÀ-ÿ]+\\s+\\d{4})",
+        "lang": "fr"
+      },
+      "title_blocks": [
+        { "page": 1, "y_max": 205.0, "x0_min": 180.0 }
+      ],
+      "running_header": {
+        "y_max": 60.0,
+        "regex": "^\\d+$",
+        "pages_from": 5
+      },
+      "running_footer": {
+        "y_min": 725.0,
+        "regex": "^[ivxlcdm]+$",
+        "pages": [1, 2, 3],
+        "x0_min": 250.0
+      },
+      "toc_parser": {
+        "level1_x0_max": 98.0,
+        "level2_x0_min": 98.1,
+        "level2_x0_max": 120.0,
+        "require_bold_for_level1": true,
+        "trailing_page_regex": "(?:\\s*\\.{2,}\\s*|\\s+)\\d+\\s*$"
+      },
+      "body_typography": {
+        "dominant_size_pt": 12.0,
+        "y_line_tolerance_pt": 2.5,
+        "heading_wrap_dy_max_pt": 17.0,
+        "heading_x0_min": 88.0,
+        "heading_x0_max": 96.0,
+        "heading_min_size_pt": 11.5,
+        "heading_require_all_bold": true,
+        "heading_exclude_italic": true,
+        "level1_all_caps": true,
+        "level1_kind": "partie",
+        "level2_kind": "sous-section"
+      },
+      "provisions": {
+        "x0_min": 88.0,
+        "x0_max": 96.0,
+        "min_size_pt": 10.5,
+        "continuation_x0_min": 115.0,
+        "subitem_x0_min": 115.0,
+        "number_mode": "numeric",
+        "repeal_regex": "^(?:Abrog[ée]\\.?|Abrogation\\.|Repealed\\.?|\\[\\s*(?:…|\\.\\.\\.)\\s*\\])$"
+      },
+      "history": {
+        "prefix_regex": "^(?:Modifications?|Abrogation|Ajouts?)\\s*:",
+        "max_size_pt": 10.5,
+        "allow_bold_italic_any_size": false,
+        "x0_min": 85.0,
+        "x0_max": 140.0
+      },
+      "footnotes": {
+        "y0_min": 650.0,
+        "lead_size_max_pt": 7.5,
+        "body_size_max_pt": 10.5,
+        "x0_min": 85.0,
+        "x0_max": 125.0
+      },
+      "unnumbered_prose_divisions": [
+        {
+          "heading": "En matière de contrôle judiciaire",
+          "article_number": "liste-controle-judiciaire",
+          "inline_topic_x0_min": 135.0
+        },
+        {
+          "heading": "En matière commerciale, faillite et de restructuration",
+          "article_number": "liste-commerciale-faillite"
+        },
+        {
+          "heading": "En matière d’oppression",
+          "article_number": "liste-oppression"
+        },
+        {
+          "heading": "En matière d’actions collectives",
+          "article_number": "liste-actions-collectives"
+        }
+      ],
+      "annexes": {
+        "start_heading": "LISTE DES ANNEXES",
+        "item_x0_min": 88.0,
+        "item_x0_max": 96.0,
+        "item_regex": "^(?P<prefix>Division)\\s+(?P<num>\\d+)\\.?\\s*(?P<rest>.*)$",
+        "slug_map": {
+          "division": "annexe-division"
+        },
+        "subgroups": []
+      },
+      "links": {
+        "allowed_schemes": ["https", "http", "mailto"],
+        "ignore_mailto_without_at_domain": true,
+        "sanitize_email_launch": true,
+        "ignore_zero_area_rect": true
+      },
+      "witness": {
+        "total_spans": 2357,
+        "real_articles": 217,
+        "int_min": 1,
+        "int_max": 190,
+        "decimals": 27,
+        "repealed_real": 6,
+        "annexes_count": 8,
+        "pseudo_jurisprudence": 4
+      }
+    }
+  }
+}
