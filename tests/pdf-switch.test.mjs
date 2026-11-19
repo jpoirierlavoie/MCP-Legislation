@@ -329,7 +329,7 @@ test("les aides SQL composent PDF_CORPUS dans clauseCorpus, masqueLawId, masqueA
   assert.match(vecFn[0], /AND \$\{c\}/);
 });
 
-test("wrangler.jsonc ferme PDF_CORPUS par défaut et tools/index propagent env", () => {
+test("wrangler.jsonc ouvre PDF_CORPUS en production et tools/index propagent env", () => {
   const wranglerBrut = readFileSync("wrangler.jsonc", "utf8");
   const wranglerCfg = JSON.parse(
     wranglerBrut
@@ -337,7 +337,7 @@ test("wrangler.jsonc ferme PDF_CORPUS par défaut et tools/index propagent env",
       .filter((l) => !/^\s*\/\//.test(l))
       .join("\n"),
   );
-  assert.equal(wranglerCfg.vars.PDF_CORPUS, "0");
+  assert.equal(wranglerCfg.vars.PDF_CORPUS, "1");
 
   const tools = readFileSync("src/tools.ts", "utf8");
   for (const fn of ["getLaw", "listLaws", "listSubjects", "relatedLaws", "loadRelevanceData"]) {

@@ -1,12 +1,13 @@
-"""Client D1 minimal, deux dorsales interchangeables :
+"""Client D1 minimal, trois dorsales interchangeables :
 
 * CloudD1 — API HTTP D1 (plan §2 : « API HTTP D1 ») : POST .../d1/database/{id}/query.
+* WranglerRemoteD1 — D1 distante via `wrangler d1 execute --remote` (OAuth, sans jeton API).
 * LocalD1 — D1 local de dev via `wrangler d1 execute --local` (validation sans réseau).
 
-Les deux exposent `run(sql) -> list[dict]` (résultats de la DERNIÈRE instruction) et
+Toutes exposent `run(sql) -> list[dict]` (résultats de la DERNIÈRE instruction) et
 `run_file(sql_path)` (exécution d'un fichier `.sql` complet via `wrangler d1 execute`).
 Le SQL de `run()` est inline (littéraux échappés via `q`) pour passer indifféremment par le
-corps JSON HTTP ou un fichier `.sql`.
+corps JSON HTTP, `--command=...` ou un fichier `.sql`.
 """
 from __future__ import annotations
 
@@ -32,6 +33,57 @@ class D1Error(Exception):
 def npx_command() -> str:
     """Résout l'exécutable npx sans passer par `shell=True`."""
     return shutil.which("npx") or ("npx.cmd" if os.name == "nt" else "npx")
+
+
+def _wrangler_cmd() -> list[str]:
+    """Appelle `node .../wrangler.js` directement (évite `cmd.exe` / limite 8 Ko de `npx.cmd` sous Windows)."""
+    node = shutil.which("node")
+    wrangler_js = config.REPO_ROOT / "node_modules" / "wrangler" / "bin" / "wrangler.js"
+    if node and wrangler_js.is_file():
+        return [node, str(wrangler_js)]
+    return [npx_command(), "wrangler"]
+
+
+_LEADING_COMMENTS = re.compile(r"^(?:\s+|--[^\r\n]*|/\*[\s\S]*?\*/)+")
+
+
+def _is_write_without_rows(sql: str) -> bool:
+    """Vrai si `sql` est une écriture pure (sans `RETURNING`) pouvant passer par `--file`."""
+    stripped = _LEADING_COMMENTS.sub("", sql)
+    if not re.match(r"^(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b", stripped, re.I):
+        return False
+    return re.search(r"\bRETURNING\b", stripped, re.I) is None
+
+
+def _parse_wrangler_json(stdout: str) -> list[dict]:
+    """Extrait le JSON résultat de `wrangler d1 execute --json` malgré les préfixes `[WARNING]`."""
+    decoder = json.JSONDecoder()
+    idx = 0
+    n = len(stdout)
+    while idx < n:
+        m = re.search(r"[\[{]", stdout[idx:])
+        if not m:
+            break
+        pos = idx + m.start()
+        try:
+            obj, end = decoder.raw_decode(stdout, pos)
+        except json.JSONDecodeError:
+            idx = pos + 1
+            continue
+        if isinstance(obj, list):
+            for item in obj:
+                if isinstance(item, dict) and item.get("success") is False:
+                    raise D1Error(stdout.strip())
+            if not obj:
+                return []
+            if isinstance(obj[-1], dict):
+                return obj[-1].get("results", [])
+            idx = end
+            continue
+        if isinstance(obj, dict) and "error" in obj:
+            raise D1Error(stdout.strip())
+        idx = end
+    return []
 
 
 def q(v) -> str:
@@ -89,6 +141,79 @@ class CloudD1:
             raise D1Error(p.stderr or p.stdout)
 
 
+class WranglerRemoteD1:
+    """D1 distante via `wrangler d1 execute --remote` (session OAuth, sans `CLOUDFLARE_API_TOKEN`)."""
+
+    name = "cloud"
+    _CMD_WRITE_FILE_THRESHOLD = 24_000
+    _CMD_MAX_LEN = 28_000
+
+    def __init__(self, account_id: str | None = None):
+        acct = (account_id if account_id is not None else os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
+        self._account_id = acct or ACCOUNT_ID
+
+    def _env(self) -> dict[str, str]:
+        env = dict(os.environ)
+        env.pop("CLOUDFLARE_API_TOKEN", None)
+        env["CLOUDFLARE_ACCOUNT_ID"] = self._account_id
+        return env
+
+    def run(self, sql: str) -> list[dict]:
+        if (len(sql) > self._CMD_WRITE_FILE_THRESHOLD or "\x00" in sql) and _is_write_without_rows(sql):
+            tmp_path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8", newline="\n", suffix=".sql", delete=False
+                ) as tf:
+                    tf.write(sql)
+                    tmp_path = Path(tf.name)
+                self.run_file(tmp_path)
+                return []
+            finally:
+                if tmp_path is not None:
+                    tmp_path.unlink(missing_ok=True)
+        if len(sql) > self._CMD_MAX_LEN:
+            raise D1Error(
+                "Requête SQL trop longue pour `wrangler d1 execute --remote --command` "
+                "(> 28 000 car.) ; définir CLOUDFLARE_API_TOKEN."
+            )
+        cmd = [
+            *_wrangler_cmd(), "d1", "execute", DB_NAME, "--remote",
+            f"--command={sql}", "--json", "-y",
+        ]
+        p = subprocess.run(
+            cmd,
+            cwd=config.REPO_ROOT,
+            env=self._env(),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if p.returncode != 0:
+            raise D1Error((p.stderr or "").strip() or (p.stdout or "").strip() or f"wrangler code {p.returncode}")
+        return _parse_wrangler_json(p.stdout or "")
+
+    def run_file(self, sql_path: Path) -> None:
+        cmd = [
+            *_wrangler_cmd(), "d1", "execute", DB_NAME, "--remote",
+            f"--file={sql_path}", "-y",
+        ]
+        p = subprocess.run(
+            cmd,
+            cwd=config.REPO_ROOT,
+            env=self._env(),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if p.returncode != 0:
+            raise D1Error((p.stderr or "").strip() or (p.stdout or "").strip() or f"wrangler code {p.returncode}")
+
+
 class LocalD1:
     name = "local"
 
@@ -134,8 +259,8 @@ class LocalD1:
 
 def make_client(target: str, persist_to: str | Path | None = None):
     if target == "cloud":
-        token = os.environ.get("CLOUDFLARE_API_TOKEN")
-        if not token:
-            raise D1Error("CLOUDFLARE_API_TOKEN manquant pour --target cloud")
-        return CloudD1(token)
+        token = (os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
+        if token:
+            return CloudD1(token)
+        return WranglerRemoteD1()
     return LocalD1(persist_to=persist_to)
