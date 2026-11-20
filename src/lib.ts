@@ -1832,8 +1832,8 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   if (extraStrip) rest = rest.replace(extraStrip, " ");
   for (const stripRe of STRIP_DATES_ET_SALLES) rest = rest.replace(stripRe, " ");
   rest = rest.replace(
-    /\b1(?:er|\u1d49\u02b3|re|\u02b3\u1d49)\b(?!\s+(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)\b)/gi,
-    "1",
+    /((?:\barticles?\b|\barts?\b\.?|\bparagraphes?\b|\bpara\.|\bpar\.|\bdir\.|\br[eè]gles?\b|\brules?\b|(?<![A-Za-zÀ-ÿ0-9.])a\.|(?<![A-Za-zÀ-ÿ0-9.])s\.|§)\s*)1(?:er|\u1d49\u02b3|re|\u02b3\u1d49)(?![A-Za-zÀ-ÿ0-9\u1d49\u02b3])/gi,
+    "$11",
   );
   const rangeMatch =
     /(?:\b(?:articles?|arts?\.?|a\.|s\.)\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s*(?:[àa]|to|[–—-])\s*(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b|\b(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s+(?:[àa]|to)\s+(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b/i.exec(

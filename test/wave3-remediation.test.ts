@@ -741,23 +741,44 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(pSingle.law).toBe("ccq");
     expect(pSingle.article).toBe("1");
 
+    const pSup = parseCitation("art. 1\u1d49\u02b3 C.c.Q.", FEDERAL_LAWS_SAMPLE);
+    expect(pSup.law).toBe("ccq");
+    expect(pSup.article).toBe("1");
+
     const pRange = parseCitation("art. 1er à 5 C.c.Q.", FEDERAL_LAWS_SAMPLE);
     expect(pRange.law).toBe("ccq");
     expect(pRange.article).toBe("1");
     expect(pRange.plage_fin).toBe("5");
 
+    const pSupRange = parseCitation("art. 1\u02b3\u1d49 à 5 C.c.Q.", FEDERAL_LAWS_SAMPLE);
+    expect(pSupRange.law).toBe("ccq");
+    expect(pSupRange.article).toBe("1");
+    expect(pSupRange.plage_fin).toBe("5");
+
+    const pAl = parseCitation("1er al. 1457 C.c.Q.", FEDERAL_LAWS_SAMPLE);
+    expect(pAl.law).toBe("ccq");
+    expect(pAl.article).toBe("1457");
+
+    const pAlNoNum = parseCitation("C.c.Q., 1er alinéa", FEDERAL_LAWS_SAMPLE);
+    expect(pAlNoNum.law).toBe("ccq");
+    expect(pAlNoNum.article).toBeNull();
+
     await db()
       .prepare(
         `INSERT OR IGNORE INTO laws (id, name_fr, name_en, official_cite, consol_date_fr, consol_date_en, jurisdiction, source, fonction, unit, name_norm)
-         VALUES ('b-1-r.5', 'Règlement test', 'Règlement test', 'RLRQ, c. B-1, r. 5', '2026-07-01', '2026-07-01', 'qc', 'pdf', 'reglement', 'article', 'reglement test')`,
+         VALUES
+           ('b-1-r.5', 'Règlement test', 'Règlement test', 'RLRQ, c. B-1, r. 5', '2026-07-01', '2026-07-01', 'qc', 'pdf', 'reglement', 'article', 'reglement test'),
+           ('vide-test', 'Loi vide test', 'Empty Test Act', 'RLRQ, c. V-99', '2026-07-01', '2026-07-01', 'qc', 'epub', 'loi', 'article', 'loi vide test')`,
       )
       .run();
     await db()
       .prepare(
         `INSERT OR IGNORE INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
-         VALUES (997, 'b-1-r.5', 'fr', '1', ?, NULL, '', 'Article premier test.')`,
+         VALUES
+           (997, 'b-1-r.5', 'fr', '1', ?, NULL, '', 'Article premier test.'),
+           (996, 'b-1-r.5', 'en', '1', ?, NULL, '', 'First test section.')`,
       )
-      .bind(legacySortKey(1))
+      .bind(legacySortKey(1), legacySortKey(1))
       .run();
 
     const outils = makeOutils();
@@ -766,10 +787,24 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(rOrd.isError).toBeUndefined();
     expect(rOrd.structuredContent?.number).toBe("1");
 
+    const rNums = await outils.get_articles({ law: "b-1-r.5", numbers: ["1er"] } as never);
+    expect(rNums.isError).toBeUndefined();
+    expect(rNums.structuredContent?.count).toBe(1);
+    expect(rNums.structuredContent?.missing_numbers).toEqual([]);
+
     const rFlat = await outils.get_structure({ law: "b-1-r.5" } as never);
     expect(rFlat.isError).toBeUndefined();
     expect(rFlat.structuredContent?.tree).toEqual([]);
+    expect(rFlat.structuredContent?.flat_text).toBe(true);
     expect(rFlat.content[0].text).toContain("get_articles");
+
+    const rFlatEn = await outils.get_structure({ law: "b-1-r.5", lang: "en" } as never);
+    expect(rFlatEn.isError).toBeUndefined();
+    expect(rFlatEn.structuredContent?.flat_text).toBe(true);
+    expect(rFlatEn.content[0].text).toContain("lang='en'");
+
+    const rEmptyLaw = await outils.get_structure({ law: "vide-test" } as never);
+    expect(rEmptyLaw.isError).toBe(true);
 
     const rBadRoot = await outils.get_structure({
       law: "b-1-r.5",

@@ -672,7 +672,7 @@ export function construireOutils(
     const lawRow = await getLaw(db, law, env);
     if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const useRange = from != null && to != null;
-    const rawNumsTrimmed = useRange ? [] : (numbers ?? []).map((n) => n.trim().normalize("NFC"));
+    const rawNumsTrimmed = useRange ? [] : (numbers ?? []).map(normalizeArticleToken);
     const hasBlankEntry = !useRange && rawNumsTrimmed.some((n) => n.length === 0);
     const requestedNumbers = useRange ? [] : [...new Set(rawNumsTrimmed.filter(Boolean))];
     if (!useRange && requestedNumbers.length === 0) {
@@ -883,20 +883,18 @@ export function construireOutils(
       if (t) tree = await getStructure(db, law, lang as Lang, t.path, d);
     }
     if (tree.length === 0) {
-      if (lang === "en") {
-        const langs = await lawLangs(db, law, env);
-        if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
-          return frOnlyError(law, lawRow);
-        }
+      const langs = await lawLangs(db, law, env);
+      if (lang === "en" && langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
+        return frOnlyError(law, lawRow);
       }
-      if (!root_path) {
+      if (!root_path && langs.includes(lang as Lang)) {
         const msg =
           lang === "en"
-            ? `No structural divisions in '${law}' (flat text without headings) — read directly with get_articles(law='${law}', from='1', to='50').`
+            ? `No structural divisions in '${law}' (flat text without headings) — read directly with get_articles(law='${law}', from='1', to='50', lang='en').`
             : `Aucune division structurelle dans '${law}' (texte plat sans chapitres ni sections) — lire directement avec get_articles(law='${law}', from='1', to='50').`;
-        return ok(msg, { law, lang, root_path: null, depth: d, tree: [] });
+        return ok(msg, { law, lang, root_path: null, depth: d, tree: [], flat_text: true });
       }
-      return err(`Aucune division sous '${root_path}'.`);
+      return err(root_path ? `Aucune division sous '${root_path}'.` : "Aucune division.");
     }
     const render = (nodes: StructureNode[], level: number): string =>
       nodes
@@ -907,7 +905,14 @@ export function construireOutils(
             (n.children.length ? `\n${render(n.children, level + 1)}` : ""),
         )
         .join("\n");
-    return ok(render(tree, 0), { law, lang, root_path: root_path ?? null, depth: d, tree });
+    return ok(render(tree, 0), {
+      law,
+      lang,
+      root_path: root_path ?? null,
+      depth: d,
+      tree,
+      flat_text: false,
+    });
   };
   outils.get_structure = H_GET_STRUCTURE as Gestionnaire;
 
