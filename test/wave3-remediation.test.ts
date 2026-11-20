@@ -735,4 +735,49 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(overOffset.isError).toBe(true);
     expect(overOffset.content[0].text).toContain("Offset (500) au-delà du total");
   });
+
+  it("post-stress-test gaps : ordinal 1er/1re, get_structure sur texte plat sans divisions, déduplication list_laws X / X", async () => {
+    const pSingle = parseCitation("art. 1er C.c.Q.", FEDERAL_LAWS_SAMPLE);
+    expect(pSingle.law).toBe("ccq");
+    expect(pSingle.article).toBe("1");
+
+    const pRange = parseCitation("art. 1er à 5 C.c.Q.", FEDERAL_LAWS_SAMPLE);
+    expect(pRange.law).toBe("ccq");
+    expect(pRange.article).toBe("1");
+    expect(pRange.plage_fin).toBe("5");
+
+    await db()
+      .prepare(
+        `INSERT OR IGNORE INTO laws (id, name_fr, name_en, official_cite, consol_date_fr, consol_date_en, jurisdiction, source, fonction, unit, name_norm)
+         VALUES ('b-1-r.5', 'Règlement test', 'Règlement test', 'RLRQ, c. B-1, r. 5', '2026-07-01', '2026-07-01', 'qc', 'pdf', 'reglement', 'article', 'reglement test')`,
+      )
+      .run();
+    await db()
+      .prepare(
+        `INSERT OR IGNORE INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
+         VALUES (997, 'b-1-r.5', 'fr', '1', ?, NULL, '', 'Article premier test.')`,
+      )
+      .bind(legacySortKey(1))
+      .run();
+
+    const outils = makeOutils();
+
+    const rOrd = await outils.get_article({ law: "b-1-r.5", article: "1er" } as never);
+    expect(rOrd.isError).toBeUndefined();
+    expect(rOrd.structuredContent?.number).toBe("1");
+
+    const rFlat = await outils.get_structure({ law: "b-1-r.5" } as never);
+    expect(rFlat.isError).toBeUndefined();
+    expect(rFlat.structuredContent?.tree).toEqual([]);
+    expect(rFlat.content[0].text).toContain("get_articles");
+
+    const rBadRoot = await outils.get_structure({
+      law: "b-1-r.5",
+      root_path: "ga:inexistant",
+    } as never);
+    expect(rBadRoot.isError).toBe(true);
+
+    const rLaws = await outils.list_laws({ structure: false } as never);
+    expect(rLaws.content[0].text).not.toContain("Règlement test / Règlement test");
+  });
 });

@@ -250,6 +250,13 @@ export function estHybrideConfigure(env: Env): boolean {
   return (brut === "1" || brut === "true") && Boolean(env.AI && env.VECTORS);
 }
 
+function normalizeArticleToken(raw: string): string {
+  const t = raw.trim().normalize("NFC");
+  if (t.toLowerCase() === "preliminaire") return "préliminaire";
+  if (/^1(?:er|\u1d49\u02b3|re|\u02b3\u1d49)$/i.test(t)) return "1";
+  return t;
+}
+
 /** Construit les gestionnaires des dix outils publiés pour le routeur du socle. */
 export function construireOutils(
   env: Env,
@@ -294,8 +301,10 @@ export function construireOutils(
     ]
       .filter(Boolean)
       .join(" ; ");
+    const titlePair =
+      l.name_en && l.name_en !== l.name_fr ? `${l.name_fr} / ${l.name_en}` : l.name_fr;
     const head =
-      `• ${l.id} — ${l.name_fr} / ${l.name_en} (${citeOf(l)}) ; ` +
+      `• ${l.id} — ${titlePair} (${citeOf(l)}) ; ` +
       `langues: ${l.langs.join(", ") || "aucune"} ; ` +
       `à jour au ${l.consol_date_fr ?? "?"}${l.consol_date_en ? ` (en: ${l.consol_date_en})` : ""} ; ` +
       `${l.article_count} articles`;
@@ -592,8 +601,7 @@ export function construireOutils(
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const law = rawLaw.trim().toLowerCase();
-    const articleTrim = rawArticle.trim().normalize("NFC");
-    const article = articleTrim.toLowerCase() === "preliminaire" ? "préliminaire" : articleTrim;
+    const article = normalizeArticleToken(rawArticle);
     const lawRow = await getLaw(db, law, env);
     if (!lawRow) {
       const all = (await listLaws(db, {}, "fr", env)).map((l) => l.id).join(", ");
@@ -689,12 +697,8 @@ export function construireOutils(
     let missing: string[] = [];
     const rangeNotes: string[] = [];
     if (useRange) {
-      const normBound = (s: string) => {
-        const t = s.trim().normalize("NFC");
-        return t.toLowerCase() === "preliminaire" ? "préliminaire" : t;
-      };
-      const fromNorm = normBound(from!);
-      const toNorm = normBound(to!);
+      const fromNorm = normalizeArticleToken(from!);
+      const toNorm = normalizeArticleToken(to!);
       // bornes LUES en base (insensible à l'échelle de sort_key) — cf. boundRef
       const [b1, b2] = await Promise.all([
         boundRef(db, law, lang as Lang, fromNorm),
@@ -885,7 +889,14 @@ export function construireOutils(
           return frOnlyError(law, lawRow);
         }
       }
-      return err(`Aucune division${root_path ? ` sous '${root_path}'` : ""}.`);
+      if (!root_path) {
+        const msg =
+          lang === "en"
+            ? `No structural divisions in '${law}' (flat text without headings) — read directly with get_articles(law='${law}', from='1', to='50').`
+            : `Aucune division structurelle dans '${law}' (texte plat sans chapitres ni sections) — lire directement avec get_articles(law='${law}', from='1', to='50').`;
+        return ok(msg, { law, lang, root_path: null, depth: d, tree: [] });
+      }
+      return err(`Aucune division sous '${root_path}'.`);
     }
     const render = (nodes: StructureNode[], level: number): string =>
       nodes
