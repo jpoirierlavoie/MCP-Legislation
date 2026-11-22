@@ -1,4 +1,4 @@
-// Page publique servie à la racine (R10).
+// Page publique servie à la racine (R10) et fichiers publics de découverte (/robots.txt, /sitemap.xml, /llms.txt).
 //
 // PRINCIPE : la page ne RECOPIE rien. Les décomptes (lois, matières, articles, dates de
 // consolidation) sont lus en D1 au rendu ; les titres d'outils viennent de catalogue.json
@@ -39,22 +39,14 @@ import {
   VECTOR_TOP_K,
   WEIGHTS,
 } from "./relevance";
+import { PUBLIC_DESCRIPTION } from "./serveur";
 
 const CONTACT = "jason@poirierlavoie.ca";
-// Le dépôt a été renommé `MCP-Legislation` côté GitHub (constaté le 2026-09-17 : une poussée
-// affiche l'avis de redirection). L'ancienne URL fonctionne encore, mais elle ne fonctionne
-// que PAR REDIRECTION — et une redirection est révocable par un tiers, ici GitHub, qui la
-// perd dès que le nom libéré est réutilisé par quelqu'un d'autre. Un lien servi au public
-// depuis un outil juridique ne doit pas dépendre de ça.
+const ORIGINE_SITE = "https://legislation.poirierlavoie.ca";
 const DEPOT = "https://github.com/jpoirierlavoie/MCP-Legislation";
+const DEPOT_PLUGIN = "https://github.com/jpoirierlavoie/droit-civil-quebecois";
 const LEGISQUEBEC = "https://www.legisquebec.gouv.qc.ca";
 
-/**
- * URL officielles par loi. Lecture SEULE de laws.config.json via une Map — invariant 1 :
- * l'ordre du tableau est porteur, on n'y touche pas (aucun tri, aucune mutation).
- * `consolidation_source` est l'URL réelle de la page LégisQuébec : on ne la reconstruit
- * PAS à partir de la citation, une URL devinée pouvant pointer vers un autre texte.
- */
 const SOURCES = new Map(
   config.laws.map((l) => [
     l.id,
@@ -79,11 +71,11 @@ function bi(fr: string, en: string): string {
   return `<span data-l="fr">${esc(fr)}</span><span data-l="en">${esc(en)}</span>`;
 }
 
-/** Suite de paragraphes bilingues. */
+/** Suite de paragraphes bilingues (avec lang="en" sur le bloc anglais pour lecteurs/indexeurs). */
 function biP(fr: string[], en: string[]): string {
   return (
-    `<div data-l="fr">${fr.map((p) => `<p>${esc(p)}</p>`).join("")}</div>` +
-    `<div data-l="en">${en.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`
+    `<div data-l="fr">${fr.map((p) => `<p>${esc(p)}</p>`).join("")}</div>\n` +
+    `<div data-l="en" lang="en">${en.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`
   );
 }
 
@@ -98,18 +90,6 @@ const FONCTION: Record<string, [string, string]> = {
 
 const nb = (n: number) => n.toLocaleString("fr-CA").replace(/ /g, " ");
 
-/**
- * Sections de premier niveau, dans l'ORDRE d'affichage. Source unique : le `<h2>` de
- * chaque section, son entrée de table des matières ET l'ordre du corps de la page sortent
- * d'ici — un titre renommé ou déplacé ne peut donc pas laisser la TDM mentir.
- *
- * `as const` n'est pas décoratif : il donne des types LITTÉRAUX aux `id`, d'où `SectionId`,
- * d'où le `Record<SectionId, …>` de `renderSite` qui exige — À LA COMPILATION, dans les
- * deux sens — une fonction de rendu par section et rien de plus. Avant, `SECTIONS` et le
- * tableau du corps étaient deux listes indépendantes que RIEN ne comparait : une section
- * pouvait quitter la page en restant au sommaire, ou l'ordre des deux diverger, sans qu'un
- * seul test bouge.
- */
 const SECTIONS = [
   { id: "outils", fr: "Les outils", en: "The tools" },
   { id: "reperage", fr: "Les aides au repérage", en: "Retrieval aids" },
@@ -120,40 +100,75 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-/**
- * `<h2>` d'une section — jamais écrit en dur, toujours tiré de SECTIONS. Le paramètre est
- * typé `SectionId` : un titre de section qui n'est pas au sommaire ne compile pas. C'est
- * volontairement plus strict qu'une erreur à l'exécution, `renderSite` étant appelé sans
- * filet (src/index.ts) et la page servie d'un cache de 900 s qu'on ne peut pas purger.
- */
 function h2(id: SectionId): string {
   const s = SECTIONS.find((x) => x.id === id) as (typeof SECTIONS)[number];
-  return `<h2>${bi(s.fr, s.en)}</h2>`;
+  return `<h2 id="h-${id}">${bi(s.fr, s.en)}</h2>`;
+}
+
+function compacterBloc(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .map((l) => l.replace(/^\s*\/\/.*$/, "").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function construireJsonLd(nLois: number, nMat: number, nArt: number, consol: string): string {
+  const nomsOutils = Object.keys(catalogue.tools);
+  const graphe = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": `${ORIGINE_SITE}/#site`,
+        url: `${ORIGINE_SITE}/`,
+        name: [
+          "MCP Législation — Lois du Québec et du Canada",
+          "MCP Legislation — Laws of Québec and Canada",
+        ],
+        inLanguage: ["fr-CA", "en-CA"],
+        isPartOf: {
+          "@type": "SoftwareApplication",
+          "@id": `${DEPOT_PLUGIN}#plugin`,
+          name: "Droit civil québécois",
+          url: DEPOT_PLUGIN,
+        },
+      },
+      {
+        "@type": "WebAPI",
+        "@id": `${ORIGINE_SITE}/#api`,
+        name: "MCP Législation (lois)",
+        url: `${ORIGINE_SITE}/`,
+        documentation: `${ORIGINE_SITE}/mcp/server-card`,
+        termsOfService: "https://acces.poirierlavoie.ca/cgu",
+        license: "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+        isAccessibleForFree: true,
+        inLanguage: ["fr-CA", "en-CA"],
+        description: PUBLIC_DESCRIPTION,
+        featureList: nomsOutils,
+      },
+      {
+        "@type": "Dataset",
+        "@id": `${ORIGINE_SITE}/#corpus-dataset`,
+        name: [
+          "Corpus législatif consolidé du Québec et du Canada, directives judiciaires et textes AMF",
+          "Consolidated Québec and federal legislative corpus, court directives, and AMF texts",
+        ],
+        description: `${nLois} instruments, ${nMat} subject areas, ${nArt} articles/provisions across official languages (most recent consolidation: ${consol}).`,
+        url: `${ORIGINE_SITE}/#corpus`,
+        inLanguage: ["fr-CA", "en-CA"],
+        dateModified: consol !== "—" ? consol : undefined,
+        license: "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      },
+    ],
+  };
+  return JSON.stringify(graphe).replace(/</g, "\\u003c");
 }
 
 // --- document ----------------------------------------------------------------
 
-/**
- * `env` est passé À DESSEIN, et les quatre sources sont masquées ENSEMBLE.
- *
- * Mesuré en production le 2026-09-11, interrupteur FERMÉ : la page annonçait « 79 lois » et
- * « 49 277 articles ». Les 22 articles en trop sont ceux d'`ca-i-15` dans les deux langues —
- * un texte que la page ne liste pas et qu'aucun outil ne sert. Après les 17 textes restants,
- * l'écart passait à ~6 800. C'est la dérive R10 exacte : un fait vivant, faux, silencieux.
- *
- * Et `subject_map` non masqué produisait la même divergence en petit : `matieres` rend le
- * décompte depuis `parMatiere` (non masqué) et la liste depuis `parId` (masqué), donc une
- * matière aurait affiché « (8) » au-dessus de sept lois.
- *
- * Le masque suit l'interrupteur dans les DEUX sens : fermé, la page dit 79 ; ouvert, elle
- * dira 97 sans qu'on y revienne. Coder le masque en dur aurait sous-déclaré 79 sur 97 au
- * premier flip. La PROSE de la page (« Lois du Québec », facette de juridiction) reste la
- * surface 5 de la phase 7 ; seuls les DÉCOMPTES sont corrigés ici, parce qu'un décompte se
- * calcule et ne se recopie pas.
- */
 export async function renderSite(db: D1Database, env: CorpusGateEnv = {}): Promise<string> {
-  // lang="fr" DÉLIBÉRÉMENT : listLaws en "en" déclenche translatePaths par loi (N+1) pour
-  // un bénéfice nul — la ligne `laws` porte déjà name_fr ET name_en, consol_date_fr ET _en.
   const [laws, subjects, map, counts] = await Promise.all([
     listLaws(db, {}, "fr", env),
     listSubjects(db, env),
@@ -181,11 +196,6 @@ export async function renderSite(db: D1Database, env: CorpusGateEnv = {}): Promi
     .sort();
   const consol = dates[dates.length - 1] ?? "—";
 
-  // L'ordre du corps est DÉRIVÉ de SECTIONS, il n'est plus recopié à côté. `Record<
-  // SectionId, …>` refuse à la compilation une section sans rendu (TS2741) comme un rendu
-  // sans section (TS2353) — le seul garde possible ici, puisqu'un `throw` à l'exécution
-  // rendrait 500 sur une page qu'aucune purge de cache ne peut rattraper.
-  // `limites` n'y figure pas : l'avertissement est rendu DANS `reperage()`.
   const RENDU: Record<SectionId, () => string> = {
     outils: () => outils(),
     reperage: () => reperage(),
@@ -201,58 +211,142 @@ export async function renderSite(db: D1Database, env: CorpusGateEnv = {}): Promi
     pied(consol),
   ].join("\n");
 
+  const titrePage = "MCP Législation — Lois du Québec et du Canada";
+  const descMeta =
+    "Serveur MCP donnant un accès en lecture seule au texte officiel de la législation du Québec et du Canada, ainsi qu'aux directives de pratique judiciaire et orientations AMF.";
+
   return `<!doctype html>
 <html lang="fr" class="l-fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lois du Québec et du Canada — serveur MCP</title>
-<meta name="description" content="Serveur MCP donnant un accès en lecture seule au texte officiel de la législation du Québec et du Canada, ainsi qu'aux directives de pratique judiciaire et orientations AMF.">
-<style>${CSS}</style>
-<script>${BOOT}</script>
+<title>${esc(titrePage)}</title>
+<meta name="description" content="${esc(descMeta)}">
+<link rel="canonical" href="${ORIGINE_SITE}/">
+<link rel="alternate" type="application/mcp-server-card+json" href="${ORIGINE_SITE}/mcp/server-card">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${esc(titrePage)}">
+<meta property="og:description" content="${esc(descMeta)}">
+<meta property="og:url" content="${ORIGINE_SITE}/">
+<meta property="og:locale" content="fr_CA">
+<meta property="og:locale:alternate" content="en_CA">
+<style>${compacterBloc(CSS)}</style>
+<script type="application/ld+json">${construireJsonLd(laws.length, subjects.length, totalArticles, consol)}</script>
+<script>${compacterBloc(BOOT)}</script>
 </head>
 <body>
+${sautContenu()}
 <div class="wrap">
 ${tdm()}
-<main>
+<main id="contenu-principal" tabindex="-1">
 ${corps}
 </main>
 </div>
 ${haut()}
-<script>${jsClient()}</script>
+<script>${compacterBloc(jsClient())}</script>
 </body>
 </html>`;
 }
 
+// --- découverte publique (/robots.txt, /sitemap.xml, /llms.txt) --------------
+
+export const CHEMINS_DECOUVERTE_PUBLIQUE = ["/robots.txt", "/sitemap.xml", "/llms.txt"] as const;
+export type CheminDecouvertePublique = (typeof CHEMINS_DECOUVERTE_PUBLIQUE)[number];
+
+export function estCheminDecouvertePublique(
+  pathname: string,
+): pathname is CheminDecouvertePublique {
+  return (CHEMINS_DECOUVERTE_PUBLIQUE as readonly string[]).includes(pathname);
+}
+
+const ROBOTS_TXT = [
+  "User-agent: *",
+  "Allow: /",
+  "Disallow: /mcp",
+  "Disallow: /admin/",
+  `Sitemap: ${ORIGINE_SITE}/sitemap.xml`,
+  "",
+].join("\n");
+
+const SITEMAP_XML = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+  `  <url><loc>${ORIGINE_SITE}/</loc></url>`,
+  "</urlset>",
+  "",
+].join("\n");
+
+const LLMS_TXT = [
+  "# MCP Législation (`lois`) — Lois du Québec et du Canada",
+  "",
+  `> ${PUBLIC_DESCRIPTION}`,
+  "",
+  "## Tools (10 read-only MCP tools, derived from catalogue.json)",
+  "",
+  ...Object.entries(catalogue.tools).map(
+    ([nom, t]) => `- \`${nom}\` — ${t.title_fr} / ${t.title_en}`,
+  ),
+  "",
+  "## Québec Civil Law MCP Suite (`droit-civil-quebecois`)",
+  "",
+  "- [MCP Accès (Admission & OAuth 2.1 Portal)](https://acces.poirierlavoie.ca/): Eligibility (active Barreau du Québec members), `/demande` application, and `/moi` console.",
+  `- [MCP Législation (\`lois\`)](${ORIGINE_SITE}/): Official statutes, regulations, court practice directives, and AMF texts. Server Card: ${ORIGINE_SITE}/mcp/server-card`,
+  "- [MCP Jurisprudence (`juris`)](https://jurisprudence.poirierlavoie.ca/): Case-law citation verification & CanLII metadata (BYOK CanLII). Server Card: https://jurisprudence.poirierlavoie.ca/mcp/server-card",
+  "- [MCP Outils (`outils` — Public, no account required)](https://outils.poirierlavoie.ca/): C.C.P. deadlines, art. 1619 C.C.Q. interest, registries, courthouses, RQA addresses, and bijural terminology. Endpoint: `https://outils.poirierlavoie.ca/mcp`",
+  `- [Umbrella Plugin Repository](${DEPOT_PLUGIN}) · [Connector Repository](${DEPOT})`,
+  "",
+].join("\n");
+
+export function repondreDecouvertePublique(
+  chemin: CheminDecouvertePublique,
+  method: string,
+): Response {
+  const { corps, type } =
+    chemin === "/robots.txt"
+      ? { corps: ROBOTS_TXT, type: "text/plain; charset=utf-8" }
+      : chemin === "/sitemap.xml"
+        ? { corps: SITEMAP_XML, type: "application/xml; charset=utf-8" }
+        : { corps: LLMS_TXT, type: "text/markdown; charset=utf-8" };
+
+  const headers = {
+    "Content-Type": type,
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "public, max-age=600",
+  };
+
+  return method === "HEAD"
+    ? new Response(null, { status: 200, headers })
+    : new Response(corps, { status: 200, headers });
+}
+
 // --- sections ----------------------------------------------------------------
 
-/**
- * Table des matières. Les cinq ancres existent déjà sur les sections — rien à inventer.
- * `<details>` sert les DEUX formes : barre latérale collante en large (le `<summary>` y
- * est masqué et le JS force l'ouverture), bloc « Sommaire » repliable en étroit. Sans
- * JavaScript l'attribut `open` du balisage la laisse dépliée : cinq liens en tête de page,
- * dégradé mais jamais cassé.
- */
+function sautContenu(): string {
+  return `<a href="#contenu-principal" class="saut">${bi("Aller au contenu principal", "Skip to main content")}</a>`;
+}
+
+function barreSuite(): string {
+  return `<nav class="suite" aria-labelledby="suite-t">
+  <span id="suite-t" class="sr">${bi("Suite Droit civil québécois", "Québec Civil Law suite")}</span>
+  <span class="suite-t">${bi("Droit civil québécois", "Québec Civil Law")}</span>
+  <ul>
+    <li><a href="https://acces.poirierlavoie.ca/">${bi("Accès", "Access")}</a></li>
+    <li><a href="/" aria-current="page">${bi("Législation", "Legislation")}</a></li>
+    <li><a href="https://jurisprudence.poirierlavoie.ca/">${bi("Jurisprudence", "Case Law")}</a></li>
+    <li><a href="https://outils.poirierlavoie.ca/">${bi("Outils", "Tools")}</a></li>
+  </ul>
+</nav>`;
+}
+
 function tdm(): string {
   const items = SECTIONS.map((s) => `<li><a href="#${s.id}">${bi(s.fr, s.en)}</a></li>`).join("");
   return `<details class="tdm" open>
-  <summary>${bi("Sommaire", "Contents")}</summary>
-  <nav><ul>${items}</ul></nav>
+  <summary id="tdm-t">${bi("Sommaire", "Contents")}</summary>
+  <nav aria-labelledby="tdm-t"><ul>${items}</ul></nav>
 </details>`;
 }
 
-/**
- * Pastille de retour en haut, dernier enfant de `<body>`.
- *
- * `href="#top"` est le repli SPÉCIFIÉ par HTML : sans élément portant cet id, le fragment
- * « top » désigne le haut du document. Le lien fonctionne donc sans une ligne de
- * JavaScript — celui-ci ne fait que le masquer tant qu'on n'a pas défilé.
- *
- * La flèche est `aria-hidden` et le nom accessible vient du libellé `.sr` : pour un `<a>`,
- * le CONTENU prime sur `title` dans le calcul du nom, donc une flèche seule donnerait un
- * lien non étiqueté. La langue non retenue étant masquée en `display:none`, les lecteurs
- * d'écran n'en annoncent qu'une.
- */
 function haut(): string {
   return (
     `<a href="#top" class="haut"><span aria-hidden="true">${FLECHE}</span>` +
@@ -260,26 +354,19 @@ function haut(): string {
   );
 }
 
-/**
- * Un état du bouton de thème. L'état est porté par `data-t` sur un span EXTÉRIEUR, la
- * langue par `data-l` sur les spans intérieurs : deux dimensions, deux éléments, donc
- * aucune collision de spécificité avec la règle de masquage bilingue (qui a déjà fait
- * apparaître les deux langues à la fois quand un `display:` la battait).
- */
 function etat(t: string, fr: string, en: string): string {
   return `<span data-t="${t}">${bi(fr, en)}</span>`;
 }
 
-// U+FE0E force la présentation TEXTE : sans lui, ☀ et ↑ basculent en émoji couleur sur
-// plusieurs plateformes et détonnent au milieu d'une page en serif. ◐ et ☾ n'ont pas de
-// variante émoji.
 const SOLEIL = "☀︎";
 const FLECHE = "↑︎";
+const FLECHE_BAS = "↓︎";
 
 function entete(): string {
   return `<header>
+  ${barreSuite()}
   <div class="bar">
-    <h1>${bi("Lois du Québec et du Canada", "Laws of Québec and Canada")}</h1>
+    <h1>${bi("MCP Législation — Lois du Québec et du Canada", "MCP Legislation — Laws of Québec and Canada")}</h1>
     <div class="btns">
       <button id="theme" type="button" title="Thème / Theme">${etat(
         "auto",
@@ -301,6 +388,11 @@ function entete(): string {
       "An MCP server giving AI assistants read-only access to the official text of Québec legislation and the federal statutes that Québec civil litigation relies on, as well as court practice directives and AMF texts. Provision text comes from official LégisQuébec EPUBs, Department of Justice Canada XML files, and official PDFs published by Québec courts (Superior Court, Court of Québec) and the Autorité des marchés financiers (AMF — regulations and policy statements, some PDFs published in French only); text is returned verbatim without alteration.",
     ],
   )}
+  <p class="btns">
+    <span class="badge">${bi("Membres du Barreau du Québec · OAuth 2.1 / jeton", "Barreau du Québec members · OAuth 2.1 / token")}</span>
+    <a class="btn" href="https://acces.poirierlavoie.ca/demande">${bi("Demander l'accès →", "Apply for access →")}</a>
+    <a class="btn-sec" href="https://acces.poirierlavoie.ca/">${bi("Portail d'accès", "Access portal")}</a>
+  </p>
 </header>`;
 }
 
@@ -318,12 +410,11 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
     .map((l) => {
       const [ffr, fen] = FONCTION[l.fonction ?? ""] ?? [l.fonction ?? "", l.fonction ?? ""];
       const src = SOURCES.get(l.id);
-      const hay = `${citeOf(l)} ${l.name_fr} ${l.name_en} ${ffr} ${fen}`.toLowerCase();
       const lien = (u: string | undefined, t: string, lg: string) =>
         u
           ? `<a data-l="${lg}" href="${esc(u)}" rel="noopener">${esc(t)}</a>`
           : `<span data-l="${lg}">${esc(t)}</span>`;
-      return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}" data-h="${esc(hay)}">
+      return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}">
       <td class="cite">${esc(citeOf(l))}</td>
       <td>${lien(src?.fr, l.name_fr, "fr")}${lien(src?.en, l.name_en, "en")}</td>
       <td>${bi(ffr, fen)}</td>
@@ -343,8 +434,10 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
       "Legislative texts are loaded in both official languages with their full hierarchy and consolidation date; court directive and AMF PDFs are loaded in French only where no official English PDF is published. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text on LégisQuébec, the Justice Laws Website of Canada, or the competent court or AMF page.",
     ],
   )}
-  <div class="ctl">
+  <search class="ctl">
+    <label class="sr" for="q">${bi("Filtrer les textes législatifs", "Filter legislative texts")}</label>
     <input id="q" type="search" placeholder="Filtrer / Filter">
+    <label class="sr" for="f">${bi("Filtrer par fonction normative", "Filter by normative function")}</label>
     <select id="f">
       <option value="">Toutes fonctions · All functions</option>
       <option value="loi">Loi · Statute</option>
@@ -358,37 +451,26 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
           : ""
       }
     </select>
-    <span id="cpt" class="m"></span>
-  </div>
-  <div class="tw"><table id="t">
+    <span id="cpt" class="m" role="status" aria-live="polite"></span>
+  </search>
+  <div class="tw" tabindex="0" role="region" aria-labelledby="h-corpus"><table id="t">
     <thead><tr>
-      <th><button type="button" data-s="0">${bi("Citation", "Citation")}</button></th>
-      <th><button type="button" data-s="1">${bi("Titre", "Title")}</button></th>
-      <th><button type="button" data-s="2">${bi("Fonction", "Function")}</button></th>
-      <th class="n"><button type="button" data-s="3">${bi("Articles", "Articles")}</button></th>
-      <th class="n"><button type="button" data-s="4">${bi("À jour au", "As of")}</button></th>
+      <th scope="col"><button type="button" data-s="0">${bi("Citation", "Citation")}</button></th>
+      <th scope="col"><button type="button" data-s="1">${bi("Titre", "Title")}</button></th>
+      <th scope="col"><button type="button" data-s="2">${bi("Fonction", "Function")}</button></th>
+      <th scope="col" class="n"><button type="button" data-s="3">${bi("Articles", "Articles")}</button></th>
+      <th scope="col" class="n"><button type="button" data-s="4">${bi("À jour au", "As of")}</button></th>
     </tr></thead>
     <tbody>${lignes}</tbody>
   </table></div>
 </section>`;
 }
 
-/**
- * Les matières — section autonome depuis ce commit, auparavant un `<h3>` en queue du
- * corpus. Le paragraphe et les deux groupes sont déplacés À L'IDENTIQUE : rien n'est
- * réécrit, seul le niveau de titre change.
- *
- * Les puces de lois ne portent VOLONTAIREMENT pas `data-law-id` : cet attribut n'existe que
- * pour le contrôle d'éval qui compte les lignes du tableau, et l'ajouter ici doublerait
- * silencieusement le décompte.
- */
 function matieres(
   subjects: SubjectSummary[],
   parMatiere: Map<string, string[]>,
   parId: Map<string, LawSummary>,
 ): string {
-  // <h3> et non <h4> : le titre parent est passé de <h3> à <h2> en devenant une section,
-  // et un niveau sauté s'entend dans la navigation par titres d'un lecteur d'écran.
   const groupe = (kind: string, tfr: string, ten: string) => {
     const items = subjects
       .filter((s) => s.kind === kind)
@@ -461,7 +543,6 @@ function outils(): string {
 
 function reperage(): string {
   const r = catalogue.retrieval;
-  // Valeurs LUES dans src/relevance.ts — jamais recopiées (R10).
   const cal = `<ul class="cal">
     <li>${bi("matière", "subject")} <b>+${WEIGHTS.S1_SUBJECT}</b></li>
     <li>${bi("intitulé de division", "division heading")} <b>+${WEIGHTS.S2_DIVISION_HEADING}</b></li>
@@ -496,19 +577,6 @@ function reperage(): string {
 </section>`;
 }
 
-/**
- * L'avertissement — sous-section des aides au repérage depuis ce commit.
- *
- * Le `<h3>` est construit DIRECTEMENT depuis catalogue.json et non par `h2()` : `limites`
- * ne figure plus dans SECTIONS, donc `h2("limites")` ne compilerait pas. `<section>`
- * imbriquée plutôt que `<div>` pour garder l'ancre `#limites` vivante (un lien externe
- * existant ne casse pas) et conserver `section[id]{scroll-margin-top}`.
- *
- * À SAVOIR : sur les trois paragraphes, un seul porte sur le repérage ; les deux autres
- * portent sur le service entier. En descendant d'un niveau, ce bloc perd aussi son entrée
- * de sommaire. C'est pourquoi la clause de non-conseil est reprise au pied de page, qui est
- * sur tous les écrans (décision de Jason, 2026-07-30).
- */
 function limites(): string {
   const a = catalogue.avertissement;
   return `<section id="limites" class="avert">
@@ -532,7 +600,7 @@ function acces(): string {
       "The source code is public under the CC BY-NC-SA 4.0 licence with a Companion Professional Legal Practice Grant for members in good standing of the Barreau du Québec (see LICENSE). The corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
     ],
   )}
-  <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">acces.poirierlavoie.ca</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
+  <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">${bi("Demande d'accès (/demande)", "Apply for access (/demande)")}</a> · <a href="https://acces.poirierlavoie.ca/moi" rel="noopener">/moi</a> · <a href="https://jurisprudence.poirierlavoie.ca/" rel="noopener">${bi("Jurisprudence", "Case Law")}</a> · <a href="https://outils.poirierlavoie.ca/" rel="noopener">${bi("Outils (public)", "Tools (public)")}</a> · <a href="${DEPOT_PLUGIN}" rel="noopener">droit-civil-quebecois</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
 </section>`;
 }
 
@@ -540,9 +608,6 @@ function pied(consol: string): string {
   return `<footer>
   <p><b>Jason Poirier Lavoie</b>, ${bi("avocat", "attorney")} · <a href="mailto:${CONTACT}">${CONTACT}</a></p>
   ${biP(
-    // « Aucun conseil juridique » vit AUSSI ici, et pas seulement dans l'avertissement :
-    // celui-ci est désormais une sous-section des aides au repérage, alors que la clause
-    // porte sur tout le service. Le pied, lui, est sous chaque écran de la page.
     [
       `Données : EPUB officiels de LégisQuébec (Éditeur officiel du Québec), XML du ministère de la Justice du Canada (Licence du gouvernement ouvert – Canada), ainsi que PDF officiels des tribunaux du Québec (Cour supérieure, Cour du Québec — directives de pratique) et de l'Autorité des marchés financiers (AMF — règlements et instructions générales sans force de loi) ; consolidation la plus récente chargée : ${consol}. La version officielle fait foi : celle de l'Éditeur officiel du Québec, celle publiée par le ministre pour le fédéral (art. 31 de la Loi sur la révision et la codification des textes législatifs), ou celle du tribunal ou de l'AMF compétent. Ce site n'est pas une version officielle. Aucun conseil juridique.`,
     ],
@@ -550,27 +615,19 @@ function pied(consol: string): string {
       `Data: official LégisQuébec EPUBs (Québec Official Publisher), Department of Justice Canada XML (Open Government Licence – Canada), and official PDFs from Québec courts (Superior Court, Court of Québec — practice directives) and the Autorité des marchés financiers (AMF — regulations and non-binding policy statements); most recent consolidation loaded: ${consol}. The official version prevails: that of the Québec Official Publisher, that published by the Minister for federal texts (s. 31, Legislation Revision and Consolidation Act), or that of the competent court or the AMF. This is not an official version. No legal advice.`,
     ],
   )}
-  <p><a href="${LEGISQUEBEC}" rel="noopener">legisquebec.gouv.qc.ca</a> · <a href="${DEPOT}" rel="noopener">GitHub</a></p>
+  <p><a href="${LEGISQUEBEC}" rel="noopener">legisquebec.gouv.qc.ca</a> · <a href="https://acces.poirierlavoie.ca/" rel="noopener">acces.poirierlavoie.ca</a> · <a href="${DEPOT}" rel="noopener">GitHub</a></p>
 </footer>`;
 }
 
 // --- CSS / JS ----------------------------------------------------------------
-// Autonomes : aucune police distante, aucun CDN. Sans JavaScript, le FRANÇAIS s'affiche
-// et tout le contenu reste lisible (le filtre et le tri sont des agréments, pas le fond).
 
-// Un thème = UN jeu de variables, rien d'autre. Aucune règle de mise en page ne connaît
-// plus une seule couleur : c'est ce qui permet trois états (auto / clair / sombre) sans
-// tripler la feuille. Toute couleur ajoutée plus tard doit passer par ici, sinon elle ne
-// bascule pas — et ne bascule pas EN SILENCE, la page restant lisible dans un seul thème.
 const CLAIR =
-  "--f:#111;--m:#666;--b:#e2e0da;--a:#7a2e1d;--bg:#fdfcfa;--card:#fff;" +
+  "color-scheme:light;--f:#111;--m:#666;--b:#e2e0da;--a:#7a2e1d;--bg:#fdfcfa;--card:#fff;" +
   "--th:#f7f5f1;--code:#f2efe9;--hover:#faf8f4;--avert-bg:#fbf7f1;--avert-b:#e6d9c6";
 const SOMBRE =
-  "--f:#e8e6e1;--m:#a09a90;--b:#3a372f;--a:#e08b6a;--bg:#16150f;--card:#1e1c16;" +
+  "color-scheme:dark;--f:#e8e6e1;--m:#a09a90;--b:#3a372f;--a:#e08b6a;--bg:#16150f;--card:#1e1c16;" +
   "--th:#252219;--code:#252219;--hover:#242118;--avert-bg:#211d15;--avert-b:#3d3527";
 
-// Point de rupture de la barre latérale : 13rem + 2.5rem de gouttière + 60rem de colonne
-// de texte + 2.5rem de marge intérieure = 78rem. En deçà, une seule colonne.
 const LARGE = "78rem";
 
 const CSS = `
@@ -583,6 +640,7 @@ body{margin:0;background:var(--bg);color:var(--f);font:16px/1.6 Georgia,'Times N
 .wrap{max-width:${LARGE};margin:0 auto;padding:2rem 1.25rem 4rem;display:grid;gap:1rem}
 main{min-width:0;max-width:60rem;width:100%;justify-self:center}
 section[id]{scroll-margin-top:1.5rem}
+#corpus,#matieres{content-visibility:auto;contain-intrinsic-size:auto 40rem}
 h1{font-size:1.6rem;margin:0}
 h2{font-size:1.35rem;margin:2.75rem 0 .75rem;padding-bottom:.3rem;border-bottom:2px solid var(--b)}
 h3{font-size:1.1rem;margin:1.75rem 0 .5rem}
@@ -590,17 +648,34 @@ h4{font-size:1rem;margin:1.25rem 0 .25rem}
 p{margin:.6rem 0}
 a{color:var(--a)}
 code{font:.9em ui-monospace,Menlo,Consolas,monospace;background:var(--code);padding:.1em .35em;border-radius:3px}
+:where(a,button,input,select,summary,[tabindex]):focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.saut{position:fixed;left:1rem;top:1rem;z-index:20;padding:.45rem .85rem;background:var(--card);
+  color:var(--a);border:2px solid var(--a);border-radius:6px;font-weight:700;text-decoration:none}
+.saut:not(:focus-visible){position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip-path:inset(50%);white-space:nowrap;border:0}
+.suite{display:flex;align-items:center;justify-content:space-between;gap:.5rem 1rem;flex-wrap:wrap;
+  margin:0 0 1rem;padding:0 0 .65rem;border-bottom:1px solid var(--b);font-size:.88rem}
+.suite-t{font-weight:700;color:var(--m);letter-spacing:.02em}
+.suite ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.35rem}
+.suite a{display:inline-block;padding:.28rem .65rem;border:1px solid transparent;border-radius:999px;
+  color:var(--m);text-decoration:none;min-height:1.75rem}
+.suite a:hover{color:var(--a);border-color:var(--b);background:var(--card)}
+.suite a[aria-current=page]{color:var(--a);font-weight:700;border-color:var(--a);background:var(--card)}
 .bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
-.btns{display:flex;gap:.5rem;flex-wrap:wrap}
-#bascule,#theme{font:inherit;font-size:.8rem;letter-spacing:.05em;background:none;border:1px solid var(--b);
-  border-radius:999px;padding:.35rem .9rem;cursor:pointer;color:var(--m);white-space:nowrap}
-#bascule:hover,#theme:hover{border-color:var(--a);color:var(--a)}
-/* Largeur figée : les trois libellés n'ont pas la même longueur, le bouton sauterait à chaque clic. */
+.btns{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+#bascule,#theme,.btn-sec{font:inherit;font-size:.8rem;letter-spacing:.04em;background:var(--card);border:1px solid var(--b);
+  border-radius:999px;padding:.35rem .9rem;cursor:pointer;color:var(--m);text-decoration:none;white-space:nowrap;display:inline-block}
+#bascule:hover,#theme:hover,.btn-sec:hover{border-color:var(--a);color:var(--a)}
 #theme{min-width:6.5rem;text-align:center}
 #theme [data-t]{display:none}
 html:not(.t-light):not(.t-dark) #theme [data-t=auto],
 html.t-light #theme [data-t=light],
 html.t-dark #theme [data-t=dark]{display:inline}
+.btn{font:inherit;font-size:.86rem;font-weight:700;background:var(--a);color:var(--bg);
+  border:1px solid var(--a);border-radius:999px;padding:.35rem .95rem;text-decoration:none;white-space:nowrap;display:inline-block}
+.btn:hover{opacity:.92}
+.badge{display:inline-block;font-size:.78rem;padding:.2rem .6rem;border-radius:999px;
+  border:1px solid var(--avert-b);background:var(--avert-bg);color:var(--f)}
 .chiffres{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:1rem;
   margin:2rem 0;padding:1.25rem;background:var(--card);border:1px solid var(--b);border-radius:6px}
 .chiffres div{text-align:center}
@@ -615,7 +690,9 @@ html.t-dark #theme [data-t=dark]{display:inline}
 table{border-collapse:collapse;width:100%;font-size:.88rem}
 th,td{padding:.5rem .7rem;text-align:left;border-bottom:1px solid var(--b);vertical-align:top}
 th{background:var(--th);position:sticky;top:0}
-th button{font:inherit;font-weight:700;background:none;border:0;padding:0;cursor:pointer;color:inherit}
+th button{font:inherit;font-weight:700;background:none;border:0;padding:0;cursor:pointer;color:inherit;min-height:1.5rem}
+th[aria-sort=ascending] button::after{content:" ${FLECHE}"}
+th[aria-sort=descending] button::after{content:" ${FLECHE_BAS}"}
 td.n,th.n{text-align:right;white-space:nowrap}
 td.cite{white-space:nowrap;font-size:.85em;color:var(--m)}
 tbody tr:hover{background:var(--hover)}
@@ -638,21 +715,20 @@ summary{cursor:pointer;font-weight:700}
   display:flex;justify-content:space-between;gap:.5rem}
 .avert{background:var(--avert-bg);border:1px solid var(--avert-b);border-radius:6px;padding:.25rem 1.25rem 1rem}
 footer{margin-top:3.5rem;padding-top:1.25rem;border-top:2px solid var(--b);font-size:.9rem;color:var(--m)}
-/* Libellé réservé aux lecteurs d'écran : retiré de l'affichage sans display:none, qui le
-   retirerait AUSSI de l'arbre d'accessibilité — la pastille redeviendrait un lien anonyme. */
 .sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
   clip-path:inset(50%);white-space:nowrap;border:0}
 .haut{position:fixed;right:1.25rem;bottom:1.25rem;z-index:10;width:2.6rem;height:2.6rem;
   display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:1.1rem;
   background:var(--card);color:var(--m);border:1px solid var(--b);border-radius:999px}
 .haut:hover{color:var(--a);border-color:var(--a)}
-/* Sans JavaScript la classe js n'est jamais posée : la pastille reste simplement visible.
-   Le masquage et le code qui démasque vivent dans le MÊME script (voir JS). */
 html.js .haut{opacity:0;visibility:hidden}
 html.js .haut.on{opacity:1;visibility:visible}
 @media(prefers-reduced-motion:no-preference){
   html{scroll-behavior:smooth}
   .haut{transition:opacity .2s,visibility .2s,color .2s,border-color .2s}
+}
+@media(forced-colors:active){
+  .suite a[aria-current=page],.tdm a.on{outline:2px solid Highlight}
 }
 html.l-fr [data-l=en],html.l-en [data-l=fr]{display:none}
 @media(min-width:${LARGE}){
@@ -664,11 +740,6 @@ html.l-fr [data-l=en],html.l-en [data-l=fr]{display:none}
 }
 `;
 
-// Amorçage synchrone : pose la langue ET le thème AVANT le premier rendu (pas de
-// scintillement). Les deux classes sont COMPOSÉES, jamais affectées l'une après l'autre :
-// `className = …` écrasait tout, et une classe de thème posée ici aurait disparu au
-// premier clic sur la bascule de langue — sans qu'aucun test ne le voie.
-// Thème absent de localStorage = « auto », donc aucune classe : la media query gouverne.
 const BOOT = String.raw`
 try{
   var r=document.documentElement, c=[];
@@ -680,12 +751,9 @@ try{
 }catch(e){}
 `;
 
-// AUCUN `${` ici (String.raw interpole quand même) et aucune regex (les antislashs d'un
-// gabarit non balisé seraient mangés — d'où String.raw, et la prudence en prime).
 const JS = String.raw`
 (function(){
   var d=document, h=d.documentElement;
-  // classList, PAS className : la classe de thème vit sur le même élément.
   var b=d.getElementById('bascule');
   if(b) b.addEventListener('click',function(){
     var nv=h.classList.contains('l-en')?'fr':'en';
@@ -694,8 +762,6 @@ const JS = String.raw`
     try{localStorage.setItem('qclawLang',nv);}catch(e){}
   });
 
-  // Trois états en cycle : auto -> clair -> sombre -> auto. « auto » n'est pas une classe
-  // mais l'ABSENCE des deux autres, pour que la media query reprenne la main.
   var tb=d.getElementById('theme');
   if(tb) tb.addEventListener('click',function(){
     var cur=h.classList.contains('t-light')?'light'
@@ -709,9 +775,6 @@ const JS = String.raw`
     }catch(e){}
   });
 
-  // La table des matières est un <details> : dépliée en barre latérale large, repliable
-  // en « Sommaire » sous le point de rupture. Le balisage porte l'attribut open pour que
-  // le rendu sans JavaScript reste utilisable ; c'est ici seulement qu'elle se replie.
   var td=d.querySelector('.tdm');
   if(td){
     try{
@@ -736,11 +799,6 @@ const JS = String.raw`
     }catch(e){}
   }
 
-  // Pastille de retour en haut. La classe 'js' est posée ICI et pas dans BOOT : c'est elle
-  // qui AUTORISE le masquage, et si ce script ne s'exécutait jamais (throw en amont), une
-  // classe posée dans BOOT masquerait la pastille pour toujours, sans erreur visible.
-  // if(ht){...} et JAMAIS if(!ht) return; — un return sort de toute l'IIFE et emporterait
-  // le filtre, le compteur et le tri du tableau.
   var ht=d.querySelector('.haut');
   if(ht){
     try{
@@ -765,12 +823,15 @@ const JS = String.raw`
     for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);if(c<768||c>879)o+=s[i];}
     return o;
   }
+  var idx=new WeakMap();
+  for(var r0=0;r0<rows.length;r0++) idx.set(rows[r0],fold(rows[r0].textContent));
+
   function filtre(){
     var needle=fold(q?q.value:''), fonction=f?f.value:'', n=0;
     for(var i=0;i<rows.length;i++){
       var r=rows[i];
       var ok=(!fonction||r.getAttribute('data-f')===fonction) &&
-             (!needle||fold(r.getAttribute('data-h')).indexOf(needle)>-1);
+             (!needle||(idx.get(r)||'').indexOf(needle)>-1);
       r.hidden=!ok; if(ok)n++;
     }
     if(cpt) cpt.textContent=n+' / '+rows.length;
@@ -779,16 +840,19 @@ const JS = String.raw`
   if(f) f.addEventListener('change',filtre);
   filtre();
 
-  var sens={};
+  var ths=t.tHead.rows[0].cells;
   [].forEach.call(t.querySelectorAll('th button'),function(btn){
     btn.addEventListener('click',function(){
-      var i=+btn.getAttribute('data-s'); sens[i]=!sens[i];
+      var i=+btn.getAttribute('data-s'), th=ths[i];
+      var asc=th.getAttribute('aria-sort')!=='ascending';
+      for(var m=0;m<ths.length;m++) ths[m].removeAttribute('aria-sort');
+      th.setAttribute('aria-sort',asc?'ascending':'descending');
       var num=(i===3);
       rows.sort(function(a,c){
         var x=a.cells[i].textContent.trim(), y=c.cells[i].textContent.trim();
         var v=num?(parseInt(x.replace(/[^0-9]/g,''),10)||0)-(parseInt(y.replace(/[^0-9]/g,''),10)||0)
                  :x.localeCompare(y,'fr');
-        return sens[i]?v:-v;
+        return asc?v:-v;
       });
       for(var k=0;k<rows.length;k++) body.appendChild(rows[k]);
     });
@@ -796,13 +860,6 @@ const JS = String.raw`
 })();
 `;
 
-/**
- * Le point de rupture n'est déclaré qu'UNE fois (`LARGE`) puis injecté ici : le JS client
- * est en String.raw, où `${` serait interpolé quand même — d'où le jeton textuel. Le garde
- * n'est pas décoratif : sans lui, un renommage laisserait `matchMedia('(min-width:LARGEUR)')`
- * éternellement faux et la barre latérale repliée en grand écran, SANS erreur. Évalué à
- * l'appel (pas au chargement du module) pour qu'un défaut ici ne coule que la page.
- */
 function jsClient(): string {
   if (!JS.includes("LARGEUR")) throw new Error("jeton LARGEUR absent du JS client");
   return JS.replace("LARGEUR", LARGE);

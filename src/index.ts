@@ -29,7 +29,7 @@ import {
   ressourceProtegeeOAuth,
   SCOPE_OAUTH,
 } from "./serveur";
-import { renderSite } from "./site";
+import { estCheminDecouvertePublique, renderSite, repondreDecouvertePublique } from "./site";
 
 export { carteServeur };
 
@@ -66,7 +66,7 @@ async function servePage(request: Request, env: Env, ctx: ExecutionContext): Pro
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "Content-Security-Policy":
         "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
-        "img-src data:; base-uri 'none'; form-action 'none'",
+        "img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     },
   });
   ctx.waitUntil(cache.put(CACHE_KEY, res.clone()));
@@ -81,12 +81,19 @@ export default {
     const admises = originesAdmises((env as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS);
     const origin = origineAutorisee(request, admises);
 
-    // La page publique passe AVANT le coupe-circuit, et hors du bloc /mcp (G22).
+    // La page publique et ses fichiers de découverte passent AVANT le coupe-circuit, et hors du bloc /mcp (G22).
     if (url.pathname === "/") {
       if (request.method !== "GET" && request.method !== "HEAD") {
         return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
       }
       return servePage(request, env, ctx);
+    }
+
+    if (estCheminDecouvertePublique(url.pathname)) {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+      }
+      return repondreDecouvertePublique(url.pathname, request.method);
     }
 
     const estMetaOAuth = url.pathname === "/.well-known/oauth-protected-resource/mcp/oauth";

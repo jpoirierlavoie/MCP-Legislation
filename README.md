@@ -8,7 +8,9 @@ preuve, Cours fédérales — ainsi que les directives de pratique des tribunaux
 articles ou paragraphes) et recherche hybride lexicale + sémantique.
 
 **Page publique :** <https://legislation.poirierlavoie.ca/> — outils, aides au repérage,
-corpus et matières, en français et en anglais, avec les décomptes lus en base.
+corpus et matières, en français et en anglais, avec navigation inter-connecteurs, schéma
+JSON-LD, décomptes lus en base et fichiers publics de découverte (`/robots.txt`,
+`/sitemap.xml`, `/llms.txt`).
 
 **Point d'accès MCP :** `https://legislation.poirierlavoie.ca/mcp` (jeton direct, refus `404`)
 et `https://legislation.poirierlavoie.ca/mcp/oauth` (OAuth 2.1 PKCE S256 via
