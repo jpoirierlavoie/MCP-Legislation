@@ -413,10 +413,10 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
     expect(html).toContain("<b>2</b>");
     expect(html).toContain("<b>3</b>");
     expect(html).toContain(
-      'Pratique PDF</span><span data-l="en">PDF Practice</span> <span class="m">(0)</span>',
+      'Pratique PDF</span><span data-l="en" lang="en">PDF Practice</span> <span class="m">(0)</span>',
     );
     expect(html).toContain(
-      'Cautionnement partagé</span><span data-l="en">Shared suretyship</span> <span class="m">(1)</span>',
+      'Cautionnement partagé</span><span data-l="en" lang="en">Shared suretyship</span> <span class="m">(1)</span>',
     );
   });
 });
@@ -479,10 +479,10 @@ describe("PDF_CORPUS='1' et indépendance avec FEDERAL_CORPUS", () => {
     expect(html).toContain('<tr data-law-id="essai-pdf"');
     expect(html).toContain("<b>5</b>");
     expect(html).toContain(
-      'Pratique PDF</span><span data-l="en">PDF Practice</span> <span class="m">(1)</span>',
+      'Pratique PDF</span><span data-l="en" lang="en">PDF Practice</span> <span class="m">(1)</span>',
     );
     expect(html).toContain(
-      'Cautionnement partagé</span><span data-l="en">Shared suretyship</span> <span class="m">(2)</span>',
+      'Cautionnement partagé</span><span data-l="en" lang="en">Shared suretyship</span> <span class="m">(2)</span>',
     );
   });
 
@@ -553,10 +553,10 @@ describe("PDF_CORPUS='1' et indépendance avec FEDERAL_CORPUS", () => {
     expect(html).toContain("<b>1</b>");
     expect(html).toContain("<b>2</b>");
     expect(html).toContain(
-      'Pratique PDF</span><span data-l="en">PDF Practice</span> <span class="m">(0)</span>',
+      'Pratique PDF</span><span data-l="en" lang="en">PDF Practice</span> <span class="m">(0)</span>',
     );
     expect(html).toContain(
-      'Cautionnement partagé</span><span data-l="en">Shared suretyship</span> <span class="m">(1)</span>',
+      'Cautionnement partagé</span><span data-l="en" lang="en">Shared suretyship</span> <span class="m">(1)</span>',
     );
   });
 });

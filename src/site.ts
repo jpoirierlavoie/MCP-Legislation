@@ -68,7 +68,7 @@ function esc(s: unknown): string {
 
 /** Bloc bilingue : les deux langues sont émises, le CSS n'en montre qu'une. */
 function bi(fr: string, en: string): string {
-  return `<span data-l="fr">${esc(fr)}</span><span data-l="en">${esc(en)}</span>`;
+  return `<span data-l="fr">${esc(fr)}</span><span data-l="en" lang="en">${esc(en)}</span>`;
 }
 
 /** Suite de paragraphes bilingues (avec lang="en" sur le bloc anglais pour lecteurs/indexeurs). */
@@ -212,15 +212,16 @@ export async function renderSite(db: D1Database, env: CorpusGateEnv = {}): Promi
   ].join("\n");
 
   const titrePage = "MCP Législation — Lois du Québec et du Canada";
+  const titrePageEn = "MCP Legislation — Laws of Québec and Canada";
   const descMeta =
-    "Serveur MCP donnant un accès en lecture seule au texte officiel de la législation du Québec et du Canada, ainsi qu'aux directives de pratique judiciaire et orientations AMF.";
+    "Serveur MCP en lecture seule : texte officiel des lois et règlements du Québec et du Canada, directives judiciaires et orientations AMF.";
 
   return `<!doctype html>
 <html lang="fr" class="l-fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(titrePage)}</title>
+<title data-fr="${esc(titrePage)}" data-en="${esc(titrePageEn)}">${esc(titrePage)}</title>
 <meta name="description" content="${esc(descMeta)}">
 <link rel="canonical" href="${ORIGINE_SITE}/">
 <link rel="alternate" type="application/mcp-server-card+json" href="${ORIGINE_SITE}/mcp/server-card">
@@ -410,10 +411,12 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
     .map((l) => {
       const [ffr, fen] = FONCTION[l.fonction ?? ""] ?? [l.fonction ?? "", l.fonction ?? ""];
       const src = SOURCES.get(l.id);
-      const lien = (u: string | undefined, t: string, lg: string) =>
-        u
-          ? `<a data-l="${lg}" href="${esc(u)}" rel="noopener">${esc(t)}</a>`
-          : `<span data-l="${lg}">${esc(t)}</span>`;
+      const lien = (u: string | undefined, t: string, lg: string) => {
+        const attrLg = lg === "en" ? ' lang="en"' : "";
+        return u
+          ? `<a data-l="${lg}"${attrLg} href="${esc(u)}" rel="noopener">${esc(t)}</a>`
+          : `<span data-l="${lg}"${attrLg}>${esc(t)}</span>`;
+      };
       return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}">
       <td class="cite">${esc(citeOf(l))}</td>
       <td>${lien(src?.fr, l.name_fr, "fr")}${lien(src?.en, l.name_en, "en")}</td>
@@ -690,7 +693,7 @@ html.t-dark #theme [data-t=dark]{display:inline}
 table{border-collapse:collapse;width:100%;font-size:.88rem}
 th,td{padding:.5rem .7rem;text-align:left;border-bottom:1px solid var(--b);vertical-align:top}
 th{background:var(--th);position:sticky;top:0}
-th button{font:inherit;font-weight:700;background:none;border:0;padding:0;cursor:pointer;color:inherit;min-height:1.5rem}
+th button{font:inherit;font-weight:700;background:none;border:0;padding:.25rem .15rem;cursor:pointer;color:inherit;min-height:1.75rem}
 th[aria-sort=ascending] button::after{content:" ${FLECHE}"}
 th[aria-sort=descending] button::after{content:" ${FLECHE_BAS}"}
 td.n,th.n{text-align:right;white-space:nowrap}
@@ -748,6 +751,8 @@ try{
   var t=localStorage.getItem('qclawTheme');
   if(t==='light'||t==='dark') c.push('t-'+t);
   r.className=c.join(' ');
+  var ti=document.querySelector&&document.querySelector('title[data-en]');
+  if(ti&&p==='en') document.title=ti.getAttribute('data-en');
 }catch(e){}
 `;
 
@@ -759,6 +764,8 @@ const JS = String.raw`
     var nv=h.classList.contains('l-en')?'fr':'en';
     h.classList.toggle('l-fr',nv==='fr'); h.classList.toggle('l-en',nv==='en');
     h.lang=nv;
+    var ti=d.querySelector('title[data-en]');
+    if(ti) d.title=ti.getAttribute(nv==='en'?'data-en':'data-fr')||d.title;
     try{localStorage.setItem('qclawLang',nv);}catch(e){}
   });
 
