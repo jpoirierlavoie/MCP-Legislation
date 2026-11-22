@@ -142,7 +142,7 @@ function construireJsonLd(nLois: number, nMat: number, nArt: number, consol: str
         url: `${ORIGINE_SITE}/`,
         documentation: `${ORIGINE_SITE}/mcp/server-card`,
         termsOfService: "https://acces.poirierlavoie.ca/cgu",
-        license: "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+        license: "https://www.apache.org/licenses/LICENSE-2.0",
         isAccessibleForFree: true,
         inLanguage: ["fr-CA", "en-CA"],
         description: PUBLIC_DESCRIPTION,
@@ -159,7 +159,7 @@ function construireJsonLd(nLois: number, nMat: number, nArt: number, consol: str
         url: `${ORIGINE_SITE}/#corpus`,
         inLanguage: ["fr-CA", "en-CA"],
         dateModified: consol !== "—" ? consol : undefined,
-        license: "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+        isAccessibleForFree: true,
       },
     ],
   };
@@ -595,12 +595,12 @@ function acces(): string {
     [
       `Ce serveur est réservé aux membres en règle du Barreau du Québec. Deux portes d'accès coexistent : le montage à jeton individuel direct https://legislation.poirierlavoie.ca/mcp (qui répond 404 sans corps à tout appel non authentifié afin de prévenir toute découverte OAuth non sollicitée) et le montage OAuth 2.1 https://legislation.poirierlavoie.ca/mcp/oauth (PKCE S256 via https://acces.poirierlavoie.ca). Les demandes d'accès et la gestion libre-service des jetons, de la préférence de recherche hybride et de la révocation s'effectuent sur https://acces.poirierlavoie.ca/demande et https://acces.poirierlavoie.ca/moi (ou en écrivant à ${CONTACT}).`,
       "Aucun texte de requête ni argument d'outil n'est journalisé (journaux d'invocation Cloudflare désactivés, zéro écriture dans search_log). Une fiche publique de découverte MCP (SEP-2127) sans secret est exposée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut les manifestes pour Google Antigravity (plugin.json, mcp_config.json) et Gemini CLI (gemini-extension.json).",
-      "Le code source est public sous licence CC BY-NC-SA 4.0 assortie d'une autorisation complémentaire de pratique professionnelle du droit pour les membres en règle du Barreau du Québec (voir LICENSE). Le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés.",
+      "Le code source est libre et gratuit sous licence Apache-2.0 (voir LICENSE) ; le fichier NOTICE reconnaît les sources officielles sans revendication de droit d'auteur sur les textes servis (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ et AMF). Le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés.",
     ],
     [
       `This server is reserved for members in good standing of the Barreau du Québec. Two access mounts coexist: the direct per-holder token mount https://legislation.poirierlavoie.ca/mcp (which returns an empty 404 to any unauthenticated call so unsolicited OAuth discovery is never triggered) and the OAuth 2.1 mount https://legislation.poirierlavoie.ca/mcp/oauth (PKCE S256 via https://acces.poirierlavoie.ca). Access requests and self-service token, hybrid-search preference, and revocation management are available at https://acces.poirierlavoie.ca/demande and https://acces.poirierlavoie.ca/moi (or by writing to ${CONTACT}).`,
       "No query text or tool argument is ever logged (Cloudflare invocation logs disabled, zero runtime writes to search_log). A public MCP Server Card (SEP-2127) without secrets is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository ships manifests for Google Antigravity (plugin.json, mcp_config.json) and Gemini CLI (gemini-extension.json).",
-      "The source code is public under the CC BY-NC-SA 4.0 licence with a Companion Professional Legal Practice Grant for members in good standing of the Barreau du Québec (see LICENSE). The corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
+      "The source code is free and open-source under Apache-2.0 (see LICENSE); the NOTICE file credits official publishers without claiming copyright over the served texts (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ, and AMF). The corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
     ],
   )}
   <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">${bi("Demande d'accès (/demande)", "Apply for access (/demande)")}</a> · <a href="https://acces.poirierlavoie.ca/moi" rel="noopener">/moi</a> · <a href="https://jurisprudence.poirierlavoie.ca/" rel="noopener">${bi("Jurisprudence", "Case Law")}</a> · <a href="https://outils.poirierlavoie.ca/" rel="noopener">${bi("Outils (public)", "Tools (public)")}</a> · <a href="${DEPOT_PLUGIN}" rel="noopener">droit-civil-quebecois</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
