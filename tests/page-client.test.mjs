@@ -94,6 +94,13 @@ function scene({ langStockee = null, themeStocke = null, langue = "fr-CA", large
   const theme = noeud("theme");
   const tdm = noeud("tdm");
   const haut = noeud("haut");
+  const titre = {
+    getAttribute: (a) =>
+      ({
+        "data-fr": "MCP Législation — Lois du Québec et du Canada",
+        "data-en": "MCP Legislation — Laws of Québec and Canada",
+      })[a] ?? null,
+  };
   const requetes = [];
 
   // Sans ce stub, `window` est indéfini : le bloc de la pastille lève, son try/catch avale,
@@ -133,9 +140,10 @@ function scene({ langStockee = null, themeStocke = null, langue = "fr-CA", large
     },
     window: fenetre,
     document: {
+      title: "MCP Législation — Lois du Québec et du Canada",
       documentElement: html,
       getElementById: (i) => ({ bascule, theme })[i] ?? null,
-      querySelector: (s) => ({ ".tdm": tdm, ".haut": haut })[s] ?? null,
+      querySelector: (s) => ({ ".tdm": tdm, ".haut": haut, "title[data-en]": titre })[s] ?? null,
     },
   };
 
@@ -149,7 +157,19 @@ function scene({ langStockee = null, themeStocke = null, langue = "fr-CA", large
   // `js` n'est PAS filtrée ici : la filtrer viderait de leur substance les contrôles qui
   // existent précisément pour prouver que les classes de <html> se COMPOSENT.
   const classes = () => html.className.split(/\s+/).filter(Boolean).sort().join(" ");
-  return { html, bascule, theme, tdm, haut, fenetre, store, requetes, demarrerJs, classes };
+  return {
+    html,
+    bascule,
+    theme,
+    tdm,
+    haut,
+    fenetre,
+    store,
+    requetes,
+    demarrerJs,
+    classes,
+    doc: globaux.document,
+  };
 }
 
 // --- amorçage ----------------------------------------------------------------
@@ -161,7 +181,12 @@ test("amorçage à froid : français, thème automatique (aucune classe de thèm
 });
 
 test("amorçage : la langue du navigateur est respectée", () => {
-  assert.equal(scene({ langue: "en-CA" }).classes(), "l-en");
+  const s = scene({ langue: "en-CA" });
+  assert.equal(s.classes(), "l-en");
+  assert.equal(s.doc.title, "MCP Legislation — Laws of Québec and Canada");
+  s.demarrerJs();
+  s.bascule.click();
+  assert.equal(s.doc.title, "MCP Législation — Lois du Québec et du Canada");
 });
 
 test("amorçage : les deux préférences stockées sont posées ENSEMBLE", () => {

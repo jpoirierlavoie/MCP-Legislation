@@ -2534,7 +2534,7 @@ describe("Tier 1 — F9: Public Site GET / Counts, FONCTION & Provenance", () =>
     expect(dirRow).toContain('data-f="directive"');
     expect(dirRow).not.toContain(">directive<");
     expect(dirRow).toMatch(
-      /<span data-l="fr">[^<]*(?:Directive|Pratique)[^<]*<\/span><span data-l="en">[^<]*(?:Directive|Practice directive)[^<]*<\/span>/i,
+      /<span data-l="fr">[^<]*(?:Directive|Pratique)[^<]*<\/span><span data-l="en" lang="en">[^<]*(?:Directive|Practice directive)[^<]*<\/span>/i,
     );
 
     const oriRow = html.match(/<tr data-law-id="amf-ig-45-106"[^>]*>[\s\S]*?<\/tr>/)?.[0];
@@ -2542,7 +2542,7 @@ describe("Tier 1 — F9: Public Site GET / Counts, FONCTION & Provenance", () =>
     expect(oriRow).toContain('data-f="orientation"');
     expect(oriRow).not.toContain(">orientation<");
     expect(oriRow).toMatch(
-      /<span data-l="fr">[^<]*(?:Instruction g[ée]n[ée]rale|Orientation)[^<]*<\/span><span data-l="en">[^<]*(?:Policy statement|Guidance|Orientation)[^<]*<\/span>/i,
+      /<span data-l="fr">[^<]*(?:Instruction g[ée]n[ée]rale|Orientation)[^<]*<\/span><span data-l="en" lang="en">[^<]*(?:Policy statement|Guidance|Orientation)[^<]*<\/span>/i,
     );
   });
 
