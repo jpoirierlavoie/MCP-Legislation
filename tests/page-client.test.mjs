@@ -384,3 +384,17 @@ test("les deux jeux de thème déclarent exactement les mêmes variables", () =>
   };
   assert.deepEqual(vars("CLAIR"), vars("SOMBRE"));
 });
+
+test("navigation inter-connecteurs, saut clavier et schéma JSON-LD dans le gabarit", () => {
+  assert.ok(SRC.includes('<nav class="suite"'), "barre de suite absente");
+  assert.ok(SRC.includes('href="https://acces.poirierlavoie.ca/"'), "lien Accès absent");
+  assert.ok(
+    SRC.includes('href="https://jurisprudence.poirierlavoie.ca/"'),
+    "lien Jurisprudence absent",
+  );
+  assert.ok(SRC.includes('href="https://outils.poirierlavoie.ca/"'), "lien Outils absent");
+  assert.ok(SRC.includes('href="/" aria-current="page"'), "aria-current absent sur Législation");
+  assert.ok(SRC.includes('href="#contenu-principal"'), "lien d'évitement clavier absent");
+  assert.ok(SRC.includes('type="application/ld+json"'), "JSON-LD absent");
+  assert.ok(!SRC.includes("data-h="), "attribut redondant data-h encore émis");
+});

@@ -281,6 +281,14 @@ describe("la chaîne intergicielle", () => {
       expect(santeCoupe.status).toBe(404);
       expect(santeCoupe.headers.get("Cache-Control")).toBe("no-store");
       expect((await SELF.fetch("https://legislation.test/mcp/server-card")).status).toBe(404);
+      for (const dec of ["/robots.txt", "/sitemap.xml", "/llms.txt"]) {
+        const rDec = await SELF.fetch(`https://legislation.test${dec}`);
+        expect(rDec.status, dec).toBe(200);
+        expect(rDec.headers.get("Access-Control-Allow-Origin"), dec).toBeNull();
+      }
+      expect(
+        (await SELF.fetch("https://legislation.test/robots.txt", { method: "POST" })).status,
+      ).toBe(405);
       // La base de test n'a pas de schéma (aucune migration n'est appliquée), si bien que le
       // rendu échoue sur « no such table: laws ». Cet échec est justement la preuve cherchée :
       // le coupe-circuit aurait rendu 404 AVANT toute lecture D1. On accepte les deux issues,
@@ -568,6 +576,14 @@ describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
     e.MCP_ENABLED = "false";
     try {
       expect((await SELF.fetch("https://legislation.test/mcp/server-card")).status).toBe(404);
+      for (const dec of ["/robots.txt", "/sitemap.xml", "/llms.txt"]) {
+        const rDec = await SELF.fetch(`https://legislation.test${dec}`);
+        expect(rDec.status, dec).toBe(200);
+        expect(rDec.headers.get("Access-Control-Allow-Origin"), dec).toBeNull();
+      }
+      expect(
+        (await SELF.fetch("https://legislation.test/robots.txt", { method: "POST" })).status,
+      ).toBe(405);
     } finally {
       e.MCP_ENABLED = "true";
     }
