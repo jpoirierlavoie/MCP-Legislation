@@ -241,6 +241,65 @@ class TestParserPdfPurePython(unittest.TestCase):
             [{"label": "Longer label", "url": "https://x.ca"}],
         )
 
+        # Ordre visuel sur gigue italique/romain (0.5 pt), seuil de chevauchement (1.3 pt) et fusion multi-lignes
+        sp_jitter = [
+            _span("Audet ", page=1, x0=90.0, y0=100.5, x1=120.0, y1=114.0, base_font="Arial-ItalicMT", flags=2),
+            _span("c.", page=1, x0=120.5, y0=100.0, x1=130.0, y1=114.0, base_font="ArialMT", flags=0),
+            _span(" Payette", page=1, x0=130.5, y0=100.5, x1=170.0, y1=114.0, base_font="Arial-ItalicMT", flags=2),
+            _span(", 2018 QCCA 309", page=1, x0=172.0, y0=100.0, x1=260.0, y1=114.0, base_font="ArialMT", flags=0),
+            _span("Ligne suivante non absorbee", page=1, x0=90.0, y0=117.7, x1=260.0, y1=130.0, base_font="ArialMT", flags=0),
+            _span(", [1994] 1 R.C.S.", page=1, x0=400.0, y0=140.0, x1=520.0, y1=153.0),
+            _span("311", page=1, x0=90.0, y0=154.0, x1=120.0, y1=167.0),
+        ]
+        raw_links_2 = [
+            {"kind": parser_pdf.LINK_URI, "from": (88.0, 97.0, 173.0, 119.0), "uri": "https://canlii.ca/t/audet"},
+            {"kind": parser_pdf.LINK_URI, "from": (400.0, 139.0, 520.0, 154.0), "uri": "https://decisions.scc-csc.ca/1111"},
+            {"kind": parser_pdf.LINK_URI, "from": (89.0, 154.0, 125.0, 170.0), "uri": "https://decisions.scc-csc.ca/1111"},
+        ]
+        kept_2 = parser_pdf.filter_raw_links(raw_links_2, page_num=1, page_spans=sp_jitter)
+        self.assertEqual(
+            [(k["label"], k["url"]) for k in kept_2],
+            [
+                ("Audet c. Payette", "https://canlii.ca/t/audet"),
+                ("[1994] 1 R.C.S. 311", "https://decisions.scc-csc.ca/1111"),
+            ],
+        )
+
+        # text_replacements : R4 (directives uniquement) et fail-closed si 0 effet
+        divs_tr = [Division(law_id="d", lang="fr", kind="annexe", path="ps:1", heading="MATIERE")]
+        arts_tr = [
+            Article(
+                law_id="d", lang="fr", number="1", text="Voir Stinchombe.", division_path="ps:1",
+                links=json.dumps([{"label": "Stinchombe", "url": "https://example.org/Stinchombe"}], ensure_ascii=False),
+            )
+        ]
+        with self.assertRaises(parser_pdf.PdfParseError):
+            parser_pdf.apply_text_replacements(
+                divs_tr, arts_tr, [{"from": "Stinchombe", "to": "Stinchcombe"}],
+                fonction="reglement", law_id="d", lang="fr",
+            )
+        with self.assertRaises(parser_pdf.PdfParseError):
+            parser_pdf.apply_text_replacements(
+                divs_tr, arts_tr, [{"from": "Stinchombe", "to": "Stinchcombe"}],
+                fonction="loi", law_id="d", lang="fr",
+            )
+        with self.assertRaises(parser_pdf.PdfParseError):
+            parser_pdf.apply_text_replacements(
+                divs_tr, arts_tr, [{"from": "Absent", "to": "Present"}],
+                fonction="directive", law_id="d", lang="fr",
+            )
+        parser_pdf.apply_text_replacements(
+            divs_tr, arts_tr,
+            [{"from": "MATIERE", "to": "MATIÈRE"}, {"from": "Stinchombe", "to": "Stinchcombe"}],
+            fonction="directive", law_id="d", lang="fr",
+        )
+        self.assertEqual(divs_tr[0].heading, "MATIÈRE")
+        self.assertEqual(arts_tr[0].text, "Voir Stinchcombe.")
+        self.assertEqual(
+            json.loads(arts_tr[0].links or "[]"),
+            [{"label": "Stinchcombe", "url": "https://example.org/Stinchombe"}],
+        )
+
         # Pied de page relatif (y_ratio_min) sur page paysage 612pt et portrait 792pt
         ftr_cfg = {"y_ratio_min": 0.89, "regex": r"^au Règlement 51-102\s+Le\s+.*PAGE\s+\d+$"}
         ln_land = LineRecord(44, 36.0, 564.0, 400.0, 574.0, "au Règlement 51-102 Le 22 septembre 2026 PAGE 44",
@@ -653,6 +712,18 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         self.assertNotIn("mailto:par", by_num["176"].links or "")
         self.assertIn("canlii.ca", by_num["liste-controle-judiciaire"].links or "")
         self.assertIn(".docx", by_num["annexe-division-8"].links or "")
+        self.assertIn("\nSociété de crédit commercial GMAC", by_num["liste-commerciale-faillite"].text)
+        self.assertIn("\nImperial Tobacco", by_num["liste-actions-collectives"].text)
+        self.assertIn("St-Ferdinand", by_num["liste-actions-collectives"].text)
+        self.assertNotIn("St[1]Ferdinand", by_num["liste-actions-collectives"].text)
+        self.assertIn(
+            "Délai d'exercice du pourvoi et nature discrétionnaire du contrôle judiciaire\n",
+            by_num["liste-controle-judiciaire"].text,
+        )
+        self.assertIn("Metropolitan Stores Ltd., [1987]", by_num["liste-controle-judiciaire"].text)
+        for lname in ("liste-controle-judiciaire", "liste-commerciale-faillite", "liste-actions-collectives"):
+            for lk in json.loads(by_num[lname].links or "[]"):
+                self.assertFalse(lk["label"].startswith((",", ".")), f"Étiquette mal nettoyée ({lname}): {lk!r}")
         div_paths = {d.path for d in divs}
         for a in arts:
             self.assertLessEqual(len(f"art:{law.id}:{a.number}".encode("utf-8")), 64)
@@ -727,7 +798,11 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         by_n = {a.number: a for a in arts}
         self.assertIn("helene.routhier@judex.qc.ca", by_n["tableau-7"].links or "")
         self.assertIn("▪ Baker", by_n["liste-civile"].text)
+        self.assertIn("\n▪ Spar Aerospace", by_n["liste-civile"].text)
         self.assertIn("unik.caij.qc.ca", by_n["liste-civile"].links or "")
+        for lname in ("liste-civile", "liste-familiale"):
+            for lk in json.loads(by_n[lname].links or "[]"):
+                self.assertFalse(lk["label"].startswith(","), f"Étiquette mal nettoyée ({lname}): {lk!r}")
 
     @unittest.skipUnless(
         (config.SAMPLES_DIR / "ChCivile_DirectiveReglesParticulieres.pdf").exists(),
@@ -780,15 +855,29 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         "PDF QCCQ DAA jurisprudence absent de pipeline/samples/",
     )
     def test_reel_qccq_daa_jurisprudence(self):
-        _divs, arts, _bilan = self._assert_real_pdf_ok(
+        divs, arts, _bilan = self._assert_real_pdf_ok(
             "qccq-daa-jurisprudence",
             "DAA_DirectiveListeCommuneJuris.pdf",
             fonction="directive", unit="paragraphe",
             expected_date="2021-09-27", expected_spans=1788, expected_real=5, min_divs=8,
         )
         by_n = {a.number: a for a in arts}
+        by_div = {d.path: d for d in divs}
         self.assertIn("RLRQ, c. C-25.01, r.4, art. 39", by_n["2"].footnotes or "")
         self.assertIn("canlii.org", by_n["annexe-disciplinaire"].links or "")
+        self.assertIn("R. c. Stinchcombe", by_n["annexe-disciplinaire"].text)
+        self.assertIn("R. c. Stinchcombe", by_n["annexe-deontologie-policiere"].text)
+        for a in arts:
+            self.assertNotIn("Stinchombe", a.text)
+        self.assertIn(
+            "Fondation internationale Azzahra inc., 2017 QCCA 240 Interprétation de la notion d’« institution religieuse ». | 17.",
+            by_n["annexe-fiscalite-municipale"].text,
+        )
+        self.assertIn("MATIÈRE DE FISCALITÉ", by_div["ps:3"].heading or "")
+        self.assertIn("MATIÈRE FISCALE", by_div["ps:4"].heading or "")
+        disc_labels = [lk["label"] for lk in json.loads(by_n["annexe-disciplinaire"].links or "[]")]
+        self.assertTrue(any(lbl.startswith("Audet c. Payette") for lbl in disc_labels), disc_labels[:5])
+        self.assertIn("Association des courtiers et agents immobiliers du Québec c. Proprio Direct inc.", disc_labels)
 
     @unittest.skipUnless(
         (config.SAMPLES_DIR / "2026juil04-31-103-vofficielle-fr.pdf").exists(),

@@ -330,6 +330,20 @@ def _apply_derotation(rect_obj: Any, derotation_matrix: Any) -> tuple[float, flo
     return _rect_tuple(rect_obj)
 
 
+def _clean_link_label(raw: str) -> str:
+    """Nettoie les artefacts de bordure d'une étiquette d'ancre de lien PDF."""
+    s = _norm(raw)
+    if not s:
+        return ""
+    s = re.sub(r"(?:\s*\*)+$", "", s).strip()
+    s = re.sub(r"\s+\.", ".", s)
+    s = re.sub(r"^[,.;:\s]+", "", s)
+    if s.startswith(")"):
+        s = re.sub(r"^\)+[\s,.;:]*", "", s)
+    s = re.sub(r"[,;:\s]+$", "", s)
+    return s.strip()
+
+
 def filter_raw_links(
     raw_links: list[dict[str, Any]],
     *,
@@ -394,18 +408,51 @@ def filter_raw_links(
         else:
             continue
 
-        hits = [
-            sp for sp in page_spans
-            if sp.norm_text and _rect_intersects(bbox, (sp.x0, sp.y0, sp.x1, sp.y1))
-        ]
-        hits.sort(key=lambda s: (round(s.y0, 1), s.x0))
-        anchor = _norm(" ".join(sp.norm_text for sp in hits)) if hits else ""
+        hits: list[SpanRecord] = []
+        for sp in page_spans:
+            if not sp.norm_text:
+                continue
+            ov_y = min(y1, sp.y1) - max(y0, sp.y0)
+            sp_h = max(1.0, sp.y1 - sp.y0)
+            cy = 0.5 * (sp.y0 + sp.y1)
+            ov_x = min(x1, sp.x1) - max(x0, sp.x0)
+            sp_w = max(0.1, sp.x1 - sp.x0)
+            if ov_y > 0 and (y0 - 0.5 <= cy <= y1 + 0.5 or ov_y >= 0.45 * sp_h) and ov_x >= min(2.0, 0.35 * sp_w):
+                hits.append(sp)
+        if not hits:
+            hits = [
+                sp for sp in page_spans
+                if sp.norm_text and _rect_intersects(bbox, (sp.x0, sp.y0, sp.x1, sp.y1))
+            ]
+        hit_lines = reconstruct_lines(hits, y_tolerance=2.5) if hits else []
+        anchor = _norm(" ".join(ln.norm_text for ln in hit_lines if ln.norm_text))
+
+        if (
+            kind == LINK_URI
+            and kept
+            and kept[-1]["_kind"] == LINK_URI
+            and kept[-1]["url"] == url
+            and -2.0 <= y0 - kept[-1]["bbox"][3] <= 10.0
+        ):
+            prev = kept[-1]
+            if anchor and anchor != prev["_raw_anchor"]:
+                prev["_raw_anchor"] = _norm(f"{prev['_raw_anchor']} {anchor}") if prev["_raw_anchor"] else anchor
+            prev["label"] = _clean_link_label(prev["_raw_anchor"]) or url
+            bx0, by0, bx1, by1 = prev["bbox"]
+            prev["bbox"] = (min(bx0, x0), min(by0, y0), max(bx1, x1), max(by1, y1))
+            continue
+
         kept.append({
             "page": page_num,
             "bbox": bbox,
-            "label": anchor or url,
+            "_kind": kind,
+            "_raw_anchor": anchor,
+            "label": _clean_link_label(anchor) or url,
             "url": url,
         })
+    for item in kept:
+        item.pop("_kind", None)
+        item.pop("_raw_anchor", None)
     return kept
 
 
@@ -567,6 +614,7 @@ def _is_subitem_or_new_para(
     *,
     allow_alpha_dot: bool = False,
     new_para_from_title: bool = False,
+    dy_same_page: float | None = None,
 ) -> bool:
     if new_para_from_title:
         return True
@@ -582,8 +630,50 @@ def _is_subitem_or_new_para(
         return True
     if x0 >= subitem_x0_min and prev_text.endswith((".", ":", ";")):
         # Paragraphe distinct s'il s'agit d'une phrase complète débutant par une majuscule après alinéa terminé
-        if text[:1].isupper() and abs(x0 - subitem_x0_min) >= 10.0:
+        if text[:1].isupper() and (
+            abs(x0 - subitem_x0_min) >= 10.0
+            or (dy_same_page is not None and dy_same_page >= 20.0)
+        ):
             return True
+    return False
+
+
+_UNNUMBERED_MID_CITE_TAIL_RE = re.compile(
+    r"(?:\b(?:19|20)\d{2}|\b(?:CSC|SCC|QCCA|QCCS|QCCQ|ONCA)|R\.?C\.?S\.?|R\.?J\.?Q\.?)$"
+)
+_UNNUMBERED_END_CITE_RE = re.compile(
+    r"(?:\b(?:19|20)\d{2}\s+(?:CSC|SCC|QCCA|QCCS|QCCQ|QCTP|QCBDR|ONCA|UKPC|CanLII)\s+\d+"
+    r"|\b(?:R\.?C\.?S\.?|S\.?C\.?R\.?|R\.?J\.?Q\.?|C\.?A\.?)\s+\d+)\s*$"
+)
+
+
+def _is_new_unnumbered_entry(
+    prev_text: str,
+    line_text: str,
+    *,
+    p_num: int,
+    y0: float,
+    is_bold_topic: bool,
+    last_prose_meta: tuple[int, float, bool] | None,
+) -> bool:
+    if _BULLET_RE.match(line_text):
+        return True
+    prev_line = prev_text.rsplit("\n", 1)[-1].rstrip()
+    if is_bold_topic:
+        return (
+            last_prose_meta is None
+            or not last_prose_meta[2]
+            or last_prose_meta[0] != p_num
+            or (y0 - last_prose_meta[1]) > 16.0
+        )
+    if last_prose_meta is not None and last_prose_meta[2]:
+        return True
+    if prev_line.endswith((" c.", " v.", ",")) or _UNNUMBERED_MID_CITE_TAIL_RE.search(prev_line):
+        return False
+    if last_prose_meta is not None and last_prose_meta[0] == p_num:
+        return (y0 - last_prose_meta[1]) > 16.0
+    if last_prose_meta is not None and last_prose_meta[0] != p_num:
+        return prev_line.endswith((".", ")")) or bool(_UNNUMBERED_END_CITE_RE.search(prev_line))
     return False
 
 
@@ -852,12 +942,16 @@ def parse_pdf(
                             continue
                         extracted = t.extract()
                         t_rows = getattr(t, "rows", None) or []
-                        fmt_rows: list[str] = []
+                        acc_rows: list[list[str | None]] = []
                         for ri, row in enumerate(extracted):
                             row_cells = getattr(t_rows[ri], "cells", None) if ri < len(t_rows) else None
-                            cells: list[str] = []
+                            norm_row: list[str | None] = []
                             for ci, c in enumerate(row):
+                                if c is None:
+                                    norm_row.append(None)
+                                    continue
                                 if not c:
+                                    norm_row.append("")
                                     continue
                                 raw_cbbox = row_cells[ci] if (row_cells is not None and ci < len(row_cells)) else None
                                 cbbox = _apply_derotation(raw_cbbox, tab_derot) if raw_cbbox is not None else None
@@ -869,11 +963,39 @@ def parse_pdf(
                                     page_num=p_num,
                                     bilan_obj=bilan_obj,
                                 )
-                                c_clean = re.sub(r"\s+", " ", c_norm).strip()
-                                if c_clean:
-                                    cells.append(c_clean)
-                            if cells:
-                                fmt_rows.append(" | ".join(cells))
+                                norm_row.append(re.sub(r"\s+", " ", c_norm).strip())
+
+                            non_empty_cols = [ci for ci, val in enumerate(norm_row) if val]
+                            if not non_empty_cols:
+                                continue
+                            can_merge_rowspan = (
+                                bool(acc_rows)
+                                and len(norm_row) == len(acc_rows[-1])
+                                and norm_row[0] is None
+                                and any(val is None for val in norm_row)
+                                and all(acc_rows[-1][ci] is not None for ci in non_empty_cols)
+                                and (
+                                    len(non_empty_cols) == 1
+                                    or (
+                                        ri == 1
+                                        and all((norm_row[ci] or "") == (norm_row[ci] or "").upper() for ci in non_empty_cols)
+                                    )
+                                )
+                            )
+                            if can_merge_rowspan:
+                                prev_row = acc_rows[-1]
+                                for ci in non_empty_cols:
+                                    cur_val = norm_row[ci] or ""
+                                    prev_val = prev_row[ci] or ""
+                                    prev_row[ci] = f"{prev_val} {cur_val}".strip() if prev_val else cur_val
+                            else:
+                                acc_rows.append(norm_row)
+
+                        fmt_rows = [
+                            " | ".join(c for c in r if c)
+                            for r in acc_rows
+                            if any(c for c in r)
+                        ]
                         if fmt_rows:
                             page_tables.append({
                                 "page": p_num,
@@ -1037,6 +1159,7 @@ def parse_pdf(
     bare_repeal_promoted: tuple[int, str] | None = None
     pending_heading: dict[str, Any] | None = None
     last_prose_meta: tuple[int, float, bool] | None = None  # (page, y0, is_bold)
+    last_body_pos: tuple[int, float] | None = None  # (page, y0)
     ann_full_section_rep_arts: set[int] = set()
 
     ann_start_heading = ann_cfg.get("start_heading") or ""
@@ -1100,7 +1223,7 @@ def parse_pdf(
         return "pp:0"
 
     def _flush_pending_heading() -> None:
-        nonlocal pending_heading, current_div, current_article, last_opened_node, div_sort_order, article_title_active, pending_bare_provision, bare_repeal_promoted
+        nonlocal pending_heading, current_div, current_article, last_opened_node, div_sort_order, article_title_active, pending_bare_provision, bare_repeal_promoted, last_body_pos
         if pending_heading is None:
             return
         txt = pending_heading["text"]
@@ -1135,6 +1258,7 @@ def parse_pdf(
         article_title_active = False
         pending_bare_provision = False
         bare_repeal_promoted = None
+        last_body_pos = None
         last_opened_node = "division"
         pending_heading = None
 
@@ -1184,6 +1308,7 @@ def parse_pdf(
                 bilan_obj.add_span(table_bucket, nws_sp)
                 last_opened_bucket = table_bucket
                 tbl_text = "\n".join(tb["rows"])
+                last_body_pos = None
                 if current_article is not None:
                     current_article.text = f"{current_article.text}\n{tbl_text}"
                     if id(current_article) in ann_full_section_rep_arts:
@@ -1548,13 +1673,20 @@ def parse_pdf(
                         if current_div is not None and current_div.path == current_article.division_path:
                             current_div.repealed = 0
                     sep = "\n" if (
-                        ann_mode == "full_sections"
-                        and (
-                            _is_all_bold_non_italic(non_ws)
-                            or _SUBITEM_NUM_RE.match(ln.norm_text)
-                            or _SUBITEM_ALPHA_PAREN_RE.match(ln.norm_text)
-                            or _BULLET_RE.match(ln.norm_text)
-                            or current_article.text.endswith((".", ":", ")"))
+                        (
+                            bool(ann_list_sections)
+                            and current_div is not None
+                            and current_article.text == current_div.heading
+                        )
+                        or (
+                            ann_mode == "full_sections"
+                            and (
+                                _is_all_bold_non_italic(non_ws)
+                                or _SUBITEM_NUM_RE.match(ln.norm_text)
+                                or _SUBITEM_ALPHA_PAREN_RE.match(ln.norm_text)
+                                or _BULLET_RE.match(ln.norm_text)
+                                or current_article.text.endswith((".", ":", ")"))
+                            )
                         )
                     ) else " "
                     current_article.text = f"{current_article.text}{sep}{ln.norm_text}"
@@ -1726,6 +1858,7 @@ def parse_pdf(
                     article_title_active = titled_mode and not is_rep and _is_bold_lead_non_italic(non_ws)
                     pending_bare_provision = (not body) and (not is_rep)
                     bare_repeal_promoted = None
+                    last_body_pos = (p_num, ln.y0)
                     _record_article_line(art, ln)
                     bkt = "repeal_marker" if is_rep else "numbered_provision"
                     _bucket_line(bilan_obj, ln, bkt)
@@ -1761,11 +1894,13 @@ def parse_pdf(
                         article_title_active = False
                         last_prose_meta = (p_num, ln.y0, is_bold_topic)
                     else:
-                        new_entry = (
-                            is_bold_topic
-                            or (last_prose_meta is not None and last_prose_meta[2] and not is_bold_topic)
-                            or (last_prose_meta is not None and last_prose_meta[0] == p_num and (ln.y0 - last_prose_meta[1]) > 16.0)
-                            or (last_prose_meta is not None and last_prose_meta[0] != p_num and current_article.text.endswith((".", ")")))
+                        new_entry = _is_new_unnumbered_entry(
+                            current_article.text,
+                            ln.norm_text,
+                            p_num=p_num,
+                            y0=ln.y0,
+                            is_bold_topic=is_bold_topic,
+                            last_prose_meta=last_prose_meta,
                         )
                         sep = "\n" if new_entry else " "
                         current_article.text = f"{current_article.text}{sep}{ln.norm_text}"
@@ -1820,9 +1955,26 @@ def parse_pdf(
                     current_article = art
                     last_opened_node = "article"
                     article_title_active = False
+                    last_body_pos = (p_num, ln.y0)
                 else:
-                    sep_intro = "\n" if _is_subitem_or_new_para(ln.norm_text, x0, h_x0_min, current_article.text) else " "
+                    dy_same_page = (
+                        (ln.y0 - last_body_pos[1])
+                        if (last_body_pos is not None and last_body_pos[0] == p_num)
+                        else None
+                    )
+                    sep_intro = (
+                        "\n"
+                        if _is_subitem_or_new_para(
+                            ln.norm_text,
+                            x0,
+                            h_x0_min,
+                            current_article.text,
+                            dy_same_page=dy_same_page,
+                        )
+                        else " "
+                    )
                     current_article.text = f"{current_article.text}{sep_intro}{ln.norm_text}"
+                    last_body_pos = (p_num, ln.y0)
                 _record_article_line(current_article, ln)
                 _bucket_line(bilan_obj, ln, "body_text")
                 last_opened_bucket = "body_text"
@@ -1842,6 +1994,7 @@ def parse_pdf(
                 pending_bare_provision = False
                 article_title_active = False
                 bare_repeal_promoted = (id(current_article), opening_raw)
+                last_body_pos = (p_num, ln.y0)
                 _record_article_line(current_article, ln)
                 _bucket_line(bilan_obj, ln, "repeal_marker")
                 last_opened_bucket = "repeal_marker"
@@ -1855,6 +2008,7 @@ def parse_pdf(
                     bare_repeal_promoted = None
                 if article_title_active and _is_all_bold_non_italic(non_ws):
                     current_article.text = f"{current_article.text} {ln.norm_text}"
+                    last_body_pos = (p_num, ln.y0)
                     _record_article_line(current_article, ln)
                     _bucket_line(bilan_obj, ln, "body_text")
                     last_opened_bucket = "body_text"
@@ -1868,6 +2022,11 @@ def parse_pdf(
                     or (allow_alpha_dot and _SUBITEM_ALPHA_DOT_RE.match(ln.norm_text))
                     or _BULLET_RE.match(ln.norm_text)
                 )
+                dy_same_page = (
+                    (ln.y0 - last_body_pos[1])
+                    if (last_body_pos is not None and last_body_pos[0] == p_num)
+                    else None
+                )
                 sep = (
                     "\n"
                     if _is_subitem_or_new_para(
@@ -1877,10 +2036,12 @@ def parse_pdf(
                         current_article.text,
                         allow_alpha_dot=allow_alpha_dot,
                         new_para_from_title=new_para_from_title,
+                        dy_same_page=dy_same_page,
                     )
                     else " "
                 )
                 current_article.text = f"{current_article.text}{sep}{ln.norm_text}"
+                last_body_pos = (p_num, ln.y0)
                 _record_article_line(current_article, ln)
                 bkt = "subitem" if is_sub else "body_text"
                 _bucket_line(bilan_obj, ln, bkt)
@@ -1982,7 +2143,60 @@ def parse_pdf(
             raise TocParityError(f"Doublon de chemin de division ({law.id}/{lang}) : {d.path!r}")
         seen_paths.add(d.path)
 
+    replacements = fcfg.get("text_replacements") or []
+    apply_text_replacements(
+        divisions,
+        articles,
+        replacements,
+        fonction=profile.get("fonction"),
+        law_id=law.id,
+        lang=lang,
+    )
+
     return divisions, articles
+
+
+def apply_text_replacements(
+    divisions: list[Division],
+    articles: list[Article],
+    replacements: list[dict[str, Any]],
+    *,
+    fonction: str | None,
+    law_id: str,
+    lang: str,
+) -> None:
+    """Applique des corrections typographiques déclaratives (directives uniquement, fail-closed si 0 effet)."""
+    if not replacements:
+        return
+    if fonction != "directive":
+        raise PdfParseError("text_replacements n'est autorisé que sur fonction='directive' (R4).")
+    for rule in replacements:
+        src = str(rule.get("from") or "")
+        dst = str(rule.get("to") or "")
+        if not src or src == dst:
+            raise PdfParseError(f"Règle text_replacements invalide dans {law_id}/{lang} : {rule!r}")
+        hits = 0
+        for d in divisions:
+            if d.heading and src in d.heading:
+                hits += d.heading.count(src)
+                d.heading = d.heading.replace(src, dst)
+        for a in articles:
+            if a.text and src in a.text:
+                hits += a.text.count(src)
+                a.text = a.text.replace(src, dst)
+            if a.links:
+                items = json.loads(a.links)
+                changed = False
+                for item in items:
+                    lbl = item.get("label")
+                    if isinstance(lbl, str) and src in lbl:
+                        hits += lbl.count(src)
+                        item["label"] = lbl.replace(src, dst)
+                        changed = True
+                if changed:
+                    a.links = json.dumps(items, ensure_ascii=False)
+        if hits == 0:
+            raise PdfParseError(f"text_replacements sans effet dans {law_id}/{lang} : {src!r}")
 
 
 def write_preview_md(

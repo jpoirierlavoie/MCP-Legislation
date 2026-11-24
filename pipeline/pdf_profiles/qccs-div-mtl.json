@@ -110,6 +110,10 @@
         "sanitize_email_launch": true,
         "ignore_zero_area_rect": true
       },
+      "text_replacements": [
+        { "from": "St[1]Ferdinand", "to": "St-Ferdinand" },
+        { "from": "Metropolitan Stores Ltd.,[1987]", "to": "Metropolitan Stores Ltd., [1987]" }
+      ],
       "witness": {
         "total_spans": 2357,
         "real_articles": 217,

@@ -75,8 +75,8 @@
         "list_sections": [
           { "page": 2, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE DISCIPLINAIRE", "article_number": "annexe-disciplinaire" },
           { "page": 5, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE DE DÉONTOLOGIE POLICIÈRE", "article_number": "annexe-deontologie-policiere" },
-          { "page": 7, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIERE DE FISCALITE MUNICIPALE, D’EXPROPRIATION ET DE PROTECTION DU TERRITOIRE AGRICOLE", "article_number": "annexe-fiscalite-municipale" },
-          { "page": 10, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIERE FISCALE", "article_number": "annexe-fiscale" },
+          { "page": 7, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE DE FISCALITÉ MUNICIPALE, D’EXPROPRIATION ET DE PROTECTION DU TERRITOIRE AGRICOLE", "article_number": "annexe-fiscalite-municipale" },
+          { "page": 10, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE FISCALE", "article_number": "annexe-fiscale" },
           { "page": 13, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE D’ENCADREMENT DU SECTEUR FINANCIER", "article_number": "annexe-secteur-financier" },
           { "page": 17, "heading": "LISTE COMMUNE DE JURISPRUDENCE MATIÈRE D’ACCÈS À L’INFORMATION", "article_number": "annexe-acces-information" }
         ]
@@ -87,6 +87,11 @@
         "sanitize_email_launch": true,
         "ignore_zero_area_rect": true
       },
+      "text_replacements": [
+        { "from": "R. c. Stinchombe", "to": "R. c. Stinchcombe" },
+        { "from": "2010 QCBDR 104.", "to": "2010 QCBDR 104)." },
+        { "from": "d’«institution religieuse »", "to": "d’« institution religieuse »" }
+      ],
       "witness": {
         "total_spans": 1788,
         "real_articles": 5,
