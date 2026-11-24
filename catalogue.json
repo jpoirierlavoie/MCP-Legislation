@@ -38,12 +38,12 @@
       "page_fr": [
         "La taxonomie qui organise le corpus, en deux familles : les matières du droit privé, calquées sur les Livres du Code civil du Québec, et les matières spécialisées, qui regroupent les lois sectorielles et leurs règlements.",
         "Chaque matière porte un libellé et une description bilingues, ainsi que le nombre de lois et de divisions qui lui sont rattachées. Elle sert à choisir un domaine, puis à filtrer la carte du corpus.",
-        "La description d'une matière n'est pas de la prose d'agrément : c'est la surface sur laquelle s'apparient les termes d'une requête. Le vocabulaire qu'elle contient est celui que l'on veut voir reconnu — ce qui en fait le principal levier de calibrage éditorial du repérage."
+        "Les mots d'une recherche sont directement comparés à la description de chaque matière pour orienter le repérage vers les lois pertinentes."
       ],
       "page_en": [
         "The taxonomy that organizes the corpus, in two families: private-law subjects, mapped onto the Books of the Civil Code of Québec, and specialized subjects, which group sectoral statutes with their regulations.",
         "Each subject carries a bilingual label and description, along with the number of statutes and divisions attached to it. It is used to pick a domain, then to filter the corpus map.",
-        "A subject's description is not decorative prose: it is the surface against which query terms are matched. The vocabulary it contains is the vocabulary meant to be recognized — which makes it the main editorial lever for tuning discovery."
+        "Search terms are matched directly against each subject's description to guide discovery toward relevant statutes."
       ]
     },
     "related_laws": {
@@ -53,13 +53,13 @@
       "page_fr": [
         "Le graphe d'interconnexion d'une loi : les règlements pris sous son autorité, la loi qui l'habilite, les renvois qu'elle fait vers d'autres textes, et les relations curées à la main lorsqu'un lien juridique mérite d'être qualifié — met en œuvre, applique, complète, encadré par, connexe, préséance sur (preseance-sur) et interprète (interprete).",
         "Les arêtes peuvent être suivies dans les deux sens, filtrées par type, et limitées en nombre. Chaque relation indique si elle a été dérivée automatiquement ou curée, et les relations curées portent une note expliquant le lien.",
-        "L'outil signale explicitement les cibles qui ne sont pas au corpus : un renvoi vers une loi non chargée est affiché comme tel plutôt que passé sous silence. Ces cibles absentes sont autant de candidats d'acquisition.",
+        "L'outil signale explicitement les textes cités qui ne font pas partie du corpus chargé, plutôt que de les passer sous silence.",
         "Les noms de lois suivent la langue demandée. Les notes des relations curées, elles, n'existent qu'en français : sous une demande anglaise elles sont rendues MARQUÉES [fr] plutôt que maquillées en traduction, et l'étiquette voyage aussi dans les données structurées."
       ],
       "page_en": [
         "A statute's interconnection graph: regulations made under its authority, the statute that enables it, cross-references it makes to other texts, and hand-curated relations where a legal link deserves to be characterized — implements, applies, supplements, governed by, related, precedence over (preseance-sur), and interprets (interprete).",
         "Edges can be followed in either direction, filtered by type, and capped in number. Each relation states whether it was derived automatically or curated, and curated relations carry a note explaining the link.",
-        "The tool explicitly flags targets that are not in the corpus: a reference to a statute that has not been loaded is shown as such rather than silently dropped. Those absent targets are acquisition candidates.",
+        "The tool explicitly flags referenced statutes that are not in the loaded corpus, rather than silently dropping them.",
         "Statute names follow the requested language. The notes attached to curated relations, however, exist only in French: under an English request they are returned MARKED [fr] rather than passed off as a translation, and the label travels in the structured payload as well."
       ]
     },
@@ -209,14 +209,14 @@
       "titre_fr": "Lexical et sémantique, fusionnés",
       "titre_en": "Lexical and semantic, fused",
       "corps_fr": [
-        "Les deux moteurs ne se remplacent pas : ils se fusionnent. La liste lexicale et la liste sémantique sont combinées par un rang réciproque, ce qui évite d'avoir à comparer des échelles de score incommensurables. Un article trouvé par les deux voies remonte naturellement.",
-        "Le moteur sémantique repose sur des plongements multilingues, ce qui lui donne deux usages précis : franchir l'écart de vocabulaire — une recherche sur « congédiement » atteint « délai de congé » — et franchir la barrière de langue, une requête en anglais atteignant le texte français.",
-        "Un plancher de similarité est appliqué, et il est calibré par mesure et non au jugé. Sans lui, une requête en charabia recevrait quand même ses plus proches voisins, présentés comme des résultats. Sous ce plancher, l'outil préfère ne rien rendre. Chaque titulaire peut en outre désactiver le volet vectoriel dans son espace personnel afin de borner la recherche au seul index lexical local, ce que la réponse signale alors explicitement."
+        "Les deux moteurs ne se remplacent pas : ils se complètent. Les résultats par mots exacts et les résultats par sens sont fusionnés selon leur rang dans chaque liste, ce qui évite de comparer des échelles de score différentes : un article repéré par les deux voies remonte naturellement.",
+        "La recherche sémantique repose sur un index vectoriel multilingue, avec deux usages précis : franchir les différences de vocabulaire — une recherche sur « congédiement » atteint « délai de congé » — et franchir la barrière de langue, une requête en anglais atteignant le texte français.",
+        "Un seuil minimal de pertinence écarte les rapprochements trop faibles : plutôt que d'afficher des résultats sans rapport avec la question, l'outil préfère ne rien rendre. Chaque titulaire peut en outre désactiver ce volet dans son espace personnel afin de borner la recherche aux seuls mots du texte local, ce que la réponse signale alors explicitement."
       ],
       "corps_en": [
-        "The two engines do not replace one another: they are fused. The lexical list and the semantic list are combined by reciprocal rank, which avoids having to compare incommensurable score scales. An article found by both routes naturally rises.",
-        "The semantic engine rests on multilingual embeddings, which gives it two precise uses: bridging the vocabulary gap — a search for “dismissal” reaches “notice of termination” — and bridging the language barrier, an English query reaching the French text.",
-        "A similarity floor is applied, and it is calibrated by measurement rather than by judgement. Without it, a gibberish query would still receive its nearest neighbours, presented as results. Below that floor, the tool prefers to return nothing. Each account holder may also opt out of vector search in their self-service portal so searches run strictly against the local lexical index, which the response then states explicitly."
+        "The two engines do not replace one another: they complement each other. Exact-word matches and meaning-based matches are combined by their rank in each list, avoiding direct comparison of different scoring scales: an article found by both routes naturally rises.",
+        "Semantic search relies on a multilingual vector index, serving two practical purposes: bridging differences in wording — a search for “dismissal” reaches “notice of termination” — and bridging language barriers, with an English query reaching French text.",
+        "A minimum relevance threshold filters out weak matches: rather than returning unrelated provisions, the tool prefers to return nothing. Each account holder may also turn off vector search in their self-service portal so searches run strictly against the local word index, which the response then states explicitly."
       ],
       "constantes": [
         "RRF_K",

@@ -384,10 +384,12 @@ function entete(): string {
   </div>
   ${biP(
     [
-      "Serveur MCP donnant aux assistants IA un accès en lecture seule au texte officiel de la législation du Québec et des lois fédérales que le litige civil québécois convoque, ainsi qu'aux directives de pratique judiciaire et aux textes AMF. Les dispositions proviennent des EPUB officiels de LégisQuébec, des fichiers XML du ministère de la Justice du Canada et des PDF officiels des tribunaux du Québec (Cour supérieure, Cour du Québec) et de l'Autorité des marchés financiers (AMF — règlements et instructions générales, certains PDF en français seulement) ; le texte est restitué verbatim, sans altération.",
+      "Serveur MCP en lecture seule donnant aux assistants IA l'accès verbatim au texte officiel des lois et règlements du Québec, des lois fédérales utilisées en litige civil et commercial québécois, des directives de pratique judiciaire (Cour supérieure, Cour du Québec) et des textes AMF.",
+      "Les dispositions sont chargées sans altération depuis les publications officielles de LégisQuébec, de Justice Canada et des PDF officiels des tribunaux et de l'AMF (certains publiés en français seulement).",
     ],
     [
-      "An MCP server giving AI assistants read-only access to the official text of Québec legislation and the federal statutes that Québec civil litigation relies on, as well as court practice directives and AMF texts. Provision text comes from official LégisQuébec EPUBs, Department of Justice Canada XML files, and official PDFs published by Québec courts (Superior Court, Court of Québec) and the Autorité des marchés financiers (AMF — regulations and policy statements, some PDFs published in French only); text is returned verbatim without alteration.",
+      "Read-only MCP server giving AI assistants verbatim access to the official text of Québec statutes and regulations, federal statutes used in Québec civil and commercial litigation, court practice directives (Superior Court, Court of Québec), and AMF texts.",
+      "Provisions are loaded unaltered from official LégisQuébec publications, Justice Canada consolidations, and official court and AMF PDFs (some published in French only).",
     ],
   )}
   <p class="btns">
@@ -432,10 +434,10 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
   ${h2("corpus")}
   ${biP(
     [
-      "Les textes législatifs sont chargés dans les deux langues officielles avec leur hiérarchie complète et leur date de consolidation ; les PDF des directives de cour et de l'AMF ne sont chargés qu'en français lorsqu'aucune version anglaise officielle n'est publiée. Les chiffres de cette page sont lus en base au moment du rendu : ils ne peuvent pas dériver de ce qui est réellement servi. Chaque titre renvoie au texte officiel sur LégisQuébec, sur le site Web de la législation (Justice) du Canada, ou sur le site du tribunal ou de l'AMF compétent.",
+      "Les lois et règlements sont chargés en français et en anglais avec leur hiérarchie complète et leur date de consolidation ; les PDF de directives judiciaires et de l'AMF figurent en français seulement lorsqu'aucune version anglaise officielle n'est publiée. Les décomptes affichés sont lus directement dans la base en ligne, et chaque titre renvoie à la source officielle (LégisQuébec, Justice Canada, tribunaux du Québec ou AMF).",
     ],
     [
-      "Legislative texts are loaded in both official languages with their full hierarchy and consolidation date; court directive and AMF PDFs are loaded in French only where no official English PDF is published. The figures on this page are read from the database at render time: they cannot drift from what is actually served. Each title links to the official text on LégisQuébec, the Justice Laws Website of Canada, or the competent court or AMF page.",
+      "Statutes and regulations are loaded in French and English with their full hierarchy and consolidation date; court directive and AMF PDFs appear in French only where no official English PDF is published. Counts shown on this page are read directly from the live database, and each title links to the official source (LégisQuébec, Justice Canada, Québec courts, or AMF).",
     ],
   )}
   <search class="ctl">
@@ -574,6 +576,7 @@ function reperage(): string {
   ${h2("reperage")}
   ${biP(r.intro_fr, r.intro_en)}
   ${sec(r.signaux)}
+  <p class="m">${bi("Paramètres actuels du classement (lus directement dans le code du serveur) :", "Current ranking parameters (read directly from server code):")}</p>
   ${cal}
   ${sec(r.echelle)}
   ${sec(r.hybride)}
@@ -594,14 +597,14 @@ function acces(): string {
   ${h2("acces")}
   ${biP(
     [
-      `Ce serveur est réservé aux membres en règle du Barreau du Québec. Deux portes d'accès coexistent : le montage à jeton individuel direct https://legislation.poirierlavoie.ca/mcp (qui répond 404 sans corps à tout appel non authentifié afin de prévenir toute découverte OAuth non sollicitée) et le montage OAuth 2.1 https://legislation.poirierlavoie.ca/mcp/oauth (PKCE S256 via https://acces.poirierlavoie.ca). Les demandes d'accès et la gestion libre-service des jetons, de la préférence de recherche hybride et de la révocation s'effectuent sur https://acces.poirierlavoie.ca/demande et https://acces.poirierlavoie.ca/moi (ou en écrivant à ${CONTACT}).`,
-      "Aucun texte de requête ni argument d'outil n'est journalisé (journaux d'invocation Cloudflare désactivés, zéro écriture dans search_log). Une fiche publique de découverte MCP (SEP-2127) sans secret est exposée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut les manifestes pour Google Antigravity (plugin.json, mcp_config.json) et Gemini CLI (gemini-extension.json).",
-      "Le code source est libre et gratuit sous licence Apache-2.0 (voir LICENSE) ; le fichier NOTICE reconnaît les sources officielles sans revendication de droit d'auteur sur les textes servis (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ et AMF). Le corpus est reproductible : le pipeline d'ingestion, la taxonomie et les données de configuration sont tous versionnés.",
+      `Ce serveur est réservé aux membres actifs en règle du Barreau du Québec. La connexion courante s'effectue par autorisation navigateur OAuth 2.1 via https://acces.poirierlavoie.ca (https://legislation.poirierlavoie.ca/mcp/oauth), sans clé à copier. Un accès direct par jeton individuel (https://legislation.poirierlavoie.ca/mcp, qui retourne 404 sans corps à tout appel non authentifié) demeure disponible pour les outils en ligne de commande et scripts automatisés. Demandes d'accès et gestion des jetons ou de la recherche sémantique : https://acces.poirierlavoie.ca/demande et https://acces.poirierlavoie.ca/moi (ou par courriel à ${CONTACT}).`,
+      "Le texte des recherches et les arguments d'outils ne sont jamais journalisés. Une fiche publique de découverte MCP sans secret est publiée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut aussi les manifestes autonomes pour Google Antigravity et Gemini CLI.",
+      "Le code source est libre et gratuit sous licence Apache-2.0 (voir LICENSE) ; le fichier NOTICE reconnaît les sources officielles sans revendication de droit d'auteur sur les textes servis (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ et AMF). Les scripts d'ingestion, la taxonomie et la configuration sont tous versionnés.",
     ],
     [
-      `This server is reserved for members in good standing of the Barreau du Québec. Two access mounts coexist: the direct per-holder token mount https://legislation.poirierlavoie.ca/mcp (which returns an empty 404 to any unauthenticated call so unsolicited OAuth discovery is never triggered) and the OAuth 2.1 mount https://legislation.poirierlavoie.ca/mcp/oauth (PKCE S256 via https://acces.poirierlavoie.ca). Access requests and self-service token, hybrid-search preference, and revocation management are available at https://acces.poirierlavoie.ca/demande and https://acces.poirierlavoie.ca/moi (or by writing to ${CONTACT}).`,
-      "No query text or tool argument is ever logged (Cloudflare invocation logs disabled, zero runtime writes to search_log). A public MCP Server Card (SEP-2127) without secrets is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository ships manifests for Google Antigravity (plugin.json, mcp_config.json) and Gemini CLI (gemini-extension.json).",
-      "The source code is free and open-source under Apache-2.0 (see LICENSE); the NOTICE file credits official publishers without claiming copyright over the served texts (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ, and AMF). The corpus is reproducible: the ingestion pipeline, the taxonomy and the configuration data are all version-controlled.",
+      `This server is reserved for active members in good standing of the Barreau du Québec. Standard access uses browser-based OAuth 2.1 authorization through https://acces.poirierlavoie.ca (https://legislation.poirierlavoie.ca/mcp/oauth), with no key to copy. Direct per-holder token access (https://legislation.poirierlavoie.ca/mcp, which returns an empty 404 to unauthenticated requests) remains available for command-line tools and automated scripts. Access requests and management of tokens or semantic search preferences are handled at https://acces.poirierlavoie.ca/demande and https://acces.poirierlavoie.ca/moi (or by writing to ${CONTACT}).`,
+      "Search query text and tool arguments are never logged. A public, secret-free MCP Server Card is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository also includes standalone manifests for Google Antigravity and Gemini CLI.",
+      "The source code is free and open-source under Apache-2.0 (see LICENSE); the NOTICE file credits official publishers without claiming copyright over served texts (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ, and AMF). The ingestion scripts, taxonomy, and configuration data are all version-controlled.",
     ],
   )}
   <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">${bi("Demande d'accès (/demande)", "Apply for access (/demande)")}</a> · <a href="https://acces.poirierlavoie.ca/moi" rel="noopener">/moi</a> · <a href="https://jurisprudence.poirierlavoie.ca/" rel="noopener">${bi("Jurisprudence", "Case Law")}</a> · <a href="https://outils.poirierlavoie.ca/" rel="noopener">${bi("Outils (public)", "Tools (public)")}</a> · <a href="${DEPOT_PLUGIN}" rel="noopener">droit-civil-quebecois</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
