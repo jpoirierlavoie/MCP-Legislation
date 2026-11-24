@@ -1,77 +1,39 @@
 # Lois du Québec et du Canada — serveur MCP
 
-Serveur [MCP](https://modelcontextprotocol.io) donnant aux assistants IA un accès **en
-lecture seule** au texte officiel de **110 lois, règlements et directives** : la législation du Québec
-(dont le Code civil du Québec et le Code de procédure civile), 18 textes fédéraux que le
-litige civil québécois convoque — faillite, divorce, sociétés par actions, droit d'auteur,
-preuve, Cours fédérales — ainsi que les directives de pratique des tribunaux du Québec (QCCS, QCCQ) et des textes AMF en valeurs mobilières. En **français et en anglais** (les textes PDF de la vague 1 sont publiés en français seulement lorsqu'aucune version officielle anglaise n'existe), avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres →
-articles ou paragraphes) et recherche hybride lexicale + sémantique.
+Serveur [MCP](https://modelcontextprotocol.io) public en **lecture seule** donnant aux assistants IA un accès verbatim au texte officiel de **110 lois, règlements et directives** : la législation du Québec (dont le Code civil du Québec et le Code de procédure civile), les lois fédérales utilisées en litige civil québécois — faillite, divorce, sociétés par actions, droit d'auteur, preuve, Cours fédérales — ainsi que les directives de pratique des tribunaux du Québec (Cour supérieure, Cour du Québec) et des textes de l'Autorité des marchés financiers (AMF). En **français et en anglais** (les directives et textes PDF sont en français seulement lorsqu'aucune version anglaise officielle n'existe), avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres → dispositions ou paragraphes) et recherche plein texte.
 
-**Page publique :** <https://legislation.poirierlavoie.ca/> — outils, aides au repérage,
-corpus et matières, en français et en anglais, avec navigation inter-connecteurs, schéma
-JSON-LD, décomptes lus en base et fichiers publics de découverte (`/robots.txt`,
-`/sitemap.xml`, `/llms.txt`).
+> **In English:** Read-only public-interest MCP server providing AI assistants with verbatim access to Québec statutes and regulations, federal statutes relevant to Québec civil litigation, Québec court practice directives, and AMF securities texts (French and English where officially published). Part of [`droit-civil-quebecois`](https://github.com/jpoirierlavoie/droit-civil-quebecois), reserved for active members in good standing of the Barreau du Québec via [`acces.poirierlavoie.ca`](https://acces.poirierlavoie.ca). Query text is never logged.
 
-**Point d'accès MCP :** `https://legislation.poirierlavoie.ca/mcp` (jeton direct, refus `404`)
-et `https://legislation.poirierlavoie.ca/mcp/oauth` (OAuth 2.1 PKCE S256 via
-<https://acces.poirierlavoie.ca>) — **accès réservé aux membres en règle du Barreau du Québec, un jeton individuel par titulaire**.
+- **Page publique :** <https://legislation.poirierlavoie.ca/> (outils, méthodes de repérage, liste complète des textes et matières, en français et en anglais)
+- **Connexion OAuth 2.1 (par défaut via le greffon) :** `https://legislation.poirierlavoie.ca/mcp/oauth`
+- **Connexion directe par jeton (scripts et clients autonomes) :** `https://legislation.poirierlavoie.ca/mcp`
 
-Source des données : les EPUB officiels de [LégisQuébec](https://www.legisquebec.gouv.qc.ca)
-(Éditeur officiel du Québec), les fichiers XML du ministère de la Justice du Canada, et les PDF officiels publiés par les tribunaux du Québec (Cour supérieure, Cour du Québec) et l'Autorité des marchés financiers (AMF — règlements `V-1.1, r. 10`, `r. 21`, `r. 24` et *Instructions générales*). Le texte des articles et dispositions est restitué **verbatim** — le serveur
-n'altère jamais le contenu officiel.
+Source des données : les publications officielles de [LégisQuébec](https://www.legisquebec.gouv.qc.ca) (Éditeur officiel du Québec), du ministère de la Justice du Canada, et les PDF officiels publiés par les tribunaux du Québec (Cour supérieure, Cour du Québec) et l'AMF (règlements `V-1.1, r. 10`, `r. 21`, `r. 24` et *Instructions générales*). Le serveur restitue le texte officiel **sans altération**.
 
 ## Accès
 
-Ce serveur est réservé aux membres en règle du Barreau du Québec. Chaque titulaire approuvé dispose de ses propres jetons individuels dans la base d'identité partagée (`mcp-identite`), révocables séparément depuis l'espace libre-service <https://acces.poirierlavoie.ca/moi> : renouveler ou révoquer l'un ne perturbe aucun autre confrère. Sur `/mcp`, une requête sans jeton valide reçoit `404` sans corps (jamais `401` — un `401` déclencherait une découverte OAuth non sollicitée sur les clients à jeton direct). Les hôtes compatibles OAuth 2.1 utilisent le sous-chemin dédié `/mcp/oauth`.
+Ce serveur est réservé aux membres actifs en règle du Barreau du Québec. La gestion des demandes d'accès et des jetons individuels s'effectue sur <https://acces.poirierlavoie.ca/demande> et <https://acces.poirierlavoie.ca/moi> (ou par courriel à <jason@poirierlavoie.ca>) : chaque titulaire dispose de son propre accès révocable indépendamment. Aucun texte de requête n'est journalisé.
 
-Pour demander un accès : <https://acces.poirierlavoie.ca/demande> (ou <jason@poirierlavoie.ca>). Le code source est public et le
-corpus reproductible — pipeline d'ingestion, taxonomie et données de configuration sont
-tous versionnés ici.
+Le code source et les scripts d'ingestion sont publiés gratuitement sous licence `Apache-2.0`.
 
 ### Se connecter
 
-Deux montages coexistent selon le client :
+- **Via le greffon complet [`droit-civil-quebecois`](https://github.com/jpoirierlavoie/droit-civil-quebecois) (méthode recommandée) :** Claude Code, Claude Desktop, `claude.ai`, ChatGPT Web/Desktop, Google Antigravity, Gemini CLI et Gemini App se connectent automatiquement par navigateur en OAuth 2.1 sur `https://legislation.poirierlavoie.ca/mcp/oauth` via `acces.poirierlavoie.ca`, sans variable secrète à configurer.
+- **Via jeton individuel (ligne de commande, scripts, API Gemini Deep Research ou installation autonome de ce dépôt) :** utiliser `https://legislation.poirierlavoie.ca/mcp` avec l'en-tête `Authorization: Bearer <jeton>` créé dans `/moi` (sur `/mcp`, toute requête sans jeton valide reçoit `404` sans corps).
 
-| Client | Montage | À écrire |
+| Client | Mode | Adresse à saisir |
 |---|---|---|
-| Claude Desktop, claude.ai, ChatGPT / Codex (OAuth 2.1 PKCE S256) | OAuth 2.1 | `https://legislation.poirierlavoie.ca/mcp/oauth` (métadonnées RFC 9728 sur `GET /.well-known/oauth-protected-resource/mcp/oauth`) |
-| Claude Code, Google Antigravity, Gemini CLI, CI | Jeton direct par en-tête | `https://legislation.poirierlavoie.ca/mcp` + `Authorization: Bearer <jeton>` |
-| Connecteur claude.ai (mode jeton direct transitoire) | Paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
+| Greffon `droit-civil-quebecois` (`claude.ai`, Claude Code/Desktop, ChatGPT, Antigravity, Gemini) | OAuth 2.1 | `https://legislation.poirierlavoie.ca/mcp/oauth` |
+| Scripts, API, installation autonome avec jeton | En-tête `Authorization: Bearer <jeton>` | `https://legislation.poirierlavoie.ca/mcp` |
+| Formulaire web sans OAuth (`claude.ai` en mode jeton) | Paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
 
-- **Google Antigravity** (`plugin.json`, `mcp_config.json`, `assets/logo.svg` à la racine) :
-  installer via `agy plugin install https://github.com/jpoirierlavoie/MCP-Legislation.git`
-  (ou copier les fichiers du greffon dans `~/.gemini/config/plugins/mcp-legislation`),
-  renseigner la variable `MCP_LEGISLATION_SECRET` sur la page du greffon puis l'activer —
-  les outils se chargent à la demande (*lazy*) par défaut, sans contexte additionnel hors les
-  `INSTRUCTIONS` canoniques du serveur.
-- **Gemini CLI** (`gemini-extension.json`) : installer via
-  `gemini extensions install https://github.com/jpoirierlavoie/MCP-Legislation` et saisir
-  `MCP_LEGISLATION_SECRET` (stocké de façon sensible). Le manifeste déclare
-  `"contextFileName": []` afin que `GEMINI.md` (réservé au développement de ce dépôt) ne
-  soit pas injecté dans les sessions d'usage général.
-- **Gemini web** : les origines `https://gemini.google.com` et `https://aistudio.google.com`
-  sont admises par défaut dans CORS, aux côtés de `https://claude.ai` et
-  `https://claude.com`.
-- **Découverte HTTP (SEP-2127)** : la fiche publique de connectivité est exposée sans secret
-  sur `GET https://legislation.poirierlavoie.ca/mcp/server-card`
-  (`application/mcp-server-card+json`), soumise au coupe-circuit `MCP_ENABLED` (tandis que
-  `/mcp` continue de répondre `404` sans jeton valide).
-
-**Pour le connecteur claude.ai, employer `?key=`** : c'est la forme mesurée en production.
-**Pour un backend qui ouvre lui-même sa session, employer l'en-tête** — c'est la seule des
-trois qui ne fait jamais voyager le jeton dans une URL, donc la seule qui ne le laisse
-jamais dans un journal de requêtes. La troisième forme, le segment de chemin
-`https://legislation.poirierlavoie.ca/mcp/<jeton>`, est acceptée et testée mais n'est la
-forme d'aucun client aujourd'hui : elle a échoué dans le formulaire de claude.ai alors
-qu'une session complète y passe en `curl`.
-
-Le transport est **HTTP streamable sans état** (`POST /mcp`, sans en-tête `mcp-session-id` ni ouverture de session côté serveur). Les requêtes `GET /mcp` et `DELETE /mcp` (y compris authentifiées) sont rejetées en `405` ; ce serveur n'émet aucune notification serveur→client.
-
-Trois réponses de garde à connaître :
-
-- **429** — cadence par minute trop élevée (limiteur pré-auth par IP ou post-auth par titulaire). Réessayer après `Retry-After`.
-- **404** (sur `/mcp`) ou **401** RFC 9728 (sur `/mcp/oauth`) — jeton absent, inconnu, hors portée, expiré ou révoqué.
-- **200 `isError: true` `[QUOTA_EPUISE]`** — plafond journalier UTC du titulaire atteint sur la classe d'appel (`local` ou `semantique`).
+- **Installation autonome de ce seul dépôt (sans le greffon `droit-civil-quebecois`) :**
+  - **Google Antigravity** (`plugin.json`, `mcp_config.json`) : `agy plugin install https://github.com/jpoirierlavoie/MCP-Legislation.git`, puis saisir la variable `MCP_LEGISLATION_SECRET` avec un jeton issu de `/moi`.
+  - **Gemini CLI** (`gemini-extension.json`) : `gemini extensions install https://github.com/jpoirierlavoie/MCP-Legislation` et saisir `MCP_LEGISLATION_SECRET`. (`"contextFileName": []` évite d'injecter `GEMINI.md` dans vos sessions.)
+- **Note technique sur `?key=` et le chemin URL :** lorsque la connexion se fait par jeton dans un outil en ligne de commande ou un backend, privilégier l'en-tête `Authorization: Bearer <jeton>` afin que le jeton n'apparaisse pas dans une URL. La forme `?key=<jeton>` est prise en charge pour les formulaires web de connecteurs à jeton ; la forme en segment de chemin `https://legislation.poirierlavoie.ca/mcp/<jeton>` est également acceptée mais déconseillée dans les formulaires web.
+- **Découverte HTTP (SEP-2127) :** `GET https://legislation.poirierlavoie.ca/mcp/server-card` (`application/mcp-server-card+json`).
+- **Transport :** HTTP streamable sans état (`POST /mcp` ; `GET` et `DELETE` refusés en `405`).
+- **Codes d'erreur courants :** `429` (cadence par minute dépassée, réessayer après `Retry-After`), `404` sur `/mcp` ou `401` sur `/mcp/oauth` (jeton absent, expiré ou révoqué), `200 [QUOTA_EPUISE]` (plafond journalier UTC atteint).
 
 ## Le corpus
 
