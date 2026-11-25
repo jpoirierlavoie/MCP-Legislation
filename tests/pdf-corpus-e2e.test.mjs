@@ -67,7 +67,10 @@ test("F9-M2: laws.config.json préserve l'ordre initial (invariant 1) et ajoute 
         `Invariant 1 : l'entrée PDF ${l.id} à l'index ${idx} doit être ajoutée après les 97 initiales`,
       );
       assert.ok(
-        l.fonction === "directive" || l.fonction === "orientation" || l.fonction === "reglement",
+        l.fonction === "directive" ||
+          l.fonction === "orientation" ||
+          l.fonction === "reglement" ||
+          l.fonction === "loi",
         `fonction invalide pour ${l.id}: ${l.fonction}`,
       );
       assert.ok(l.consolidation_source?.fr, `consolidation_source.fr requis pour ${l.id}`);

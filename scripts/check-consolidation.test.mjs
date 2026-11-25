@@ -493,11 +493,14 @@ test("agregeParSeau : isole le 3e seau 'pdf' et classe shaDrift en retard", () =
   assert.equal(rDrift.seaux.get("pdf").retard.length, 1);
 });
 
-test("loadPdfProfilePins : charge les 13 empreintes SHA-256 des profils PDF", () => {
+test("loadPdfProfilePins : charge les 15 empreintes SHA-256 des profils PDF", () => {
   const pins = loadPdfProfilePins(RACINE);
-  assert.equal(pins.size, 13);
+  assert.equal(pins.size, 15);
   assert.ok(pins.get("qccs-div-mtl")?.fr?.sha256);
   assert.equal(pins.get("qccs-div-mtl")?.fr?.filename, "Directives_de_la_division_de_Montreal.pdf");
+  assert.ok(pins.get("ca-const-1867")?.fr?.sha256);
+  assert.ok(pins.get("ca-const-1867")?.en?.sha256);
+  assert.equal(pins.get("ca-const-1982")?.en?.filename, "CONST_TRD.pdf");
 });
 
 test("extractPdfIndexDrift : le nom de fichier exact prime sur un préfixe antérieur (Annexe_<cible>.pdf)", () => {

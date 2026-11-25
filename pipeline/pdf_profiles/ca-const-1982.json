@@ -1,0 +1,289 @@
+{
+  "$schema_version": 1,
+  "law_id": "ca-const-1982",
+  "fonction": "loi",
+  "jurisdiction": "ca",
+  "unit": "article",
+  "langs": ["fr", "en"],
+  "files": {
+    "fr": {
+      "filename": "CONST_TRD.pdf",
+      "sha256": "9a1589a94f14b74e3d5708f84fec3c89bdb23778f609b23d58a34fcc905657ba",
+      "page_count": 115,
+      "scope_slice": {
+        "page_start": 63,
+        "page_end": 85,
+        "exclude_pages": [80, 81, 82],
+        "column_x0_min": 306.0,
+        "column_x1_max": 612.0,
+        "full_width_pages": [83, 84, 85],
+        "endnote_pages": [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115]
+      },
+      "toc_pages": [],
+      "body_start_page": 63,
+      "annexe_start_page": 83,
+      "division_intro_preamble_number": "preambule",
+      "dehyphenate_line_breaks": true,
+      "strip_superscript_note_refs": true,
+      "collapse_smallcaps_and_ordinals": true,
+      "preserve_hyphens": [
+        "bas-canada",
+        "cinquante-quatre",
+        "colombie-britannique",
+        "du-prince",
+        "extra-territoriale",
+        "fifty-four",
+        "gouverneur-général",
+        "grande-bretagne",
+        "haut-canada",
+        "lieutenant-gouverneur",
+        "lieutenants-gouverneurs",
+        "lui-même",
+        "non-renewable",
+        "nord-ouest",
+        "nouveau-brunswick",
+        "nouvelle-écosse",
+        "officiers-rapporteurs",
+        "prince-édouard",
+        "re-enacted",
+        "royaume-uni",
+        "sixty-one",
+        "sixty-three",
+        "soixante-quinze",
+        "solliciteur-général",
+        "terre-neuve",
+        "vingt-quatre",
+        "vingt-seize"
+      ],
+      "consolidation_date": {
+        "pages": [63],
+        "y_min": 750.0,
+        "x0_min": 480.0,
+        "regex": "À\\s+jour\\s+au\\s+(.+)$",
+        "lang": "fr"
+      },
+      "title_blocks": [
+        { "page": 63, "y_min": 70.0, "y_max": 130.0 }
+      ],
+      "running_header": {
+        "y_max": 68.0,
+        "regex": ".*"
+      },
+      "running_footer": {
+        "y_min": 750.0,
+        "regex": ".*"
+      },
+      "toc_parser": {
+        "source": "outline",
+        "outline_start_after": { "level": 2, "title": "LOI CONSTITUTIONNELLE DE 1982" },
+        "outline_stop_before": { "level": 2, "title": "NOTES" },
+        "strip_leading_section_number": true
+      },
+      "body_typography": {
+        "dominant_size_pt": 9.7,
+        "y_line_tolerance_pt": 2.5,
+        "heading_wrap_dy_max_pt": 25.0,
+        "heading_x0_min": 314.0,
+        "heading_x0_max": 324.0,
+        "heading_wrap_x0_max": 324.0,
+        "level1_kind": "partie",
+        "level2_kind": "rubrique",
+        "allow_division_intro_prose": true,
+        "heading_rules": [
+          { "level": 1, "min_size_pt": 9.85, "max_size_pt": 10.6, "font_contains": "Bold", "regex": "^PARTIE\\b", "merge_next_level": 1 },
+          { "level": 1, "min_size_pt": 16.5, "max_size_pt": 18.0, "font_contains": "UniversLTStd" },
+          { "level": 2, "min_size_pt": 15.5, "max_size_pt": 16.4, "font_contains": "UniversLTStd-Light" }
+        ]
+      },
+      "marginal_notes": {
+        "x0_min": 314.0,
+        "x0_max": 324.0,
+        "min_size_pt": 9.2,
+        "max_size_pt": 9.8,
+        "font_contains": "Bold"
+      },
+      "provisions": {
+        "x0_min": 314.0,
+        "x0_max": 324.0,
+        "min_size_pt": 8.5,
+        "max_size_pt": 9.4,
+        "lead_font_contains": "Black",
+        "continuation_x0_min": 314.0,
+        "subitem_x0_min": 314.0,
+        "number_mode": "alphanumeric",
+        "allow_undelimited_alphanum": true,
+        "allow_empty_rest": true,
+        "allow_prose_following": true,
+        "repeal_regex": "^\\(?\\s*(?:Abrog[ée]e?\\.?|Abrogation\\.|Repealed\\.?|\\[\\s*(?:…|\\.\\.\\.)\\s*\\])\\s*\\)?\\.?$"
+      },
+      "history": {
+        "prefix_regex": "$^",
+        "x0_min": 999.0,
+        "x0_max": 999.0
+      },
+      "footnotes": {
+        "y0_min": 9999.0
+      },
+      "endnotes": {
+        "pages": [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115],
+        "lead_x0_max": 60.0,
+        "ignore_headings": ["ENDNOTES", "NOTES"]
+      },
+      "annexes": {
+        "mode": "full_sections",
+        "heading_max_lines": 3,
+        "tabular_columns": [95.0, 275.0, 450.0],
+        "skip_header_regex": "^(?:Colonne\\s+I\\s+Colonne\\s+II|Article\\s+Loi\\s+visée)",
+        "slug_prefix_map": {
+          "annexe de la loi constitutionnelle de 1982": "annexe"
+        }
+      },
+      "links": {
+        "allowed_schemes": ["https", "http", "mailto"],
+        "ignore_mailto_without_at_domain": true,
+        "ignore_host_without_dot": true,
+        "sanitize_email_launch": true,
+        "ignore_zero_area_rect": true
+      }
+    },
+    "en": {
+      "filename": "CONST_TRD.pdf",
+      "sha256": "9a1589a94f14b74e3d5708f84fec3c89bdb23778f609b23d58a34fcc905657ba",
+      "page_count": 115,
+      "scope_slice": {
+        "page_start": 63,
+        "page_end": 82,
+        "column_x0_min": 0.0,
+        "column_x1_max": 306.0,
+        "full_width_pages": [80, 81, 82],
+        "endnote_pages": [86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]
+      },
+      "toc_pages": [],
+      "body_start_page": 63,
+      "annexe_start_page": 80,
+      "division_intro_preamble_number": "preamble",
+      "dehyphenate_line_breaks": true,
+      "strip_superscript_note_refs": true,
+      "collapse_smallcaps_and_ordinals": true,
+      "preserve_hyphens": [
+        "bas-canada",
+        "cinquante-quatre",
+        "colombie-britannique",
+        "du-prince",
+        "extra-territoriale",
+        "fifty-four",
+        "gouverneur-général",
+        "grande-bretagne",
+        "haut-canada",
+        "lieutenant-gouverneur",
+        "lieutenants-gouverneurs",
+        "lui-même",
+        "non-renewable",
+        "nord-ouest",
+        "nouveau-brunswick",
+        "nouvelle-écosse",
+        "officiers-rapporteurs",
+        "prince-édouard",
+        "re-enacted",
+        "royaume-uni",
+        "sixty-one",
+        "sixty-three",
+        "soixante-quinze",
+        "solliciteur-général",
+        "terre-neuve",
+        "vingt-quatre",
+        "vingt-seize"
+      ],
+      "consolidation_date": {
+        "pages": [63],
+        "y_min": 750.0,
+        "x0_min": 0.0,
+        "regex": "^Current\\s+to\\s+(.+)$",
+        "lang": "en"
+      },
+      "title_blocks": [
+        { "page": 63, "y_min": 70.0, "y_max": 130.0 }
+      ],
+      "running_header": {
+        "y_max": 68.0,
+        "regex": ".*"
+      },
+      "running_footer": {
+        "y_min": 750.0,
+        "regex": ".*"
+      },
+      "toc_parser": {
+        "source": "outline",
+        "outline_start_after": { "level": 2, "title": "CONSTITUTION ACT, 1982" },
+        "outline_stop_before": { "level": 2, "title": "ENDNOTES" },
+        "strip_leading_section_number": true
+      },
+      "body_typography": {
+        "dominant_size_pt": 9.7,
+        "y_line_tolerance_pt": 2.5,
+        "heading_wrap_dy_max_pt": 25.0,
+        "heading_x0_min": 44.0,
+        "heading_x0_max": 52.0,
+        "heading_wrap_x0_max": 52.0,
+        "level1_kind": "partie",
+        "level2_kind": "rubrique",
+        "allow_division_intro_prose": true,
+        "heading_rules": [
+          { "level": 1, "min_size_pt": 9.85, "max_size_pt": 10.6, "font_contains": "Bold", "regex": "^PART\\b", "merge_next_level": 1 },
+          { "level": 1, "min_size_pt": 16.5, "max_size_pt": 18.0, "font_contains": "UniversLTStd" },
+          { "level": 2, "min_size_pt": 15.5, "max_size_pt": 16.4, "font_contains": "UniversLTStd-Light" }
+        ]
+      },
+      "marginal_notes": {
+        "x0_min": 44.0,
+        "x0_max": 52.0,
+        "min_size_pt": 9.2,
+        "max_size_pt": 9.8,
+        "font_contains": "Bold"
+      },
+      "provisions": {
+        "x0_min": 44.0,
+        "x0_max": 52.0,
+        "min_size_pt": 8.5,
+        "max_size_pt": 9.4,
+        "lead_font_contains": "Black",
+        "continuation_x0_min": 44.0,
+        "subitem_x0_min": 44.0,
+        "number_mode": "alphanumeric",
+        "allow_undelimited_alphanum": true,
+        "allow_empty_rest": true,
+        "allow_prose_following": true,
+        "repeal_regex": "^\\(?\\s*(?:Abrog[ée]e?\\.?|Abrogation\\.|Repealed\\.?|\\[\\s*(?:…|\\.\\.\\.)\\s*\\])\\s*\\)?\\.?$"
+      },
+      "history": {
+        "prefix_regex": "$^",
+        "x0_min": 999.0,
+        "x0_max": 999.0
+      },
+      "footnotes": {
+        "y0_min": 9999.0
+      },
+      "endnotes": {
+        "pages": [86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100],
+        "lead_x0_max": 60.0,
+        "ignore_headings": ["ENDNOTES", "NOTES"]
+      },
+      "annexes": {
+        "mode": "full_sections",
+        "heading_max_lines": 3,
+        "tabular_columns": [95.0, 275.0, 450.0],
+        "skip_header_regex": "^(?:Column\\s+I\\s+Column\\s+II|Item\\s+Act\\s+Affected)",
+        "slug_prefix_map": {
+          "schedule to the constitution act, 1982": "annexe"
+        }
+      },
+      "links": {
+        "allowed_schemes": ["https", "http", "mailto"],
+        "ignore_mailto_without_at_domain": true,
+        "ignore_host_without_dot": true,
+        "sanitize_email_launch": true,
+        "ignore_zero_area_rect": true
+      }
+    }
+  }
+}

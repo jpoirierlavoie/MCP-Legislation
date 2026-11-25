@@ -58,6 +58,8 @@ ORDRE_ATTENDU = [
     "qccq-regles-simplifiees", "qccq-mtl-prat-civile", "qccq-mtl-prat-admin", "qccq-daa-jurisprudence",
     "v-1.1-r.10", "v-1.1-r.21", "v-1.1-r.24",
     "amf-ig-31-103", "amf-ig-45-106", "amf-ig-51-102",
+    # --- VAGUE 1 CONSTITUTION : PDF bilingues Justice Canada, ajoutées EN FIN ---
+    "ca-const-1867", "ca-const-1982",
 ]
 
 
@@ -147,7 +149,7 @@ class ConfigTest(unittest.TestCase):
                     )
             elif law.get("source") == "pdf":
                 self.assertIn(
-                    law.get("fonction"), ("directive", "orientation", "reglement"),
+                    law.get("fonction"), ("directive", "orientation", "reglement", "loi"),
                     f"{law['id']} : fonction PDF invalide : {law.get('fonction')!r}",
                 )
                 self.assertNotIn("epub", law, f"{law['id']} : un texte PDF n'a pas d'EPUB")

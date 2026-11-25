@@ -1033,5 +1033,229 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             pdf_p.unlink(missing_ok=True)
 
 
+class ConstitutionDualColumnPdfTest(unittest.TestCase):
+    """Couvre le mode bilingue double-colonne (scope_slice, notes marginales, notes de fin, Prose '41 An')."""
+
+    def test_synthetique_double_colonne_bilingue_et_notes_fin(self):
+        import hashlib
+        pymupdf = parser_pdf.pymupdf
+        if pymupdf is None:
+            self.skipTest("pymupdf requis")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            pdf_path = tmp_dir / "const_synth.pdf"
+            doc = pymupdf.open()
+            p1 = doc.new_page(width=612, height=792)
+            p1.insert_text((48, 45), "CONSOLIDATION", fontname="helv", fontsize=7.0)
+            p1.insert_text((48, 82), "SYNTHETIC ACT", fontname="hebo", fontsize=11.0)
+            p1.insert_text((318, 82), "LOI SYNTHETIQUE", fontname="hebo", fontsize=11.0)
+
+            # Colonne EN (x <= 300)
+            p1.insert_text((48, 130), "PART I", fontname="hebo", fontsize=10.2)
+            p1.insert_text((48, 152), "CHARTER", fontname="helv", fontsize=17.0)
+            p1.insert_text((48, 175), "Whereas Canada is founded.", fontname="helv", fontsize=9.7)
+            p1.insert_text((48, 200), "Short title", fontname="hebo", fontsize=9.5)
+            p1.insert_text((48, 218), "1 This Act deals with inconsis-", fontname="hebo", fontsize=9.0)
+            p1.insert_text((48, 231), "tency rules.", fontname="helv", fontsize=9.7)
+            p1.insert_text((48, 255), "General rule", fontname="hebo", fontsize=9.5)
+            p1.insert_text((48, 273), "41 An amendment applies.", fontname="hebo", fontsize=9.0)
+            p1.insert_text((48, 286), "(1)", fontname="helv", fontsize=6.0)
+            p1.insert_text((48, 310), "50", fontname="hebo", fontsize=9.0)
+            p1.insert_text((62, 307), "(2)", fontname="helv", fontsize=6.0)
+            p1.insert_text((48, 768), "Current to January 1, 2024", fontname="helv", fontsize=7.5)
+
+            # Colonne FR (x >= 306)
+            p1.insert_text((318, 130), "PARTIE I", fontname="hebo", fontsize=10.2)
+            p1.insert_text((318, 152), "CHARTE", fontname="helv", fontsize=17.0)
+            p1.insert_text((318, 175), "Attendu que le Canada est fondé au Bas-", fontname="helv", fontsize=9.7)
+            p1.insert_text((318, 188), "Canada.", fontname="helv", fontsize=9.7)
+            p1.insert_text((318, 210), "Titre abrégé", fontname="hebo", fontsize=9.5)
+            p1.insert_text((318, 228), "1 La présente loi traite de désha-", fontname="hebo", fontsize=9.0)
+            p1.insert_text((318, 241), "rmonie.", fontname="helv", fontsize=9.7)
+            p1.insert_text((318, 265), "Règle générale", fontname="hebo", fontsize=9.5)
+            p1.insert_text((318, 283), "41 Toute modification s'applique.", fontname="hebo", fontsize=9.0)
+            p1.insert_text((318, 296), "(1)", fontname="helv", fontsize=6.0)
+            p1.insert_text((318, 320), "50", fontname="hebo", fontsize=9.0)
+            p1.insert_text((332, 317), "(2)", fontname="helv", fontsize=6.0)
+            p1.insert_text((490, 768), "À jour au 1er janvier 2024", fontname="helv", fontsize=7.5)
+
+            p2 = doc.new_page(width=612, height=792)
+            p2.insert_text((48, 75), "ENDNOTES", fontname="hebo", fontsize=10.0)
+            p2.insert_text((48, 95), "(1) First historical note.", fontname="hebo", fontsize=9.0)
+            p2.insert_text((48, 115), "(2) See s. 92A.", fontname="hebo", fontsize=9.0)
+            p3 = doc.new_page(width=612, height=792)
+            p3.insert_text((48, 75), "NOTES", fontname="hebo", fontsize=10.0)
+            p3.insert_text((48, 95), "(1) Première note historique.", fontname="hebo", fontsize=9.0)
+            p3.insert_text((48, 115), "(2) Voir l'article 92A.", fontname="hebo", fontsize=9.0)
+            doc.set_toc([
+                [1, "RACINE", 1],
+                [2, "SYNTHETIC ACT", 1],
+                [3, "PART I CHARTER", 1],
+                [2, "LOI SYNTHETIQUE", 1],
+                [3, "PARTIE I CHARTE", 1],
+                [2, "NOTES", 3],
+            ])
+            doc.save(pdf_path)
+            doc.close()
+
+            sha = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+
+            def _side(lang: str) -> dict:
+                is_fr = lang == "fr"
+                x0_min, x1_max = (306.0, 612.0) if is_fr else (0.0, 306.0)
+                c_min, c_max = (314.0, 324.0) if is_fr else (44.0, 52.0)
+                end_page = [3] if is_fr else [2]
+                return {
+                    "filename": "const_synth.pdf",
+                    "sha256": sha,
+                    "page_count": 3,
+                    "scope_slice": {
+                        "page_start": 1,
+                        "page_end": 1,
+                        "column_x0_min": x0_min,
+                        "column_x1_max": x1_max,
+                        "endnote_pages": end_page,
+                    },
+                    "toc_pages": [],
+                    "toc_parser": {
+                        "source": "outline",
+                        "outline_start_after": {"level": 2, "title": "LOI SYNTHETIQUE" if is_fr else "SYNTHETIC ACT"},
+                        "outline_stop_before": {"level": 2, "title": "NOTES" if is_fr else "LOI SYNTHETIQUE"},
+                    },
+                    "body_start_page": 1,
+                    "annexe_start_page": 99,
+                    "division_intro_preamble_number": "preambule" if is_fr else "preamble",
+                    "dehyphenate_line_breaks": True,
+                    "strip_superscript_note_refs": True,
+                    "collapse_smallcaps_and_ordinals": True,
+                    "preserve_hyphens": ["bas-canada"],
+                    "consolidation_date": {
+                        "pages": [1],
+                        "y_min": 750.0,
+                        "x0_min": 480.0 if is_fr else 0.0,
+                        "regex": r"À\s+jour\s+au\s+(.+)$" if is_fr else r"^Current\s+to\s+(.+)$",
+                        "lang": lang,
+                    },
+                    "title_blocks": [{"page": 1, "y_min": 65.0, "y_max": 100.0}],
+                    "running_header": {"y_max": 58.0, "regex": ".*"},
+                    "running_footer": {"y_min": 750.0, "regex": ".*"},
+                    "body_typography": {
+                        "dominant_size_pt": 9.7,
+                        "y_line_tolerance_pt": 2.5,
+                        "heading_wrap_dy_max_pt": 26.0,
+                        "heading_x0_min": c_min,
+                        "heading_x0_max": c_max,
+                        "heading_wrap_x0_max": c_max,
+                        "level1_kind": "partie",
+                        "allow_division_intro_prose": True,
+                        "heading_rules": [
+                            {"level": 1, "min_size_pt": 9.9, "max_size_pt": 11.0, "font_contains": "Bold", "regex": r"^PART(?:IE)?\b", "merge_next_level": 1},
+                            {"level": 1, "min_size_pt": 16.0, "max_size_pt": 18.0, "font_contains": "Helvetica"},
+                        ],
+                    },
+                    "marginal_notes": {
+                        "x0_min": c_min,
+                        "x0_max": c_max,
+                        "min_size_pt": 9.2,
+                        "max_size_pt": 9.8,
+                        "font_contains": "Bold",
+                    },
+                    "provisions": {
+                        "x0_min": c_min,
+                        "x0_max": c_max,
+                        "min_size_pt": 8.5,
+                        "max_size_pt": 9.4,
+                        "lead_font_contains": "Helvetica-Bold",
+                        "continuation_x0_min": c_min,
+                        "subitem_x0_min": c_min,
+                        "number_mode": "alphanumeric",
+                        "allow_undelimited_alphanum": True,
+                        "allow_empty_rest": True,
+                        "allow_prose_following": True,
+                        "repeal_regex": r"^Abrog[ée]\.$" if is_fr else r"^Repealed\.$",
+                    },
+                    "history": {"prefix_regex": "$^", "x0_min": 999.0, "x0_max": 999.0},
+                    "footnotes": {"y0_min": 9999.0},
+                    "endnotes": {
+                        "pages": end_page,
+                        "lead_x0_max": 60.0,
+                        "ignore_headings": ["ENDNOTES", "NOTES"],
+                    },
+                }
+
+            prof_path = tmp_dir / "const-synth.json"
+            prof_path.write_text(json.dumps({
+                "$schema_version": 1,
+                "law_id": "const-synth",
+                "fonction": "loi",
+                "jurisdiction": "ca",
+                "unit": "article",
+                "langs": ["fr", "en"],
+                "files": {"fr": _side("fr"), "en": _side("en")},
+            }), encoding="utf-8")
+
+            law_fr = Law(id="const-synth", name_fr="Loi synth", name_en="Synth Act", rlrq_cite="x", official_cite_en="x", source="pdf", jurisdiction="ca")
+            bilan_fr = parser_pdf.PdfBilan()
+            divs_fr, arts_fr = parser_pdf.parse_pdf(pdf_path, law_fr, "fr", profile_path=prof_path, bilan=bilan_fr)
+            self.assertEqual(bilan_fr.unclassified, 0)
+            self.assertEqual(law_fr.consol_date_fr, "2024-01-01")
+            by_fr = {a.number: a for a in arts_fr}
+            self.assertEqual(parser_pdf._join_lines_dehyphenated("inconsis\u2010", "tency", set(), True), "inconsistency")
+            self.assertEqual([d.path for d in divs_fr], ["ph1:1"])
+            self.assertIn("Bas-Canada", by_fr["preambule"].text)
+            self.assertIn("désharmonie", by_fr["1"].text)
+            self.assertEqual(by_fr["41"].marginal_note, "Règle générale")
+            self.assertNotIn("(1)", by_fr["41"].text)
+            self.assertIn("Première note historique", by_fr["41"].footnotes or "")
+            self.assertEqual(by_fr["50"].text, "Note de fin de page (2)")
+            self.assertIn("article 92A", by_fr["50"].footnotes or "")
+
+            law_en = Law(id="const-synth", name_fr="Loi synth", name_en="Synth Act", rlrq_cite="x", official_cite_en="x", source="pdf", jurisdiction="ca")
+            bilan_en = parser_pdf.PdfBilan()
+            divs_en, arts_en = parser_pdf.parse_pdf(pdf_path, law_en, "en", profile_path=prof_path, bilan=bilan_en)
+            self.assertEqual(bilan_en.unclassified, 0)
+            self.assertEqual(law_en.consol_date_en, "2024-01-01")
+            by_en = {a.number: a for a in arts_en}
+            self.assertEqual([d.path for d in divs_en], [d.path for d in divs_fr])
+            self.assertIn("inconsistency rules", by_en["1"].text)
+            self.assertEqual(by_en["41"].marginal_note, "General rule")
+            self.assertNotIn("(1)", by_en["41"].text)
+            self.assertIn("First historical note", by_en["41"].footnotes or "")
+            self.assertEqual(by_en["50"].text, "End note (2)")
+
+    @unittest.skipUnless((config.SAMPLES_DIR / "CONST_TRD.pdf").exists(), "CONST_TRD.pdf absent de pipeline/samples")
+    def test_const_trd_reel_bilingue_et_symetrique(self):
+        pdf_path = config.SAMPLES_DIR / "CONST_TRD.pdf"
+        for lid, exp_divs, exp_arts, must_have in [
+            ("ca-const-1867", 40, 162, ["1", "2", "29", "51", "51A", "90Q.1", "90Q.2", "90S.1", "91", "92A", "128Q.1", "annexe-1", "annexe-6"]),
+            ("ca-const-1982", 21, 67, ["1", "2", "16.1", "35.1", "37.1", "41", "43", "50", "51", "52", "54.1", "annexe"]),
+        ]:
+            paths_by_lang: dict[str, list[str]] = {}
+            for lang in ("fr", "en"):
+                law = Law(id=lid, name_fr=lid, name_en=lid, rlrq_cite=lid, official_cite_en=lid, source="pdf", jurisdiction="ca")
+                bilan = parser_pdf.PdfBilan()
+                divs, arts = parser_pdf.parse_pdf(pdf_path, law, lang, bilan=bilan)
+                rep = validate.validate(
+                    lid, lang, divs, arts,
+                    jurisdiction="ca",
+                    span_accounting=bilan.span_accounting,
+                    toc_titles=bilan.toc_titles,
+                    toc_exempt_headings=bilan.toc_exempt_headings,
+                )
+                self.assertTrue(rep.ok, f"{lid}/{lang}: {rep.lines}")
+                self.assertEqual(bilan.unclassified, 0)
+                self.assertEqual(len(divs), exp_divs, f"{lid}/{lang} divs")
+                self.assertEqual(len(arts), exp_arts, f"{lid}/{lang} arts")
+                self.assertEqual(getattr(law, f"consol_date_{lang}"), "2024-01-01")
+                paths_by_lang[lang] = [d.path for d in divs]
+                by_n = {a.number: a for a in arts}
+                pre_key = "preambule" if lang == "fr" else "preamble"
+                self.assertIn(pre_key, by_n)
+                for req_num in must_have:
+                    self.assertIn(req_num, by_n, f"{lid}/{lang} manquant {req_num}")
+                self.assertFalse(any(a.number.startswith("intro-") for a in arts), f"{lid}/{lang} faux intro-")
+            self.assertEqual(paths_by_lang["fr"], paths_by_lang["en"], f"{lid} symétrie FR/EN")
+
+
 if __name__ == "__main__":
     unittest.main()

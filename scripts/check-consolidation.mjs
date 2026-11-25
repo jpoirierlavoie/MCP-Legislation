@@ -488,10 +488,10 @@ async function main() {
   );
   const pdfPins = loadPdfProfilePins(ROOT);
 
-  // 1) Dates stockées, via l'endpoint MCP public (une seule session).
+  // 1) Dates stockées, via l'endpoint MCP public (une seule session, tous domaines).
   const mcp = createMcpClient(MCP_URL);
   await mcp.connect();
-  const res = await mcp.callTool("list_laws", {});
+  const res = await mcp.callTool("list_laws", { domains: ["all"] });
   const laws = res?.structuredContent?.laws;
   if (!Array.isArray(laws) || laws.length === 0) {
     throw new Error(`list_laws n'a renvoyé aucune loi (endpoint ${MCP_URL} injoignable ?)`);

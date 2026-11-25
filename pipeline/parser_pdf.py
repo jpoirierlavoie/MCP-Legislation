@@ -104,6 +104,11 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _SUBITEM_ALPHA_PAREN_RE = re.compile(r"^(?P<num>(?:\([a-z]\)|[a-z]\)))(?=\s|$)")
 _SUBITEM_ALPHA_DOT_RE = re.compile(r"^(?P<num>[a-z]\.)(?=\s|$)")
 _TOC_NUMBERED_ARTICLE_RE = re.compile(r"^(?P<num>\d+[A-Za-z]*(?:\.\d+[A-Za-z]*)*)\.?(?=\s|$)")
+_TOC_LEAD_SEC_RE = re.compile(r"^\d+[A-Za-z]*(?:\.\d+[A-Za-z]*)*\s+")
+_SUP_NOTE_REF_RE = re.compile(r"^(?:\(\d+\))+$")
+_SUP_ORDINAL_RE = re.compile(r"^(?:er|e|re)$")
+_DEHYPHEN_PREV_RE = re.compile(r"([A-Za-zÀ-ÿ]+)[-\u2010]$")
+_DEHYPHEN_NEXT_RE = re.compile(r"^([A-Za-zÀ-ÿ]+)")
 _PROV_NUMERIC_RE = re.compile(r"^(?P<num>\d+(?:\.\d+)*)(?P<delim>\.?)(?:\s+(?P<rest>.*))?$")
 _PROV_ALPHANUM_RE = re.compile(
     r"^(?P<num>(?:\d+[A-Za-z]+(?:\.\d+(?:[A-Za-z]+)?)*|\d+(?:\.\d+)*(?:[A-Za-z]+(?:\.\d+(?:[A-Za-z]+)?)*)?))"
@@ -507,6 +512,9 @@ def match_provision_prefix(
     number_mode: str = "numeric",
     *,
     require_dot_in_number: bool = False,
+    allow_undelimited_alphanum: bool = False,
+    allow_empty_rest: bool = False,
+    allow_prose_following: bool = False,
 ) -> tuple[str, str] | None:
     """Extrait `(numero, reste)` en début de disposition avec gardes anti-faux-positifs (§7.6)."""
     if not text:
@@ -526,16 +534,17 @@ def match_provision_prefix(
 
     # Garde 1 : sans délimiteur ni point interne, une lettre attachée (ex. « 2A Champ ») est rejetée
     has_letters = any(c.isalpha() for c in num)
-    if has_letters and "." not in num and not delim:
+    if has_letters and "." not in num and not delim and not allow_undelimited_alphanum:
         return None
     # Garde 2 : rejeter « 1er », « 12 $ », « 100 % », « 45-106 », « 2026-02-23 »
     if rest and _BAD_NUMERIC_UNIT_RE.match(rest):
-        return None
+        if not (allow_prose_following and re.match(r"^An\s+[A-Za-z]", rest)):
+            return None
     # Garde 3 : chiffre entier sans délimiteur suivi d'un mot-outil minuscule (« 2019 CSC », « 12 ou »)
     if not delim and "." not in num and not has_letters:
-        if rest and _BAD_NUMERIC_LOWER_PROSE_RE.match(rest):
+        if rest and not allow_prose_following and _BAD_NUMERIC_LOWER_PROSE_RE.match(rest):
             return None
-        if not rest:
+        if not rest and not allow_empty_rest:
             return None
     return num, rest
 
@@ -697,6 +706,139 @@ def _match_in_box_blocks(ln: LineRecord, page_num: int, blocks: list[dict[str, A
     return False
 
 
+def _join_lines_dehyphenated(
+    prev: str,
+    nxt: str,
+    preserve_hyphens: set[str],
+    enabled: bool = False,
+) -> str:
+    """Joint deux lignes avec dé-césure des traits d'union finaux (- et U+2010), sauf composés."""
+    if not prev:
+        return nxt
+    if not nxt:
+        return prev
+    if enabled:
+        m1 = _DEHYPHEN_PREV_RE.search(prev)
+        m2 = _DEHYPHEN_NEXT_RE.match(nxt)
+        if m1 and m2:
+            pair = f"{m1.group(1)}-{m2.group(1)}".lower()
+            if pair in preserve_hyphens:
+                return f"{prev[:-1]}-{nxt}"
+            return f"{prev[:-1]}{nxt}"
+    return f"{prev} {nxt}"
+
+
+def _extract_clean_line_text(
+    ln: LineRecord,
+    *,
+    strip_note_refs: bool = False,
+    collapse_smallcaps_ordinals: bool = False,
+) -> tuple[str, list[int]]:
+    """Reconstruit une ligne en isolant les appels de note en exposant et les ordinaux/petites capitales."""
+    if not strip_note_refs and not collapse_smallcaps_ordinals:
+        return ln.norm_text, []
+
+    non_ws = [sp for sp in ln.spans if sp.text and sp.norm_text]
+    if not non_ws:
+        return ln.norm_text, []
+
+    if strip_note_refs and all(sp.size <= 6.5 for sp in non_ws):
+        joined_line = re.sub(r"\s+", "", "".join(sp.text for sp in non_ws))
+        if _SUP_NOTE_REF_RE.match(joined_line):
+            return "", [int(m) for m in re.findall(r"\d+", joined_line)]
+
+    refs: list[int] = []
+    out: list[str] = []
+    sup_buf: list[SpanRecord] = []
+    prev_kept: SpanRecord | None = None
+
+    def _cur_tail() -> str:
+        return out[-1] if out else ""
+
+    def _emit_span(sp: SpanRecord, force_no_space: bool = False) -> None:
+        nonlocal prev_kept
+        txt = sp.text
+        if not txt.strip():
+            return
+        if prev_kept is not None and not force_no_space:
+            tail = _cur_tail()
+            gap = sp.x0 - prev_kept.x1
+            has_ws = tail.endswith((" ", "\t", "(", "[", "«", "“")) or txt.startswith((" ", "\t"))
+            is_sc_hereas = (
+                collapse_smallcaps_ordinals
+                and tail.strip() == "W"
+                and txt.strip() == "HEREAS"
+                and gap <= 1.5
+            )
+            if not has_ws and not is_sc_hereas:
+                if gap > max(1.2, 0.16 * max(sp.size, 6.0)) and not txt.startswith((".", ",", ";", ":", ")", "]", "»", "”", "'", "’")):
+                    out.append(" ")
+        out.append(txt)
+        prev_kept = sp
+
+    def _flush_sup_buf() -> None:
+        if not sup_buf:
+            return
+        joined = re.sub(r"\s+", "", "".join(s.text for s in sup_buf))
+        if strip_note_refs and _SUP_NOTE_REF_RE.match(joined):
+            refs.extend(int(m) for m in re.findall(r"\d+", joined))
+            sup_buf.clear()
+            return
+        for s in sup_buf:
+            _emit_span(s)
+        sup_buf.clear()
+
+    for sp in non_ws:
+        s_txt = sp.norm_text
+        is_sup = bool(sp.flags & 1) and sp.size <= 6.5
+        if is_sup and collapse_smallcaps_ordinals and _SUP_ORDINAL_RE.match(s_txt):
+            tail_s = "".join(out).rstrip()
+            if tail_s and tail_s[-1].isdigit() and (prev_kept is None or (sp.x0 - prev_kept.x1) <= 3.5):
+                _flush_sup_buf()
+                _emit_span(sp, force_no_space=True)
+                continue
+        if strip_note_refs and is_sup:
+            sup_buf.append(sp)
+            continue
+        _flush_sup_buf()
+        _emit_span(sp)
+
+    _flush_sup_buf()
+    cleaned = _norm("".join(out))
+    return cleaned, refs
+
+
+def _slice_outline_toc(
+    raw_toc_all: list[tuple[int, str, int]],
+    toc_cfg: dict[str, Any],
+) -> list[tuple[int, str, int]]:
+    """Extrait un sous-arbre des signets PDF entre deux marqueurs déclaratifs (bilingue multi-lois)."""
+    start_after = toc_cfg.get("outline_start_after")
+    stop_before = toc_cfg.get("outline_stop_before")
+    if not start_after and not stop_before:
+        return raw_toc_all
+
+    started = start_after is None
+    sliced: list[tuple[int, str, int]] = []
+    start_lvl = int(start_after["level"]) if start_after else 1
+    start_title = _toc_cmp_norm(start_after["title"]) if start_after else ""
+    stop_lvl = int(stop_before["level"]) if stop_before else None
+    stop_title = _toc_cmp_norm(stop_before["title"]) if stop_before else ""
+
+    for lvl, title, pg in raw_toc_all:
+        norm_t = _toc_cmp_norm(title)
+        if not started:
+            if lvl == start_lvl and norm_t == start_title:
+                started = True
+            continue
+        if stop_before is not None and lvl == stop_lvl and norm_t == stop_title:
+            break
+        if lvl < start_lvl:
+            break
+        sliced.append((max(1, lvl - (start_lvl - 1)), title, pg))
+    return sliced
+
+
 def _match_band(
     ln: LineRecord,
     page_num: int,
@@ -848,6 +990,15 @@ def parse_pdf(
         table_from_page = int(tables_cfg.get("from_page", 1))
         running_footer_cfg = fcfg.get("running_footer")
         running_header_cfg = fcfg.get("running_header")
+        scope_cfg = fcfg.get("scope_slice") or {}
+        scope_active = bool(scope_cfg)
+        scope_p_start = int(scope_cfg.get("page_start", 1))
+        scope_p_end = int(scope_cfg.get("page_end", page_count))
+        scope_excl = {int(p) for p in (scope_cfg.get("exclude_pages") or [])}
+        scope_full_pages = {int(p) for p in (scope_cfg.get("full_width_pages") or [])}
+        scope_endnote_pages = {int(p) for p in (scope_cfg.get("endnote_pages") or [])}
+        scope_x0_min = scope_cfg.get("column_x0_min")
+        scope_x1_max = scope_cfg.get("column_x1_max")
 
         lines_by_page: dict[int, list[LineRecord]] = {}
         spans_by_page: dict[int, list[SpanRecord]] = {}
@@ -857,6 +1008,7 @@ def parse_pdf(
         total_images = 0
         total_non_ws_chars = 0
         image_only_pages: list[int] = []
+        scoped_pages_seen = 0
 
         for p_idx in range(page_count):
             p_num = p_idx + 1
@@ -864,12 +1016,26 @@ def parse_pdf(
             p_dict = page.get_text("dict", flags=flags)
             page_h = float(p_dict.get("height") or page.cropbox.height or page.rect.height)
             page_heights[p_num] = page_h
-            page_images = len(page.get_images(full=True))
+            in_body_scope = (
+                not scope_active
+                or (scope_p_start <= p_num <= scope_p_end and p_num not in scope_excl)
+            )
+            in_endnote_scope = scope_active and (p_num in scope_endnote_pages)
+            page_in_scope = in_body_scope or in_endnote_scope
+            page_images = len(page.get_images(full=True)) if page_in_scope else 0
             total_images += page_images
+            if page_in_scope:
+                scoped_pages_seen += 1
 
             page_spans: list[SpanRecord] = []
             raw_pua_spans: list[tuple[float, float, str, str]] = []
             page_non_ws = 0
+            col_slice_on_page = (
+                scope_active
+                and in_body_scope
+                and p_num not in scope_full_pages
+                and (scope_x0_min is not None or scope_x1_max is not None)
+            )
             for blk in p_dict.get("blocks", []):
                 if blk.get("type") != 0:
                     continue
@@ -877,6 +1043,16 @@ def parse_pdf(
                     for sp_d in ln_d.get("spans", []):
                         bilan_obj.total_spans += 1
                         bbox = sp_d["bbox"]
+                        if not page_in_scope:
+                            bilan_obj.add_span("out_of_scope_slice", 1)
+                            continue
+                        if col_slice_on_page:
+                            sx0 = float(bbox[0])
+                            if (scope_x0_min is not None and sx0 < float(scope_x0_min)) or (
+                                scope_x1_max is not None and sx0 >= float(scope_x1_max)
+                            ):
+                                bilan_obj.add_span("out_of_scope_slice", 1)
+                                continue
                         raw_txt = sp_d.get("text", "")
                         base_font = strip_font_subset(sp_d.get("font", ""))
                         if any(0xE000 <= ord(c) <= 0xF8FF for c in raw_txt):
@@ -909,6 +1085,12 @@ def parse_pdf(
                                 norm_text=norm_txt,
                             )
                         )
+            if not page_in_scope:
+                tables_by_page[p_num] = []
+                spans_by_page[p_num] = []
+                lines_by_page[p_num] = []
+                links_by_page[p_num] = []
+                continue
             total_non_ws_chars += page_non_ws
             if page_images > 0 and page_non_ws < 10:
                 image_only_pages.append(p_num)
@@ -1053,7 +1235,8 @@ def parse_pdf(
             )
 
         # Porte 0 : refus dur numérisé (zéro OCR, zéro LLM)
-        avg_non_ws = total_non_ws_chars / page_count
+        denom_pages = max(1, scoped_pages_seen if scope_active else page_count)
+        avg_non_ws = total_non_ws_chars / denom_pages
         if (
             total_non_ws_chars == 0
             or (total_images > 0 and avg_non_ws < 10.0)
@@ -1112,6 +1295,17 @@ def parse_pdf(
         for item in pdf_toc
         if len(item) >= 3
     ]
+    raw_toc_all = _slice_outline_toc(raw_toc_all, toc_cfg)
+    strip_lead_sec = bool(toc_cfg.get("strip_leading_section_number", False))
+    if strip_lead_sec:
+        raw_toc_all = [
+            (
+                lvl,
+                _TOC_LEAD_SEC_RE.sub("", title, count=1).strip() if pg < annexe_start_page else title,
+                pg,
+            )
+            for lvl, title, pg in raw_toc_all
+        ]
     if toc_excl_numbered:
         toc_div_entries_3 = [
             (lvl, title, pg)
@@ -1129,12 +1323,26 @@ def parse_pdf(
     )
     ann_list_sections = list(ann_cfg.get("list_sections") or [])
 
+    dehyphenate = bool(fcfg.get("dehyphenate_line_breaks", False))
+    preserve_hyphens = {str(w).lower() for w in (fcfg.get("preserve_hyphens") or [])}
+    strip_sup_refs = bool(fcfg.get("strip_superscript_note_refs", False))
+    collapse_sc_ord = bool(fcfg.get("collapse_smallcaps_and_ordinals", False))
+
     divisions: list[Division] = []
     articles: list[Article] = []
     art_line_boxes: dict[int, list[tuple[int, float, float, float, float]]] = {}
     art_page_sups: dict[int, set[str]] = {}
+    art_note_refs: dict[int, list[int]] = {}
     art_by_page: dict[int, list[Article]] = collections.defaultdict(list)
     links_acc: dict[int, list[dict[str, str]]] = collections.defaultdict(list)
+
+    def _add_note_refs(art: Article | None, refs: list[int]) -> None:
+        if art is None or not refs:
+            return
+        bucket = art_note_refs.setdefault(id(art), [])
+        for r in refs:
+            if r not in bucket:
+                bucket.append(r)
 
     toc_raw_lines: list[LineRecord] = []
     pile: list[int] = []
@@ -1158,9 +1366,21 @@ def parse_pdf(
     pending_bare_provision = False
     bare_repeal_promoted: tuple[int, str] | None = None
     pending_heading: dict[str, Any] | None = None
+    pending_div_refs: list[int] = []
+    pending_marginal_note: str | None = None
+    pending_mn_refs: list[int] = []
     last_prose_meta: tuple[int, float, bool] | None = None  # (page, y0, is_bold)
     last_body_pos: tuple[int, float] | None = None  # (page, y0)
     ann_full_section_rep_arts: set[int] = set()
+    tabular_pending_row: list[str] | None = None
+
+    def _flush_tabular_row() -> None:
+        nonlocal tabular_pending_row
+        if tabular_pending_row is not None and current_article is not None:
+            row_txt = " | ".join(c.strip() for c in tabular_pending_row if c.strip())
+            if row_txt:
+                current_article.text = f"{current_article.text}\n{row_txt}"
+            tabular_pending_row = None
 
     ann_start_heading = ann_cfg.get("start_heading") or ""
     ann_subgroups = ann_cfg.get("subgroups") or []
@@ -1171,14 +1391,123 @@ def parse_pdf(
 
     ann_item_re = re.compile(ann_cfg["item_regex"], re.I) if ann_cfg.get("item_regex") else None
     ann_slug_map = {_toc_cmp_norm(k): v for k, v in (ann_cfg.get("slug_map") or {}).items()}
+    ann_slug_prefix_map = [
+        (_toc_cmp_norm(k), str(v))
+        for k, v in (ann_cfg.get("slug_prefix_map") or {}).items()
+    ]
+    ann_tabular_cols = [float(x) for x in (ann_cfg.get("tabular_columns") or [])]
+    ann_tab_skip_re = (
+        re.compile(ann_cfg["skip_header_regex"], re.I)
+        if ann_cfg.get("skip_header_regex")
+        else None
+    )
+    ann_max_heading_lines = int(ann_cfg.get("heading_max_lines", 4))
     repeal_re = re.compile(prov_cfg["repeal_regex"], re.I)
 
     div_re_src = typo.get("division_regex")
     div_re = re.compile(div_re_src) if div_re_src else None
+    heading_rules = typo.get("heading_rules") or []
+    compiled_heading_rules: list[tuple[dict[str, Any], re.Pattern[str] | None]] = [
+        (hr, re.compile(hr["regex"]) if hr.get("regex") else None)
+        for hr in heading_rules
+    ]
+    mn_cfg = fcfg.get("marginal_notes")
     trailing_log_re_src = hist_cfg.get("trailing_log_regex")
     trailing_log_re = re.compile(trailing_log_re_src, re.I) if trailing_log_re_src else None
     preamble_number = fcfg.get("preamble_number")
+    div_intro_pre_num = fcfg.get("division_intro_preamble_number")
     allow_div_intro = bool(typo.get("allow_division_intro_prose", False))
+
+    # Pré-extraction des notes de fin de document si configurée (ex. CONST_TRD.pdf pp. 86–115)
+    endnotes_cfg = fcfg.get("endnotes") or {}
+    endnotes_map: dict[int, str] = {}
+    endnotes_pages_list = [int(p) for p in (endnotes_cfg.get("pages") or [])]
+    if endnotes_pages_list:
+        en_lead_x0_max = float(endnotes_cfg.get("lead_x0_max", 60.0))
+        en_ignore_headings = {_toc_cmp_norm(h) for h in (endnotes_cfg.get("ignore_headings") or ["ENDNOTES", "NOTES"])}
+        en_lead_re = re.compile(r"^\((\d+)\)\s*(.*)$")
+        en_buf: dict[int, list[str]] = {}
+        cur_en_num: int | None = None
+        prev_en_y0: float | None = None
+        for ep_num in endnotes_pages_list:
+            ep_h = page_heights.get(ep_num, 792.0)
+            prev_en_y0 = None
+            for eln in lines_by_page.get(ep_num, []):
+                if not eln.norm_text:
+                    _bucket_line(bilan_obj, eln, "whitespace_only")
+                    continue
+                if _match_band(eln, ep_num, running_header, is_header=True, page_height=ep_h):
+                    _bucket_line(bilan_obj, eln, "running_header")
+                    continue
+                if _match_band(eln, ep_num, running_footer, is_header=False, page_height=ep_h):
+                    _bucket_line(bilan_obj, eln, "running_footer")
+                    continue
+                enws = _line_non_ws(eln)
+                if not enws:
+                    _bucket_line(bilan_obj, eln, "whitespace_only")
+                    continue
+                e_first = enws[0]
+                e_txt, _ = _extract_clean_line_text(
+                    eln,
+                    strip_note_refs=False,
+                    collapse_smallcaps_ordinals=collapse_sc_ord,
+                )
+                if e_first.size >= 9.5 and _toc_cmp_norm(e_txt) in en_ignore_headings:
+                    _bucket_line(bilan_obj, eln, "heading_or_division")
+                    continue
+                m_en = en_lead_re.match(e_txt)
+                if (
+                    m_en
+                    and e_first.x0 <= en_lead_x0_max
+                    and ("Bold" in e_first.base_font or bool(e_first.flags & 16))
+                    and abs(e_first.size - 9.0) <= 0.6
+                ):
+                    cur_en_num = int(m_en.group(1))
+                    en_buf[cur_en_num] = [m_en.group(2).strip()]
+                    prev_en_y0 = eln.y0
+                    _bucket_line(bilan_obj, eln, "footnote")
+                    continue
+                if cur_en_num is not None:
+                    starts_quote_block = (
+                        ("Black" in e_first.base_font)
+                        or (prev_en_y0 is not None and (eln.y0 - prev_en_y0) > 13.0)
+                        or not en_buf[cur_en_num][-1]
+                    )
+                    if starts_quote_block:
+                        if not en_buf[cur_en_num][-1]:
+                            en_buf[cur_en_num][-1] = e_txt
+                        else:
+                            en_buf[cur_en_num].append(e_txt)
+                    else:
+                        en_buf[cur_en_num][-1] = _join_lines_dehyphenated(
+                            en_buf[cur_en_num][-1],
+                            e_txt,
+                            preserve_hyphens,
+                            dehyphenate,
+                        )
+                    prev_en_y0 = eln.y0
+                    _bucket_line(bilan_obj, eln, "footnote")
+                    continue
+                _bucket_line(bilan_obj, eln, "unclassified")
+        endnotes_map = {k: "\n".join(p for p in parts if p).strip() for k, parts in en_buf.items()}
+
+    def _match_heading_rule(non_ws: list[SpanRecord], cleaned_txt: str) -> dict[str, Any] | None:
+        if not compiled_heading_rules or not non_ws:
+            return None
+        first_sp = non_ws[0]
+        sz = first_sp.size
+        for hr, hr_re in compiled_heading_rules:
+            if sz < float(hr["min_size_pt"]) or sz > float(hr["max_size_pt"]):
+                continue
+            fc = hr.get("font_contains")
+            if fc and str(fc) not in first_sp.base_font:
+                continue
+            if hr.get("require_bold", False) and not _is_any_bold(non_ws):
+                continue
+            if hr_re is not None and not hr_re.match(cleaned_txt):
+                continue
+            return hr
+        return None
 
     def _infer_heading_level(txt: str, first_sz: float) -> int:
         if div_re is not None:
@@ -1223,7 +1552,7 @@ def parse_pdf(
         return "pp:0"
 
     def _flush_pending_heading() -> None:
-        nonlocal pending_heading, current_div, current_article, last_opened_node, div_sort_order, article_title_active, pending_bare_provision, bare_repeal_promoted, last_body_pos
+        nonlocal pending_heading, current_div, current_article, last_opened_node, div_sort_order, article_title_active, pending_bare_provision, bare_repeal_promoted, last_body_pos, pending_marginal_note
         if pending_heading is None:
             return
         txt = pending_heading["text"]
@@ -1259,6 +1588,7 @@ def parse_pdf(
         pending_bare_provision = False
         bare_repeal_promoted = None
         last_body_pos = None
+        pending_marginal_note = None
         last_opened_node = "division"
         pending_heading = None
 
@@ -1278,6 +1608,12 @@ def parse_pdf(
             art_by_page[p_num_box].append(art)
 
     for p_num in range(1, page_count + 1):
+        if scope_active and (
+            p_num in scope_endnote_pages
+            or not (scope_p_start <= p_num <= scope_p_end)
+            or p_num in scope_excl
+        ):
+            continue
         footnote_active_on_page = False
         active_footnote_num: str | None = None
         last_footnote_target: Article | None = None
@@ -1426,14 +1762,16 @@ def parse_pdf(
             if in_annexes:
                 norm_ln = _toc_cmp_norm(ln.norm_text)
 
-                # Mode full_sections (AMF) piloté par les signets TOC post-annexe
+                # Mode full_sections (AMF, Lois constitutionnelles) piloté par les signets TOC post-annexe
                 if ann_mode == "full_sections" and ann_toc_idx < len(annexe_toc_queue):
                     next_lvl, next_title, next_pg = annexe_toc_queue[ann_toc_idx]
                     if p_num >= next_pg and _is_any_bold(non_ws):
                         target_norm = _toc_cmp_norm(next_title)
                         matched_k = 0
                         cand_lines: list[LineRecord] = []
-                        for k in range(1, 5):
+                        cand_refs_acc: list[int] = []
+                        cand_parts: list[str] = []
+                        for k in range(1, ann_max_heading_lines + 1):
                             if idx_l + k - 1 >= len(page_lines):
                                 break
                             cand_ln = page_lines[idx_l + k - 1]
@@ -1444,11 +1782,24 @@ def parse_pdf(
                             if _match_band(cand_ln, p_num, running_footer, is_header=False, page_height=page_h):
                                 break
                             cand_lines.append(cand_ln)
-                            joined_cand = _toc_cmp_norm(" ".join(c.norm_text for c in cand_lines))
+                            c_txt, c_refs = _extract_clean_line_text(
+                                cand_ln,
+                                strip_note_refs=strip_sup_refs,
+                                collapse_smallcaps_ordinals=collapse_sc_ord,
+                            )
+                            cand_parts.append(c_txt)
+                            cand_refs_acc.extend(c_refs)
+                            joined_cand_txt = cand_parts[0]
+                            for cp in cand_parts[1:]:
+                                joined_cand_txt = _join_lines_dehyphenated(
+                                    joined_cand_txt, cp, preserve_hyphens, dehyphenate
+                                )
+                            joined_cand = _toc_cmp_norm(joined_cand_txt)
                             if joined_cand == target_norm:
                                 matched_k = k
                                 break
                         if matched_k > 0:
+                            _flush_tabular_row()
                             for cln in cand_lines:
                                 _bucket_line(bilan_obj, cln, "annexe")
                             skip_line_until = idx_l + matched_k - 1
@@ -1470,6 +1821,13 @@ def parse_pdf(
                                 )
                                 parent_p = paths.parent_path(ann_path)
                                 raw_art_slug = _annexe_section_slug(next_title, ann_l1_slug)
+                            if target_norm in ann_slug_map:
+                                raw_art_slug = ann_slug_map[target_norm]
+                            else:
+                                for pref, val in ann_slug_prefix_map:
+                                    if target_norm == pref or target_norm.startswith(pref + " "):
+                                        raw_art_slug = val
+                                        break
                             div_sort_order += 1
                             is_ann_rep = 1 if _DIV_REPEAL_RE.search(next_title.strip()) else 0
                             div = Division(
@@ -1498,6 +1856,7 @@ def parse_pdf(
                                 sort_key=DISPOSITION_SORT_BASE + disp_idx * 1_000_000,
                             )
                             articles.append(art)
+                            _add_note_refs(art, cand_refs_acc)
                             if is_ann_rep:
                                 ann_full_section_rep_arts.add(id(art))
                             current_article = art
@@ -1646,6 +2005,47 @@ def parse_pdf(
                     continue
 
                 if current_article is not None:
+                    ann_txt, ann_refs = _extract_clean_line_text(
+                        ln,
+                        strip_note_refs=strip_sup_refs,
+                        collapse_smallcaps_ordinals=collapse_sc_ord,
+                    )
+                    if ann_tabular_cols:
+                        _record_article_line(current_article, ln)
+                        _add_note_refs(current_article, ann_refs)
+                        _bucket_line(bilan_obj, ln, "annexe")
+                        last_opened_bucket = "annexe"
+                        if ann_tab_skip_re and ann_tab_skip_re.match(ann_txt):
+                            continue
+                        n_cols = len(ann_tabular_cols) + 1
+                        col_spans: list[list[SpanRecord]] = [[] for _ in range(n_cols)]
+                        for sp in ln.spans:
+                            c_idx = sum(1 for bx in ann_tabular_cols if sp.x0 >= bx)
+                            col_spans[c_idx].append(sp)
+                        cols_txt: list[str] = []
+                        for bucket_sp in col_spans:
+                            if not bucket_sp:
+                                cols_txt.append("")
+                                continue
+                            tmp_ln = LineRecord(page=ln.page, y0=ln.y0, y1=ln.y1, x0=bucket_sp[0].x0, x1=bucket_sp[-1].x1, spans=bucket_sp, text="", norm_text="")
+                            c_clean, _ = _extract_clean_line_text(
+                                tmp_ln,
+                                strip_note_refs=strip_sup_refs,
+                                collapse_smallcaps_ordinals=collapse_sc_ord,
+                            )
+                            cols_txt.append(c_clean)
+                        if re.match(r"^\d+\.$", cols_txt[0]):
+                            _flush_tabular_row()
+                            tabular_pending_row = cols_txt
+                        elif tabular_pending_row is not None:
+                            for ci, val in enumerate(cols_txt):
+                                if val:
+                                    tabular_pending_row[ci] = _join_lines_dehyphenated(
+                                        tabular_pending_row[ci], val, preserve_hyphens, dehyphenate
+                                    )
+                        elif ann_txt:
+                            current_article.text = f"{current_article.text}\n{ann_txt}"
+                        continue
                     hist_cont_sz = hist_cfg.get("continue_while_max_size_pt")
                     is_hist_cont = (
                         hist_cont_sz is not None
@@ -1667,7 +2067,7 @@ def parse_pdf(
                     if (
                         id(current_article) in ann_full_section_rep_arts
                         and first_sp.size > float(hist_cfg.get("max_size_pt", 9.5))
-                        and not repeal_re.match(ln.norm_text)
+                        and not repeal_re.match(ann_txt)
                     ):
                         current_article.repealed = 0
                         if current_div is not None and current_div.path == current_article.division_path:
@@ -1682,14 +2082,20 @@ def parse_pdf(
                             ann_mode == "full_sections"
                             and (
                                 _is_all_bold_non_italic(non_ws)
-                                or _SUBITEM_NUM_RE.match(ln.norm_text)
-                                or _SUBITEM_ALPHA_PAREN_RE.match(ln.norm_text)
-                                or _BULLET_RE.match(ln.norm_text)
+                                or _SUBITEM_NUM_RE.match(ann_txt)
+                                or _SUBITEM_ALPHA_PAREN_RE.match(ann_txt)
+                                or _BULLET_RE.match(ann_txt)
                                 or current_article.text.endswith((".", ":", ")"))
                             )
                         )
                     ) else " "
-                    current_article.text = f"{current_article.text}{sep}{ln.norm_text}"
+                    if sep == " ":
+                        current_article.text = _join_lines_dehyphenated(
+                            current_article.text, ann_txt, preserve_hyphens, dehyphenate
+                        )
+                    else:
+                        current_article.text = f"{current_article.text}\n{ann_txt}"
+                    _add_note_refs(current_article, ann_refs)
                     _record_article_line(current_article, ln)
                     _bucket_line(bilan_obj, ln, "annexe")
                     last_opened_bucket = "annexe"
@@ -1765,6 +2171,22 @@ def parse_pdf(
                 continue
 
             # Priorité C : Intitulé de division
+            cleaned_txt, line_refs = _extract_clean_line_text(
+                ln,
+                strip_note_refs=strip_sup_refs,
+                collapse_smallcaps_ordinals=collapse_sc_ord,
+            )
+            if not cleaned_txt and line_refs:
+                if pending_heading is not None:
+                    pending_div_refs.extend(line_refs)
+                elif last_opened_bucket == "marginal_note" and pending_marginal_note is not None:
+                    pending_mn_refs.extend(line_refs)
+                elif current_article is not None:
+                    _add_note_refs(current_article, line_refs)
+                elif current_div is not None:
+                    pending_div_refs.extend(line_refs)
+                _bucket_line(bilan_obj, ln, last_opened_bucket or "body_text")
+                continue
             h_x0_min = float(typo.get("heading_x0_min", 88.0))
             h_x0_max = float(typo.get("heading_x0_max", 96.0))
             h_wrap_x0_max = float(typo.get("heading_wrap_x0_max", h_x0_max))
@@ -1774,57 +2196,140 @@ def parse_pdf(
             p_x0_min = float(prov_cfg.get("x0_min", 85.0))
             p_x0_max = float(prov_cfg.get("x0_max", 96.0))
             p_min_sz = float(prov_cfg.get("min_size_pt", 10.5))
+            p_max_sz = prov_cfg.get("max_size_pt")
+            lead_font_cond = prov_cfg.get("lead_font_contains")
             num_mode = str(prov_cfg.get("number_mode", "numeric"))
             req_dot_num = bool(prov_cfg.get("require_dot_in_number", False))
+            allow_undelim_an = bool(prov_cfg.get("allow_undelimited_alphanum", False))
+            allow_empty_p = bool(prov_cfg.get("allow_empty_rest", False))
+            allow_prose_foll = bool(prov_cfg.get("allow_prose_following", False))
             wrap_dy = float(typo.get("heading_wrap_dy_max_pt", 17.0))
 
-            # Suite d'un pending_heading en cours (peut déborder sur x0 <= h_wrap_x0_max ou être BoldItalic pour ABROGÉE)
-            is_heading_wrap = (
-                pending_heading is not None
-                and pending_heading["page"] == p_num
-                and (ln.y0 - pending_heading["last_y0"]) <= wrap_dy
-                and h_x0_min <= x0 <= h_wrap_x0_max
-                and first_sp.size >= h_min_sz
-                and (_is_any_bold(non_ws) if div_re is not None else (_is_all_bold_non_italic(non_ws) if req_all_bold else True))
-                and match_provision_prefix(ln.norm_text, number_mode=num_mode, require_dot_in_number=req_dot_num) is None
-                and (div_re is None or not div_re.match(ln.norm_text))
-            )
-            if is_heading_wrap:
-                pending_heading["text"] = f"{pending_heading['text']} {ln.norm_text}"
-                pending_heading["last_y0"] = ln.y0
-                if div_re is None and typo.get("level1_all_caps", True):
-                    l3_max = typo.get("level3_max_size_pt")
-                    if l3_max is not None and first_sp.size <= float(l3_max):
-                        pending_heading["level"] = 3
-                    else:
-                        pending_heading["level"] = 1 if pending_heading["text"] == pending_heading["text"].upper() else 2
-                _bucket_line(bilan_obj, ln, "heading_or_division")
-                last_opened_bucket = "heading_or_division"
-                continue
+            if heading_rules:
+                matched_rule = (
+                    _match_heading_rule(non_ws, cleaned_txt)
+                    if h_x0_min <= x0 <= h_wrap_x0_max
+                    else None
+                )
+                can_wrap_rule = (
+                    pending_heading is not None
+                    and matched_rule is not None
+                    and pending_heading["page"] == p_num
+                    and (ln.y0 - pending_heading["last_y0"]) <= wrap_dy
+                    and match_provision_prefix(
+                        cleaned_txt,
+                        number_mode=num_mode,
+                        require_dot_in_number=req_dot_num,
+                        allow_undelimited_alphanum=allow_undelim_an,
+                        allow_empty_rest=allow_empty_p,
+                        allow_prose_following=allow_prose_foll,
+                    ) is None
+                    and (
+                        (matched_rule is pending_heading.get("rule") and not matched_rule.get("no_wrap_same_rule"))
+                        or (
+                            pending_heading.get("merge_next_level") is not None
+                            and int(matched_rule["level"]) == int(pending_heading["merge_next_level"])
+                        )
+                    )
+                )
+                if can_wrap_rule and matched_rule is not None and pending_heading is not None:
+                    pending_heading["text"] = _join_lines_dehyphenated(
+                        pending_heading["text"], cleaned_txt, preserve_hyphens, dehyphenate
+                    )
+                    pending_heading["last_y0"] = ln.y0
+                    if pending_heading.get("merge_next_level") is not None and int(matched_rule["level"]) == int(pending_heading["merge_next_level"]):
+                        pending_heading["rule"] = matched_rule
+                        pending_heading["merge_next_level"] = None
+                    pending_div_refs.extend(line_refs)
+                    _bucket_line(bilan_obj, ln, "heading_or_division")
+                    last_opened_bucket = "heading_or_division"
+                    continue
+                if matched_rule is not None and h_x0_min <= x0 <= h_x0_max:
+                    _flush_pending_heading()
+                    pending_heading = {
+                        "page": p_num,
+                        "last_y0": ln.y0,
+                        "text": cleaned_txt,
+                        "level": int(matched_rule["level"]),
+                        "rule": matched_rule,
+                        "merge_next_level": matched_rule.get("merge_next_level"),
+                    }
+                    pending_div_refs.extend(line_refs)
+                    _bucket_line(bilan_obj, ln, "heading_or_division")
+                    last_opened_bucket = "heading_or_division"
+                    continue
+            else:
+                # Suite d'un pending_heading en cours (peut déborder sur x0 <= h_wrap_x0_max ou être BoldItalic pour ABROGÉE)
+                is_heading_wrap = (
+                    pending_heading is not None
+                    and pending_heading["page"] == p_num
+                    and (ln.y0 - pending_heading["last_y0"]) <= wrap_dy
+                    and h_x0_min <= x0 <= h_wrap_x0_max
+                    and first_sp.size >= h_min_sz
+                    and (_is_any_bold(non_ws) if div_re is not None else (_is_all_bold_non_italic(non_ws) if req_all_bold else True))
+                    and match_provision_prefix(ln.norm_text, number_mode=num_mode, require_dot_in_number=req_dot_num) is None
+                    and (div_re is None or not div_re.match(ln.norm_text))
+                )
+                if is_heading_wrap:
+                    pending_heading["text"] = f"{pending_heading['text']} {ln.norm_text}"
+                    pending_heading["last_y0"] = ln.y0
+                    if div_re is None and typo.get("level1_all_caps", True):
+                        l3_max = typo.get("level3_max_size_pt")
+                        if l3_max is not None and first_sp.size <= float(l3_max):
+                            pending_heading["level"] = 3
+                        else:
+                            pending_heading["level"] = 1 if pending_heading["text"] == pending_heading["text"].upper() else 2
+                    _bucket_line(bilan_obj, ln, "heading_or_division")
+                    last_opened_bucket = "heading_or_division"
+                    continue
 
-            is_heading = (
-                h_x0_min <= x0 <= h_x0_max
-                and first_sp.size >= h_min_sz
-                and (_is_all_bold_non_italic(non_ws) if req_all_bold else True)
-                and (div_re is None or bool(div_re.match(ln.norm_text)))
-            )
-            if is_heading and excl_numbered and p_x0_min <= x0 <= p_x0_max and first_sp.size >= p_min_sz:
-                if match_provision_prefix(ln.norm_text, number_mode=num_mode, require_dot_in_number=req_dot_num) is not None:
-                    is_heading = False
-            if is_heading:
-                _flush_pending_heading()
-                lvl = _infer_heading_level(ln.norm_text, first_sp.size)
-                pending_heading = {
-                    "page": p_num,
-                    "last_y0": ln.y0,
-                    "text": ln.norm_text,
-                    "level": lvl,
-                }
-                _bucket_line(bilan_obj, ln, "heading_or_division")
-                last_opened_bucket = "heading_or_division"
-                continue
+                is_heading = (
+                    h_x0_min <= x0 <= h_x0_max
+                    and first_sp.size >= h_min_sz
+                    and (_is_all_bold_non_italic(non_ws) if req_all_bold else True)
+                    and (div_re is None or bool(div_re.match(ln.norm_text)))
+                )
+                if is_heading and excl_numbered and p_x0_min <= x0 <= p_x0_max and first_sp.size >= p_min_sz:
+                    if match_provision_prefix(ln.norm_text, number_mode=num_mode, require_dot_in_number=req_dot_num) is not None:
+                        is_heading = False
+                if is_heading:
+                    _flush_pending_heading()
+                    lvl = _infer_heading_level(ln.norm_text, first_sp.size)
+                    pending_heading = {
+                        "page": p_num,
+                        "last_y0": ln.y0,
+                        "text": ln.norm_text,
+                        "level": lvl,
+                    }
+                    _bucket_line(bilan_obj, ln, "heading_or_division")
+                    last_opened_bucket = "heading_or_division"
+                    continue
 
             _flush_pending_heading()
+
+            # Notes marginales en titre courant d'article (lois fédérales / art. 14 L.I.)
+            if mn_cfg:
+                mn_x0_min = float(mn_cfg.get("x0_min", 0.0))
+                mn_x0_max = float(mn_cfg.get("x0_max", 999.0))
+                mn_min_sz = float(mn_cfg.get("min_size_pt", 9.0))
+                mn_max_sz = float(mn_cfg.get("max_size_pt", 9.8))
+                mn_font_sub = str(mn_cfg.get("font_contains", "Bold"))
+                if (
+                    mn_x0_min <= x0 <= mn_x0_max
+                    and mn_min_sz <= first_sp.size <= mn_max_sz
+                    and mn_font_sub in first_sp.base_font
+                ):
+                    pending_marginal_note = (
+                        cleaned_txt
+                        if pending_marginal_note is None
+                        else _join_lines_dehyphenated(
+                            pending_marginal_note, cleaned_txt, preserve_hyphens, dehyphenate
+                        )
+                    )
+                    pending_mn_refs.extend(line_refs)
+                    _bucket_line(bilan_obj, ln, "marginal_note")
+                    last_opened_bucket = "marginal_note"
+                    continue
 
             # Priorité D : Disposition numérotée
             req_bold_lead = bool(prov_cfg.get("require_bold_lead", False))
@@ -1832,15 +2337,23 @@ def parse_pdf(
             if (
                 p_x0_min <= x0 <= p_x0_max
                 and first_sp.size >= p_min_sz
+                and (p_max_sz is None or first_sp.size <= float(p_max_sz))
                 and (not req_bold_lead or _is_bold_lead_non_italic(non_ws))
+                and (not lead_font_cond or str(lead_font_cond) in first_sp.base_font)
             ):
                 prov = match_provision_prefix(
-                    ln.norm_text,
+                    cleaned_txt,
                     number_mode=num_mode,
                     require_dot_in_number=req_dot_num,
+                    allow_undelimited_alphanum=allow_undelim_an,
+                    allow_empty_rest=allow_empty_p,
+                    allow_prose_following=allow_prose_foll,
                 )
                 if prov is not None:
                     num, body = prov
+                    if not body and line_refs:
+                        ref_txt = ", ".join(str(r) for r in line_refs)
+                        body = f"Note de fin de page ({ref_txt})" if lang == "fr" else f"End note ({ref_txt})"
                     _check_vectorize_id_limit(law.id, num)
                     is_rep = 1 if (body and repeal_re.match(body)) else 0
                     div_p = current_div.path if current_div else _ensure_pp0_division()
@@ -1848,11 +2361,16 @@ def parse_pdf(
                         law_id=law.id,
                         lang=lang,
                         number=num,
-                        text=body or ln.norm_text,
+                        text=body or cleaned_txt,
                         division_path=div_p,
                         repealed=is_rep,
+                        marginal_note=pending_marginal_note,
                     )
+                    pending_marginal_note = None
                     articles.append(art)
+                    _add_note_refs(art, pending_div_refs + pending_mn_refs + line_refs)
+                    pending_div_refs.clear()
+                    pending_mn_refs.clear()
                     current_article = art
                     last_opened_node = "article"
                     article_title_active = titled_mode and not is_rep and _is_bold_lead_non_italic(non_ws)
@@ -1884,7 +2402,7 @@ def parse_pdf(
                             law_id=law.id,
                             lang=lang,
                             number=art_num,
-                            text=ln.norm_text,
+                            text=cleaned_txt,
                             division_path=current_div.path,
                             sort_key=sk_val,
                         )
@@ -1896,21 +2414,26 @@ def parse_pdf(
                     else:
                         new_entry = _is_new_unnumbered_entry(
                             current_article.text,
-                            ln.norm_text,
+                            cleaned_txt,
                             p_num=p_num,
                             y0=ln.y0,
                             is_bold_topic=is_bold_topic,
                             last_prose_meta=last_prose_meta,
                         )
-                        sep = "\n" if new_entry else " "
-                        current_article.text = f"{current_article.text}{sep}{ln.norm_text}"
+                        if new_entry:
+                            current_article.text = f"{current_article.text}\n{cleaned_txt}"
+                        else:
+                            current_article.text = _join_lines_dehyphenated(
+                                current_article.text, cleaned_txt, preserve_hyphens, dehyphenate
+                            )
                         last_prose_meta = (p_num, ln.y0, is_bold_topic)
+                    _add_note_refs(current_article, line_refs)
                     _record_article_line(current_article, ln)
                     _bucket_line(bilan_obj, ln, "jurisprudence_list")
                     last_opened_bucket = "jurisprudence_list"
                     continue
 
-            # Priorité E2 : Préambule avant la 1re division (ex. encadré note-preliminaire AMF)
+            # Priorité E2 : Préambule avant la 1re division (ex. encadré note-preliminaire AMF, préambule 1867)
             if preamble_number and current_div is None and x0 >= h_x0_min:
                 if current_article is None:
                     _check_vectorize_id_limit(law.id, preamble_number)
@@ -1920,36 +2443,9 @@ def parse_pdf(
                         law_id=law.id,
                         lang=lang,
                         number=preamble_number,
-                        text=ln.norm_text,
+                        text=cleaned_txt,
                         division_path=div_p,
                         sort_key=0,
-                    )
-                    articles.append(art)
-                    current_article = art
-                    last_opened_node = "article"
-                    article_title_active = False
-                else:
-                    current_article.text = f"{current_article.text} {ln.norm_text}"
-                _record_article_line(current_article, ln)
-                _bucket_line(bilan_obj, ln, "body_text")
-                last_opened_bucket = "body_text"
-                continue
-
-            # Priorité E3 : Prose introductive de division avant le 1er article numéroté
-            if allow_div_intro and current_div is not None and x0 >= h_x0_min and (
-                current_article is None or current_article.number.startswith("intro-")
-            ):
-                if current_article is None:
-                    intro_slug = _make_bounded_slug(law.id, f"intro-{current_div.heading or div_sort_order}", used_slugs)
-                    _check_vectorize_id_limit(law.id, intro_slug)
-                    disp_idx += 1
-                    art = Article(
-                        law_id=law.id,
-                        lang=lang,
-                        number=intro_slug,
-                        text=ln.norm_text,
-                        division_path=current_div.path,
-                        sort_key=DISPOSITION_SORT_BASE + disp_idx * 1_000_000,
                     )
                     articles.append(art)
                     current_article = art
@@ -1962,19 +2458,71 @@ def parse_pdf(
                         if (last_body_pos is not None and last_body_pos[0] == p_num)
                         else None
                     )
-                    sep_intro = (
-                        "\n"
-                        if _is_subitem_or_new_para(
-                            ln.norm_text,
-                            x0,
-                            h_x0_min,
-                            current_article.text,
-                            dy_same_page=dy_same_page,
+                    is_para = dy_same_page is not None and dy_same_page >= 14.0
+                    if is_para:
+                        current_article.text = f"{current_article.text}\n{cleaned_txt}"
+                    else:
+                        current_article.text = _join_lines_dehyphenated(
+                            current_article.text, cleaned_txt, preserve_hyphens, dehyphenate
                         )
-                        else " "
-                    )
-                    current_article.text = f"{current_article.text}{sep_intro}{ln.norm_text}"
                     last_body_pos = (p_num, ln.y0)
+                _add_note_refs(current_article, line_refs)
+                _record_article_line(current_article, ln)
+                _bucket_line(bilan_obj, ln, "body_text")
+                last_opened_bucket = "body_text"
+                continue
+
+            # Priorité E3 : Prose introductive de division avant le 1er article numéroté
+            if allow_div_intro and current_div is not None and x0 >= h_x0_min and (
+                current_article is None
+                or current_article.number.startswith("intro-")
+                or (div_intro_pre_num and current_article.number == str(div_intro_pre_num))
+            ):
+                if current_article is None:
+                    if div_intro_pre_num and not articles:
+                        intro_slug = str(div_intro_pre_num)
+                        intro_sk = 0
+                    else:
+                        intro_slug = _make_bounded_slug(law.id, f"intro-{current_div.heading or div_sort_order}", used_slugs)
+                        disp_idx += 1
+                        intro_sk = DISPOSITION_SORT_BASE + disp_idx * 1_000_000
+                    _check_vectorize_id_limit(law.id, intro_slug)
+                    art = Article(
+                        law_id=law.id,
+                        lang=lang,
+                        number=intro_slug,
+                        text=cleaned_txt,
+                        division_path=current_div.path,
+                        sort_key=intro_sk,
+                    )
+                    articles.append(art)
+                    _add_note_refs(art, pending_div_refs + line_refs)
+                    pending_div_refs.clear()
+                    current_article = art
+                    last_opened_node = "article"
+                    article_title_active = False
+                    last_body_pos = (p_num, ln.y0)
+                else:
+                    dy_same_page = (
+                        (ln.y0 - last_body_pos[1])
+                        if (last_body_pos is not None and last_body_pos[0] == p_num)
+                        else None
+                    )
+                    is_para = _is_subitem_or_new_para(
+                        cleaned_txt,
+                        x0,
+                        h_x0_min,
+                        current_article.text,
+                        dy_same_page=dy_same_page,
+                    )
+                    if is_para:
+                        current_article.text = f"{current_article.text}\n{cleaned_txt}"
+                    else:
+                        current_article.text = _join_lines_dehyphenated(
+                            current_article.text, cleaned_txt, preserve_hyphens, dehyphenate
+                        )
+                    last_body_pos = (p_num, ln.y0)
+                _add_note_refs(current_article, line_refs)
                 _record_article_line(current_article, ln)
                 _bucket_line(bilan_obj, ln, "body_text")
                 last_opened_bucket = "body_text"
@@ -1986,15 +2534,16 @@ def parse_pdf(
                 pending_bare_provision
                 and current_article is not None
                 and x0 >= min(p_x0_min, sub_x0_min)
-                and repeal_re.match(ln.norm_text)
+                and repeal_re.match(cleaned_txt)
             ):
                 opening_raw = current_article.text
                 current_article.repealed = 1
-                current_article.text = ln.norm_text
+                current_article.text = cleaned_txt
                 pending_bare_provision = False
                 article_title_active = False
                 bare_repeal_promoted = (id(current_article), opening_raw)
                 last_body_pos = (p_num, ln.y0)
+                _add_note_refs(current_article, line_refs)
                 _record_article_line(current_article, ln)
                 _bucket_line(bilan_obj, ln, "repeal_marker")
                 last_opened_bucket = "repeal_marker"
@@ -2002,13 +2551,25 @@ def parse_pdf(
             allow_alpha_dot = bool(prov_cfg.get("allow_alpha_dot_subitems", False))
             if current_article is not None and x0 >= sub_x0_min:
                 pending_bare_provision = False
+                if pending_marginal_note:
+                    current_article.marginal_note = (
+                        f"{current_article.marginal_note} ; {pending_marginal_note}"
+                        if current_article.marginal_note
+                        else pending_marginal_note
+                    )
+                    pending_marginal_note = None
+                    _add_note_refs(current_article, pending_mn_refs)
+                    pending_mn_refs.clear()
                 if bare_repeal_promoted is not None and bare_repeal_promoted[0] == id(current_article):
                     current_article.repealed = 0
                     current_article.text = f"{bare_repeal_promoted[1]} {current_article.text}"
                     bare_repeal_promoted = None
                 if article_title_active and _is_all_bold_non_italic(non_ws):
-                    current_article.text = f"{current_article.text} {ln.norm_text}"
+                    current_article.text = _join_lines_dehyphenated(
+                        current_article.text, cleaned_txt, preserve_hyphens, dehyphenate
+                    )
                     last_body_pos = (p_num, ln.y0)
+                    _add_note_refs(current_article, line_refs)
                     _record_article_line(current_article, ln)
                     _bucket_line(bilan_obj, ln, "body_text")
                     last_opened_bucket = "body_text"
@@ -2016,11 +2577,11 @@ def parse_pdf(
                 new_para_from_title = article_title_active
                 article_title_active = False
                 is_sub = bool(
-                    _SUBITEM_NUM_RE.match(ln.norm_text)
-                    or _SUBITEM_ROMAN_RE.match(ln.norm_text)
-                    or _SUBITEM_ALPHA_PAREN_RE.match(ln.norm_text)
-                    or (allow_alpha_dot and _SUBITEM_ALPHA_DOT_RE.match(ln.norm_text))
-                    or _BULLET_RE.match(ln.norm_text)
+                    _SUBITEM_NUM_RE.match(cleaned_txt)
+                    or _SUBITEM_ROMAN_RE.match(cleaned_txt)
+                    or _SUBITEM_ALPHA_PAREN_RE.match(cleaned_txt)
+                    or (allow_alpha_dot and _SUBITEM_ALPHA_DOT_RE.match(cleaned_txt))
+                    or _BULLET_RE.match(cleaned_txt)
                 )
                 dy_same_page = (
                     (ln.y0 - last_body_pos[1])
@@ -2030,7 +2591,7 @@ def parse_pdf(
                 sep = (
                     "\n"
                     if _is_subitem_or_new_para(
-                        ln.norm_text,
+                        cleaned_txt,
                         x0,
                         sub_x0_min,
                         current_article.text,
@@ -2040,8 +2601,14 @@ def parse_pdf(
                     )
                     else " "
                 )
-                current_article.text = f"{current_article.text}{sep}{ln.norm_text}"
+                if sep == " ":
+                    current_article.text = _join_lines_dehyphenated(
+                        current_article.text, cleaned_txt, preserve_hyphens, dehyphenate
+                    )
+                else:
+                    current_article.text = f"{current_article.text}\n{cleaned_txt}"
                 last_body_pos = (p_num, ln.y0)
+                _add_note_refs(current_article, line_refs)
                 _record_article_line(current_article, ln)
                 bkt = "subitem" if is_sub else "body_text"
                 _bucket_line(bilan_obj, ln, bkt)
@@ -2052,6 +2619,15 @@ def parse_pdf(
             _bucket_line(bilan_obj, ln, "unclassified")
 
     _flush_pending_heading()
+    _flush_tabular_row()
+
+    if endnotes_map:
+        for a in articles:
+            refs = art_note_refs.get(id(a))
+            if refs:
+                notes_txt = "\n".join(f"({n}) {endnotes_map[n]}" for n in refs if n in endnotes_map)
+                if notes_txt:
+                    a.footnotes = f"{a.footnotes}\n{notes_txt}" if a.footnotes else notes_txt
 
     # --- Rattachement des liens par intersection de bbox ---
     for p_num, page_links in links_by_page.items():

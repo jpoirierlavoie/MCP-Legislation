@@ -2627,6 +2627,56 @@
         "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/51-102/2026-09-22/2026sept22-51-102-ig-vadmin-fr.pdf"
       },
       "domain": "financier"
+    },
+    {
+      "id": "ca-const-1867",
+      "source": "pdf",
+      "jurisdiction": "ca",
+      "name_fr": "Loi constitutionnelle de 1867",
+      "name_en": "Constitution Act, 1867",
+      "official_cite": "Loi constitutionnelle de 1867",
+      "official_cite_en": "Constitution Act, 1867",
+      "fonction": "loi",
+      "unit": "article",
+      "numbering": "alphanumeric",
+      "langs": [
+        "fr",
+        "en"
+      ],
+      "pdf": {
+        "fr": "CONST_TRD.pdf",
+        "en": "CONST_TRD.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://laws-lois.justice.gc.ca/PDF/CONST_TRD.pdf",
+        "en": "https://laws-lois.justice.gc.ca/PDF/CONST_TRD.pdf"
+      },
+      "domain": "core"
+    },
+    {
+      "id": "ca-const-1982",
+      "source": "pdf",
+      "jurisdiction": "ca",
+      "name_fr": "Loi constitutionnelle de 1982",
+      "name_en": "Constitution Act, 1982",
+      "official_cite": "Loi constitutionnelle de 1982",
+      "official_cite_en": "Constitution Act, 1982",
+      "fonction": "loi",
+      "unit": "article",
+      "numbering": "alphanumeric",
+      "langs": [
+        "fr",
+        "en"
+      ],
+      "pdf": {
+        "fr": "CONST_TRD.pdf",
+        "en": "CONST_TRD.pdf"
+      },
+      "consolidation_source": {
+        "fr": "https://laws-lois.justice.gc.ca/PDF/CONST_TRD.pdf",
+        "en": "https://laws-lois.justice.gc.ca/PDF/CONST_TRD.pdf"
+      },
+      "domain": "core"
     }
   ]
 }
