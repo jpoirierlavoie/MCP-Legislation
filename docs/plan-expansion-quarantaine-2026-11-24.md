@@ -51,7 +51,7 @@ Ce document consigne l'architecture de quarantaine par domaine arrêtée avec Ja
 - **Ingestion :** `pipeline/parser_pdf.py` via deux profils déclaratifs bornés par plages de pages sur les PDF consolidés officiels FR/EN de Justice Canada (évite la collision des numéros 1–61 entre 1867 et 1982, zéro parseur HTML neuf).
 - **Citations (`resolve_reference`) :** Reconnaissance des abréviations *Charte canadienne*, *Canadian Charter*, *L.C. 1982*, *L.C. 1867*, *Constitution Act, 1867/1982*.
 
-### Vague 2 — Lois sectorielles provinciales et fédérales (19 textes, `feat/wave2-sectoral-statutes`)
+### Vague 2 — Lois sectorielles provinciales et fédérales (19 textes — livré en prod, `df58a4a`)
 - **`core` :**
   - `c-11` — *Charte de la langue française*
   - `a-25` — *Loi sur l'assurance automobile* (immunité civile art. 83.57)
