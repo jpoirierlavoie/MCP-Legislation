@@ -39,6 +39,7 @@ import {
   VECTOR_TOP_K,
   WEIGHTS,
 } from "./relevance";
+import { PUBLIES } from "./schemas";
 import { PUBLIC_DESCRIPTION } from "./serveur";
 
 const CONTACT = "jason@poirierlavoie.ca";
@@ -91,11 +92,11 @@ const FONCTION: Record<string, [string, string]> = {
 const nb = (n: number) => n.toLocaleString("fr-CA").replace(/ /g, " ");
 
 const SECTIONS = [
-  { id: "outils", fr: "Les outils", en: "The tools" },
-  { id: "reperage", fr: "Les aides au repérage", en: "Retrieval aids" },
-  { id: "corpus", fr: "Le corpus", en: "The corpus" },
-  { id: "matieres", fr: "Les matières", en: "Subject areas" },
-  { id: "acces", fr: "Accès", en: "Access" },
+  { id: "corpus", fr: "Textes disponibles", en: "Available texts" },
+  { id: "matieres", fr: "Classés par matière", en: "Browse by subject" },
+  { id: "acces", fr: "Accès et installation", en: "Access & setup" },
+  { id: "outils", fr: "Les 10 outils", en: "The 10 tools" },
+  { id: "reperage", fr: "Fonctionnement et limites", en: "How search works & limits" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -197,11 +198,11 @@ export async function renderSite(db: D1Database, env: CorpusGateEnv = {}): Promi
   const consol = dates[dates.length - 1] ?? "—";
 
   const RENDU: Record<SectionId, () => string> = {
-    outils: () => outils(),
-    reperage: () => reperage(),
     corpus: () => corpus(laws, pdfOuvert(env)),
     matieres: () => matieres(subjects, parMatiere, parId),
     acces: () => acces(),
+    outils: () => outils(),
+    reperage: () => reperage(),
   };
 
   const corps = [
@@ -384,12 +385,12 @@ function entete(): string {
   </div>
   ${biP(
     [
-      "Serveur MCP en lecture seule donnant aux assistants IA l'accès verbatim au texte officiel des lois et règlements du Québec, des lois fédérales utilisées en litige civil et commercial québécois, des directives de pratique judiciaire (Cour supérieure, Cour du Québec) et des textes AMF.",
-      "Les dispositions sont chargées sans altération depuis les publications officielles de LégisQuébec, de Justice Canada et des PDF officiels des tribunaux et de l'AMF (certains publiés en français seulement).",
+      "Connecteur gratuit donnant à votre assistant IA (Claude, ChatGPT, Gemini, Antigravity) l'accès direct au texte officiel mot pour mot des lois et règlements du Québec, des lois fédérales utiles en litige civil et commercial, des directives de pratique des tribunaux (Cour supérieure, Cour du Québec) et des textes de l'AMF — au lieu de le laisser réciter des articles de mémoire.",
+      "Les dispositions sont chargées sans aucune modification depuis les publications officielles de LégisQuébec, de Justice Canada et des PDF officiels des tribunaux et de l'AMF (certains publiés en français seulement). Vos recherches ne sont jamais journalisées.",
     ],
     [
-      "Read-only MCP server giving AI assistants verbatim access to the official text of Québec statutes and regulations, federal statutes used in Québec civil and commercial litigation, court practice directives (Superior Court, Court of Québec), and AMF texts.",
-      "Provisions are loaded unaltered from official LégisQuébec publications, Justice Canada consolidations, and official court and AMF PDFs (some published in French only).",
+      "Free connector giving your AI assistant (Claude, ChatGPT, Gemini, Antigravity) direct, word-for-word access to official consolidated Québec statutes and regulations, key federal civil-litigation statutes, court practice directives (Superior Court, Court of Québec), and AMF texts — instead of letting it cite articles from memory.",
+      "Provisions are loaded unaltered from official LégisQuébec publications, Justice Canada consolidations, and official court and AMF PDFs (some published in French only). Your searches are never logged.",
     ],
   )}
   <p class="btns">
@@ -434,12 +435,22 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
   ${h2("corpus")}
   ${biP(
     [
-      "Les lois et règlements sont chargés en français et en anglais avec leur hiérarchie complète et leur date de consolidation ; les PDF de directives judiciaires et de l'AMF figurent en français seulement lorsqu'aucune version anglaise officielle n'est publiée. Les décomptes affichés sont lus directement dans la base en ligne, et chaque titre renvoie à la source officielle (LégisQuébec, Justice Canada, tribunaux du Québec ou AMF).",
+      "Les lois et règlements sont chargés en français et en anglais avec leur table des matières complète et leur date de mise à jour ; les directives judiciaires et textes de l'AMF en PDF figurent en français seulement lorsqu'aucune version anglaise officielle n'est publiée. Chaque titre renvoie directement à la publication officielle (LégisQuébec, Justice Canada, tribunaux du Québec ou AMF).",
     ],
     [
-      "Statutes and regulations are loaded in French and English with their full hierarchy and consolidation date; court directive and AMF PDFs appear in French only where no official English PDF is published. Counts shown on this page are read directly from the live database, and each title links to the official source (LégisQuébec, Justice Canada, Québec courts, or AMF).",
+      "Statutes and regulations are loaded in French and English with their full structure and consolidation date; court directive and AMF PDFs appear in French only where no official English PDF is published. Each title links directly to its official source (LégisQuébec, Justice Canada, Québec courts, or AMF).",
     ],
   )}
+  <div class="avert">
+  ${biP(
+    [
+      "Ce qui n'est pas inclus (important) : seuls les textes actuellement en vigueur sont servis. Il n'y a aucune version historique ni aucun ancien article abrogé antérieur à la consolidation courante. En particulier, l'ancien Code de procédure civile (RLRQ, c. C-25, en vigueur avant le 1er janvier 2016) est volontairement exclu — si une référence à l'ancien Code est demandée, l'outil la refuse explicitement plutôt que de renvoyer par erreur à un article renuméroté du Code actuel (c. C-25.01). Sont également exclus le Code criminel, la Loi de l'impôt sur le revenu et les lois constitutionnelles.",
+    ],
+    [
+      "What is not included (important): only currently in-force consolidated texts are served — no historical point-in-time versions. In particular, the former Code of Civil Procedure (CQLR, c. C-25, replaced January 1, 2016) is intentionally excluded; citations to the old Code are explicitly declined rather than silently mapped to renumbered articles of the current Code (c. C-25.01). The Criminal Code, Income Tax Act, and constitutional statutes are also excluded.",
+    ],
+  )}
+  </div>
   <search class="ctl">
     <label class="sr" for="q">${bi("Filtrer les textes législatifs", "Filter legislative texts")}</label>
     <input id="q" type="search" placeholder="Filtrer / Filter">
@@ -521,28 +532,33 @@ function outils(): string {
   const bloc = (g: string) =>
     Object.entries(catalogue.tools)
       .filter(([, t]) => t.groupe === g)
-      .map(
-        ([nom, t]) => `<article>
+      .map(([nom, t]) => {
+        const invite = PUBLIES[nom as keyof typeof PUBLIES].description;
+        return `<article>
       <h4><code>${esc(nom)}</code></h4>
       <p class="titre">${bi(t.title_fr, t.title_en)}</p>
       ${biP(t.page_fr, t.page_en)}
-    </article>`,
-      )
+      <details>
+        <summary>${bi("Instruction exacte transmise à l'assistant IA", "Exact prompt sent to the AI assistant")}</summary>
+        <p class="m">${bi("Texte exact reçu par le modèle :", "Exact prompt string received by the model:")} <code>${esc(invite)}</code></p>
+      </details>
+    </article>`;
+      })
       .join("\n");
 
   return `<section id="outils">
   ${h2("outils")}
   ${biP(
     [
-      "Le patron d'usage est en deux temps : s'orienter, puis extraire. Les premiers outils servent à trouver où regarder ; les suivants rendent le texte officiel. Tous sont en lecture seule — aucun n'écrit quoi que ce soit.",
+      "Vous n'avez jamais à appeler ces fonctions vous-même : votre assistant IA les utilise automatiquement en arrière-plan pour repérer la bonne loi, puis en lire le texte officiel mot pour mot. Aucun outil ne modifie quoi que ce soit.",
     ],
     [
-      "The usage pattern has two beats: orient yourself, then extract. The first tools find where to look; the rest return the official text. All are read-only — none writes anything.",
+      "You never need to invoke these functions manually: your AI assistant calls them automatically behind the scenes to locate the right statute and read its exact official text. All are strictly read-only.",
     ],
   )}
-  <h3>${bi("S'orienter", "Orient")}</h3>
+  <h3>${bi("1. Repérer la bonne loi", "1. Locate the right statute")}</h3>
   ${bloc("orientation")}
-  <h3>${bi("Extraire", "Extract")}</h3>
+  <h3>${bi("2. Lire le texte officiel", "2. Read the official text")}</h3>
   ${bloc("extraction")}
 </section>`;
 }
@@ -575,12 +591,15 @@ function reperage(): string {
   return `<section id="reperage">
   ${h2("reperage")}
   ${biP(r.intro_fr, r.intro_en)}
-  ${sec(r.signaux)}
-  <p class="m">${bi("Paramètres actuels du classement (lus directement dans le code du serveur) :", "Current ranking parameters (read directly from server code):")}</p>
-  ${cal}
-  ${sec(r.echelle)}
-  ${sec(r.hybride)}
   ${limites()}
+  <details>
+    <summary>${bi("Détails techniques du moteur de classement et paramètres de calibration", "Technical ranking engine details & calibration parameters")}</summary>
+    ${sec(r.signaux)}
+    <p class="m">${bi("Paramètres actuels du classement (lus directement dans le code du serveur) :", "Current ranking parameters (read directly from server code):")}</p>
+    ${cal}
+    ${sec(r.echelle)}
+    ${sec(r.hybride)}
+  </details>
 </section>`;
 }
 
@@ -597,16 +616,33 @@ function acces(): string {
   ${h2("acces")}
   ${biP(
     [
-      `Ce serveur est réservé aux membres actifs en règle du Barreau du Québec. La connexion courante s'effectue par autorisation navigateur OAuth 2.1 via https://acces.poirierlavoie.ca (https://legislation.poirierlavoie.ca/mcp/oauth), sans clé à copier. Un accès direct par jeton individuel (https://legislation.poirierlavoie.ca/mcp, qui retourne 404 sans corps à tout appel non authentifié) demeure disponible pour les outils en ligne de commande et scripts automatisés. Demandes d'accès et gestion des jetons ou de la recherche sémantique : https://acces.poirierlavoie.ca/demande et https://acces.poirierlavoie.ca/moi (ou par courriel à ${CONTACT}).`,
-      "Le texte des recherches et les arguments d'outils ne sont jamais journalisés. Une fiche publique de découverte MCP sans secret est publiée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut aussi les manifestes autonomes pour Google Antigravity et Gemini CLI.",
-      "Le code source est libre et gratuit sous licence Apache-2.0 (voir LICENSE) ; le fichier NOTICE reconnaît les sources officielles sans revendication de droit d'auteur sur les textes servis (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ et AMF). Les scripts d'ingestion, la taxonomie et la configuration sont tous versionnés.",
+      "Accès gratuit réservé aux membres actifs en règle du Barreau du Québec.",
+      `1. Demandez votre accès une seule fois sur https://acces.poirierlavoie.ca/demande (avec votre numéro du Barreau et votre clé API CanLII).`,
+      "2. Installez le greffon droit-civil-quebecois dans Claude, ChatGPT, Gemini ou Antigravity — ou ajoutez directement l'adresse https://legislation.poirierlavoie.ca/mcp/oauth dans les réglages de connecteurs — puis autorisez l'accès dans votre navigateur en un clic (aucun secret à copier).",
+      `Vos recherches ne sont jamais enregistrées. Vous pouvez gérer votre compte ou désactiver la recherche par sens assistée par IA (pour chercher uniquement par mots exacts) à tout moment sur https://acces.poirierlavoie.ca/moi (contact : ${CONTACT}).`,
     ],
     [
-      `This server is reserved for active members in good standing of the Barreau du Québec. Standard access uses browser-based OAuth 2.1 authorization through https://acces.poirierlavoie.ca (https://legislation.poirierlavoie.ca/mcp/oauth), with no key to copy. Direct per-holder token access (https://legislation.poirierlavoie.ca/mcp, which returns an empty 404 to unauthenticated requests) remains available for command-line tools and automated scripts. Access requests and management of tokens or semantic search preferences are handled at https://acces.poirierlavoie.ca/demande and https://acces.poirierlavoie.ca/moi (or by writing to ${CONTACT}).`,
-      "Search query text and tool arguments are never logged. A public, secret-free MCP Server Card is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository also includes standalone manifests for Google Antigravity and Gemini CLI.",
-      "The source code is free and open-source under Apache-2.0 (see LICENSE); the NOTICE file credits official publishers without claiming copyright over served texts (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ, and AMF). The ingestion scripts, taxonomy, and configuration data are all version-controlled.",
+      "Free access reserved for active members in good standing of the Barreau du Québec.",
+      "1. Apply once at https://acces.poirierlavoie.ca/demande (with your Barreau number and personal CanLII API key).",
+      "2. Install the droit-civil-quebecois plugin in Claude, ChatGPT, Gemini, or Antigravity — or add https://legislation.poirierlavoie.ca/mcp/oauth directly in connector settings — then click Connect and sign in through your browser (no secret keys to copy).",
+      `Your searches are never logged. Manage your account or toggle AI meaning-based search (to search exact words only) anytime at https://acces.poirierlavoie.ca/moi (contact: ${CONTACT}).`,
     ],
   )}
+  <details>
+    <summary>${bi("Détails techniques (scripts, ligne de commande et découverte MCP)", "Technical details (scripts, CLI & MCP discovery)")}</summary>
+    ${biP(
+      [
+        "Connexion OAuth 2.1 par navigateur : https://legislation.poirierlavoie.ca/mcp/oauth. Un accès direct par jeton individuel (https://legislation.poirierlavoie.ca/mcp, qui retourne 404 sans corps à tout appel non authentifié) demeure disponible pour les scripts, la ligne de commande et l'API Gemini Deep Research.",
+        "Une fiche publique de découverte MCP sans secret est publiée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut aussi les manifestes autonomes pour Google Antigravity et Gemini CLI.",
+        "Le code source est libre et gratuit sous licence Apache-2.0 (voir LICENSE) ; le fichier NOTICE reconnaît les sources officielles sans revendication de droit d'auteur sur les textes servis (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ et AMF).",
+      ],
+      [
+        "Browser OAuth 2.1 endpoint: https://legislation.poirierlavoie.ca/mcp/oauth. Direct per-holder token access (https://legislation.poirierlavoie.ca/mcp, returning an empty 404 to unauthenticated calls) remains available for scripts, CLI tools, and Gemini API Deep Research.",
+        "A public, secret-free MCP Server Card is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository also includes standalone manifests for Google Antigravity and Gemini CLI.",
+        "The source code is free and open-source under Apache-2.0 (see LICENSE); the NOTICE file credits official publishers without claiming copyright over served texts (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ, and AMF).",
+      ],
+    )}
+  </details>
   <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">${bi("Demande d'accès (/demande)", "Apply for access (/demande)")}</a> · <a href="https://acces.poirierlavoie.ca/moi" rel="noopener">/moi</a> · <a href="https://jurisprudence.poirierlavoie.ca/" rel="noopener">${bi("Jurisprudence", "Case Law")}</a> · <a href="https://outils.poirierlavoie.ca/" rel="noopener">${bi("Outils (public)", "Tools (public)")}</a> · <a href="${DEPOT_PLUGIN}" rel="noopener">droit-civil-quebecois</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
 </section>`;
 }
@@ -647,7 +683,7 @@ body{margin:0;background:var(--bg);color:var(--f);font-family:system-ui,-apple-s
 .wrap{max-width:${LARGE};margin:0 auto;padding:2rem 1.25rem 4rem;display:grid;gap:1rem}
 main{min-width:0;max-width:60rem;width:100%;justify-self:center}
 section[id]{scroll-margin-top:1.5rem}
-#corpus,#matieres{content-visibility:auto;contain-intrinsic-size:auto 40rem}
+#matieres,#outils,#reperage{content-visibility:auto;contain-intrinsic-size:auto 40rem}
 h1{font-size:clamp(1.45rem,1.2rem + 1vw,1.85rem);line-height:1.25;letter-spacing:-.02em;margin:0;text-wrap:balance}
 h2{font-size:1.28rem;line-height:1.3;letter-spacing:-.015em;margin:2.75rem 0 .8rem;padding-bottom:.4rem;border-bottom:1px solid var(--b);text-wrap:balance}
 h3{font-size:1.08rem;line-height:1.35;letter-spacing:-.01em;margin:1.75rem 0 .45rem;text-wrap:balance}

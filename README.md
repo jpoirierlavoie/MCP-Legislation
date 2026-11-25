@@ -46,10 +46,9 @@ Le code source et les scripts d'ingestion sont publiés gratuitement sous licenc
 | Directives judiciaires | Directives de pratique de la Cour supérieure (Montréal — District et Division — et Québec) et de la Cour du Québec (règles simplifiées, pratique civile et administrative à Montréal, liste commune DAA) — source PDF, non législatives, français seulement |
 | Orientations (AMF) | *Instructions générales* 31-103, 45-106 et 51-102 de l'Autorité des marchés financiers — source PDF, indicatives et sans force de loi, français seulement |
 
-Les décomptes exacts (nombre d'articles par langue, dates de consolidation) sont calculés
+Les décomptes exacts (dates de consolidation, répartition) sont calculés
 en base et affichés sur la [page publique](https://legislation.poirierlavoie.ca/) ainsi que
-par l'outil `list_laws` — ils ne sont pas recopiés ici (R10). Rafraîchissement
-semestriel.
+par l'outil `list_laws`. Rafraîchissement semestriel.
 
 **Ce que le corpus NE couvre PAS, et qu'il vaut mieux savoir avant d'en avoir besoin.**
 Le corpus sert le **droit en vigueur**, dans sa version consolidée courante — il n'y a ni
@@ -59,9 +58,9 @@ actuel (c. C-25.01), **n'y figure pas** : c'est une décision de portée, pas un
 Comme la recodification a **renuméroté** le code, l'article N de l'ancien n'est pas
 l'article N du nouveau — aussi `resolve_reference` refuse-t-il NOMMÉMENT une
 citation de l'ancien code (« ancien C.p.c. », « c. C-25 », « C.p.c. de 1965 ») plutôt que de
-la rabattre en silence sur son successeur. Côté fédéral, la portée exclut également le Code
-criminel, la Loi de l'impôt sur le revenu et les lois constitutionnelles (voir l'invariant 17
-de [CLAUDE.md](CLAUDE.md)).
+la rabattre en silence sur son successeur. Côté fédéral, la portée couvre 16 lois et 2 règlements
+pertinents au litige civil québécois et exclut le Code criminel, la Loi de l'impôt sur le revenu
+et les lois constitutionnelles.
 
 ## Les 10 outils
 
@@ -89,34 +88,20 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 
 ## La recherche, en détail
 
-`search_text` combine deux moteurs et **dit toujours quel chemin a produit les
-résultats** :
+`search_text` combine deux approches et **dit toujours comment il a trouvé chaque résultat** :
 
-1. **Lexical** (FTS5, insensible aux accents) — correspondance exacte d'abord ; si une
-   recherche restreinte à une loi ne donne rien, elle est automatiquement **élargie au
-   corpus** ; sinon l'échelle de **relaxation** s'applique (retrait d'un terme à la fois,
-   puis OU pondéré bm25), chaque étape étiquetée : *« résultats approchés (terme ignoré :
-   « hors ») »*. Un barreau n'arrête la descente que s'il rend **assez** de résultats : une
-   liste d'un seul article laisse l'échelle continuer, car le moteur lexical ne connaît
-   aucune famille de mots en français — une question posée avec *« garantie »* n'atteint pas
-   d'elle-même un texte qui dit *« garantir »*.
-2. **Sémantique** (embeddings multilingues) — fusionné au lexical par RRF ; il fait le
-   pont de vocabulaire (*« congédiement »* trouve *« délai de congé »*) et de langue
-   (une requête en anglais trouve le texte français). Les résultats issus du seul chemin
-   sémantique sont marqués *« (repérage sémantique) »*. Chaque titulaire peut désactiver
-   ce volet (`hybride_permis = 0` sur <https://acces.poirierlavoie.ca/moi>) : `search_text`
-   s'exécute alors en mode lexical FTS5 seul (sans appel à `Workers AI` ni à `Vectorize`,
-   comptabilisé en classe `local`) et le mentionne dans la réponse.
+1. **Recherche par mots exacts (FTS5, insensible aux accents)** — correspondance exacte d'abord ; si une
+   recherche restreinte à une loi ne donne rien, elle est automatiquement **élargie à l'ensemble du
+   corpus** ; sinon l'échelle de **relaxation** s'applique progressivement (retrait d'un terme à la fois,
+   puis recherche pondérée `bm25` sur un seul terme), chaque étape étant clairement étiquetée
+   (*« résultats approchés (terme ignoré : « hors ») »*). La recherche continue tant qu'un palier ne rend
+   pas assez de résultats (car le moteur lexical ne relie pas automatiquement « garantie » à « garantir »).
+2. **Recherche par sens (index vectoriel multilingue)** — fusionnée à la recherche lexicale par classement réciproque (RRF) ; elle relie les synonymes (*« congédiement »* trouve *« délai de congé »*) et traverse la barrière linguistique (une requête en anglais trouve le texte français). Les résultats issus du seul chemin sémantique sont marqués *« (repérage sémantique) »*. Chaque titulaire peut désactiver l'option d'IA sémantique dans son compte (<https://acces.poirierlavoie.ca/moi>) pour s'en tenir aux mots exacts sur la base locale (`hybride_permis = 0`).
 
-Chaque résultat est auto-explicatif : `C.p.c. — Livre V, Titre IV : LES DEMANDES
+Chaque résultat affiche son fil d'Ariane complet : `C.p.c. — Livre V, Titre IV : LES DEMANDES
 INTÉRESSANT LE DROIT INTERNATIONAL PRIVÉ › art. 490 [ga:l_v-gb:l_iv-gc:l_i]` + extrait.
 
-Trois décomptes accompagnent la réponse, et ils ne disent pas la même chose : `total` compte
-les appariements **lexicaux** dans le corpus entier, `returned` la taille de la page rendue,
-et `sources` départage ce qui vient du lexical de ce qui vient du sémantique. Un `total` de 1
-avec cinq résultats n'est donc pas une incohérence : c'est un appariement lexical et quatre
-voisins de sens.
-Les recherches corpus sont regroupées par loi (max 6 par loi).
+Trois compteurs accompagnent la réponse : `total` compte les correspondances **par mots exacts** dans tout le corpus, `returned` la taille de la page affichée, et `sources` départage les résultats lexicaux des résultats par sens. Un `total` de 1 avec cinq résultats signifie donc un résultat par mots exacts et quatre résultats voisins par le sens. Les résultats corpus sont regroupés par loi (max 6 par loi).
 
 ## Avertissement
 
@@ -170,7 +155,7 @@ relais sans validation via la porte d'évaluation (`npm run eval:gate`).
 descriptions, schéma, ce README et la [page publique](https://legislation.poirierlavoie.ca/)
 (`catalogue.json`) — et inclure les mises à jour requises dans le même commit. C'est une
 condition de fin de tâche, pas une recommandation : voir l'obligation préalable en tête de
-[CLAUDE.md](CLAUDE.md) et la règle R10. Garde en CI : **`npm test`** — la suite vitest à deux
+[CLAUDE.md](CLAUDE.md). Garde en CI : **`npm test`** — la suite vitest à deux
 projets, qui porte notamment la parité outils ↔ documentation (`tests/catalogue.test.mjs`) et
 le comportement du JS de la page sans navigateur (`tests/page-client.test.mjs`). C'est bien
 cette commande unique que lance `.github/workflows/ci.yml`.
