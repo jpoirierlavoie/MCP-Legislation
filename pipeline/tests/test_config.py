@@ -60,6 +60,12 @@ ORDRE_ATTENDU = [
     "amf-ig-31-103", "amf-ig-45-106", "amf-ig-51-102",
     # --- VAGUE 1 CONSTITUTION : PDF bilingues Justice Canada, ajoutées EN FIN ---
     "ca-const-1867", "ca-const-1982",
+    # --- VAGUE 2 : lois sectorielles provinciales et fédérales, ajoutées EN FIN ---
+    "c-11", "a-25", "c-37", "c-81", "n-3",
+    "ca-dors-2002-156", "ca-c-7.75",
+    "t-15.1", "t-15.1-r.1.1", "c-27", "a-3.001", "s-2.1",
+    "c-47.1", "a-19.1", "q-2", "p-41.1",
+    "ca-p-4", "ca-i-9", "s-29.02",
 ]
 
 

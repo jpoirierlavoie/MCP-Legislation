@@ -439,6 +439,9 @@ def harvest_renvois(htmls) -> dict[str, int]:
     return dict(counts)
 
 
+_PURE_REPEAL_STUB_RE = re.compile(r"^\((?:Abrog[ée]|Repealed)\)\.?$")
+
+
 def parse_epub(epub_path: str | Path, law: Law, lang: str) -> tuple[list[Division], list[Article]]:
     """Parse un EPUB LégisQuébec et retourne (divisions, articles) normalisés.
 
@@ -544,5 +547,21 @@ def parse_epub(epub_path: str | Path, law: Law, lang: str) -> tuple[list[Divisio
                 add_special(_parse_preliminary(soup, cfg["preliminary"]))
             for sc in soup.find_all(id=re.compile(r"^sc-nb:\d+$")):
                 add_special(_parse_sc_block_el(sc, cfg))
+
+    # Dédoublonnage fail-closed d'un fantôme abrogé laissé en doublon dans l'EPUB source
+    # (ex. Q-2 EN art. 114.2) : retiré uniquement s'il partage le même numéro qu'un article
+    # actif unique et ne porte qu'une mention nue « (Abrogé). » / « (Repealed). ».
+    ordinary_by_num: dict[str, list[Article]] = {}
+    for art in articles:
+        if art.sort_key is None:
+            ordinary_by_num.setdefault(art.number, []).append(art)
+    stale_ghosts: set[int] = set()
+    for group in ordinary_by_num.values():
+        if len(group) == 2 and {a.repealed for a in group} == {0, 1}:
+            stub = next(a for a in group if a.repealed == 1)
+            if _PURE_REPEAL_STUB_RE.fullmatch(stub.text.strip()):
+                stale_ghosts.add(id(stub))
+    if stale_ghosts:
+        articles = [a for a in articles if id(a) not in stale_ghosts]
 
     return divisions, articles

@@ -36,8 +36,7 @@ LIMS_NS = "http://justice.gc.ca/lims"
 RAPPORT = config.REPO_ROOT / "docs" / "reconnaissance-lims-courante.md"
 ATTENDUS_DIR = config.REPO_ROOT / "pipeline" / "expected"
 
-# Les 18 textes du corpus arrêté (SPEC §9). L'ORDRE suit celui du SPEC : c'est lui qui
-# deviendra l'ordre d'ajout EN FIN de laws.config.json (invariant 1).
+# Les 22 textes XML du corpus arrêté (SPEC §9 + Vague 2). L'ORDRE suit celui de laws.config.json (invariant 1).
 CORPUS: list[tuple[str, str, str, str]] = [
     # (id, chapitre, chemin FR, chemin EN)
     ("ca-b-3", "B-3", "fra/lois/B-3.xml", "eng/acts/B-3.xml"),
@@ -60,6 +59,11 @@ CORPUS: list[tuple[str, str, str, str]] = [
      "fra/reglements/DORS-98-106.xml", "eng/regulations/SOR-98-106.xml"),
     ("ca-crc-368", "C.R.C., ch. 368",
      "fra/reglements/C.R.C.,_ch._368.xml", "eng/regulations/C.R.C.,_c._368.xml"),
+    ("ca-dors-2002-156", "DORS/2002-156",
+     "fra/reglements/DORS-2002-156.xml", "eng/regulations/SOR-2002-156.xml"),
+    ("ca-c-7.75", "C-7.75", "fra/lois/C-7.75.xml", "eng/acts/C-7.75.xml"),
+    ("ca-p-4", "P-4", "fra/lois/P-4.xml", "eng/acts/P-4.xml"),
+    ("ca-i-9", "I-9", "fra/lois/I-9.xml", "eng/acts/I-9.xml"),
 ]
 
 # Témoin de REFUS : édictée et NON EN VIGUEUR (SPEC §3.7). Recensée pour que la phase 1
