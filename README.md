@@ -1,6 +1,6 @@
 # Lois du Québec et du Canada — serveur MCP
 
-Serveur [MCP](https://modelcontextprotocol.io) public en **lecture seule** donnant aux assistants IA un accès verbatim au texte officiel de **110 lois, règlements et directives** : la législation du Québec (dont le Code civil du Québec et le Code de procédure civile), les lois fédérales utilisées en litige civil québécois — faillite, divorce, sociétés par actions, droit d'auteur, preuve, Cours fédérales — ainsi que les directives de pratique des tribunaux du Québec (Cour supérieure, Cour du Québec) et des textes de l'Autorité des marchés financiers (AMF). En **français et en anglais** (les directives et textes PDF sont en français seulement lorsqu'aucune version anglaise officielle n'existe), avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres → dispositions ou paragraphes) et recherche plein texte.
+Serveur [MCP](https://modelcontextprotocol.io) public en **lecture seule** donnant aux assistants IA un accès verbatim au texte officiel de **112 lois, règlements et directives** : la législation du Québec (dont le Code civil du Québec et le Code de procédure civile), les lois fédérales utilisées en litige civil québécois — Lois constitutionnelles de 1867 et de 1982 (dont la Charte canadienne des droits et libertés), faillite, divorce, sociétés par actions, droit d'auteur, preuve, Cours fédérales — ainsi que les directives de pratique des tribunaux du Québec (Cour supérieure, Cour du Québec) et des textes de l'Autorité des marchés financiers (AMF). En **français et en anglais** (les directives et textes PDF sont en français seulement lorsqu'aucune version anglaise officielle n'existe), avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres → dispositions ou paragraphes) et recherche plein texte.
 
 > **In English:** Read-only public-interest MCP server providing AI assistants with verbatim access to Québec statutes and regulations, federal statutes relevant to Québec civil litigation, Québec court practice directives, and AMF securities texts (French and English where officially published). Part of [`droit-civil-quebecois`](https://github.com/jpoirierlavoie/droit-civil-quebecois), reserved for active members in good standing of the Barreau du Québec via [`acces.poirierlavoie.ca`](https://acces.poirierlavoie.ca). Query text is never logged.
 
@@ -58,9 +58,9 @@ actuel (c. C-25.01), **n'y figure pas** : c'est une décision de portée, pas un
 Comme la recodification a **renuméroté** le code, l'article N de l'ancien n'est pas
 l'article N du nouveau — aussi `resolve_reference` refuse-t-il NOMMÉMENT une
 citation de l'ancien code (« ancien C.p.c. », « c. C-25 », « C.p.c. de 1965 ») plutôt que de
-la rabattre en silence sur son successeur. Côté fédéral, la portée couvre 16 lois et 2 règlements
-pertinents au litige civil québécois et exclut le Code criminel, la Loi de l'impôt sur le revenu
-et les lois constitutionnelles.
+la rabattre en silence sur son successeur. Côté fédéral, la portée couvre 18 lois et 2 règlements
+pertinents au litige civil québécois — dont les Lois constitutionnelles de 1867 et de 1982 —
+et exclut le Code criminel et la Loi de l'impôt sur le revenu.
 
 ## Les 10 outils
 
@@ -72,7 +72,7 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 |---|---|---|
 | `find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats (`core` par défaut ; `domains`, `jurisdiction`, `forum` + radar `other_domains`), avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
 | `list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, domaine, loi habilitante, plan des grands codes ; filtres `domains`/`jurisdiction`/`fonction`/`forum`/`subject` (`core` par défaut ; `domains=["all"]` pour les 8 domaines) | `fonction=tarif, domains=["all"]` → les 4 tarifs |
-| `list_subjects` | Les 44 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
+| `list_subjects` | Les 45 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
 | `related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées (`preseance-sur`, `interprete`…) | `law=cpc` → ses 6 règlements de cour |
 
 ### Extraction

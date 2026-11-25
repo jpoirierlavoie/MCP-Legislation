@@ -677,18 +677,22 @@ class TestDiffEtApply(TestCase):
         ),
         "PDF vague 1 absents de pipeline/samples/",
     )
-    def test_acquire_all_tous_les_13_pdf_reels(self):
+    def test_acquire_all_tous_les_15_pdf_reels(self):
         from pipeline import ingest as I
         from pipeline import refresh as R
 
-        pdf_ids = [cfg["id"] for cfg in config.load_all_laws() if cfg.get("source") == "pdf"]
-        self.assertEqual(len(pdf_ids), 13)
+        cfgs = [cfg for cfg in config.load_all_laws() if cfg.get("source") == "pdf"]
+        by_id = {cfg["id"]: cfg for cfg in cfgs}
+        pdf_ids = [cfg["id"] for cfg in cfgs]
+        self.assertEqual(len(pdf_ids), 15)
         with tempfile.TemporaryDirectory() as tmp_out:
             with mock.patch.object(I, "OUT_DIR", Path(tmp_out)):
                 for lid in pdf_ids:
                     combos, _sha, warnings = R.acquire_all(law_ids=[lid])
-                    self.assertEqual(len(combos), 1, lid)
-                    self.assertTrue(combos[0].report.ok, f"{lid}: {combos[0].report.lines}")
+                    expected_langs = by_id[lid].get("langs") or ["fr"]
+                    self.assertEqual(len(combos), len(expected_langs), lid)
+                    for combo in combos:
+                        self.assertTrue(combo.report.ok, f"{lid}/{combo.lang}: {combo.report.lines}")
                     self.assertEqual(warnings, [], lid)
 
     def test_diff_all_mcp_inclut_annexes_disposition_sort_base_et_get_division(self):
@@ -785,6 +789,7 @@ class TestDiffEtApply(TestCase):
         self.assertEqual([d.status for d in diffs], ["unchanged", "unchanged"])
         self.assertEqual(diffs[0].added_articles, [])
         self.assertEqual(diffs[1].added_articles, [])
+        self.assertIn(("list_laws", {"domains": ["all"], "structure": False, "lang": "fr"}), client.calls)
         get_art_tos = [a["to"] for n, a in client.calls if n == "get_articles"]
         self.assertEqual(get_art_tos, ["annexe", "annexe"])
 

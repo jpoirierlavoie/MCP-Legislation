@@ -1515,7 +1515,7 @@ const CHAPITRE_EXPLICITE =
  * anglaise — ancrées pour ne pas mordre sur « C.S. 115 ».
  */
 const MARQUEUR_ARTICLE =
-  /(?:(?:\barticles?\b|\barts?\.|\bparagraphes?\b|\bpara\.|\bpar\.|\bdir\.|\br[eè]gles?\b|\brules?\b|(?<![A-Za-zÀ-ÿ0-9.])a\.|(?<![A-Za-zÀ-ÿ0-9.])s\.)\s*|§\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*(?![A-Za-z0-9]))/i;
+  /(?:(?:\barticles?\b|\barts?\.|\bparagraphes?\b|\bpara\.|\bpar\.|\bdir\.|\br[eè]gles?\b|\brules?\b|(?<![A-Za-zÀ-ÿ0-9.])a\.|(?<![A-Za-zÀ-ÿ0-9.])ss?\.)\s*|§\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*(?![A-Za-z0-9]))/i;
 
 const AMF_PAIRS: Record<string, { regId: string; igId: string }> = {
   "31-103": { regId: "v-1.1-r.10", igId: "amf-ig-31-103" },
@@ -1563,6 +1563,43 @@ function extractPseudoArticle(rest: string, isIG = false): string | null {
   const restNorm = rest.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const mTirets = restNorm.match(PSEUDO_ANNEXE_TIRETS);
   if (mTirets) return mTirets[1].toLowerCase();
+  const ORDRE_ANNEXE: Record<string, string> = {
+    premiere: "1",
+    first: "1",
+    "1ere": "1",
+    "1st": "1",
+    deuxieme: "2",
+    second: "2",
+    "2e": "2",
+    "2nd": "2",
+    troisieme: "3",
+    third: "3",
+    "3e": "3",
+    "3rd": "3",
+    quatrieme: "4",
+    fourth: "4",
+    "4e": "4",
+    "4th": "4",
+    cinquieme: "5",
+    fifth: "5",
+    "5e": "5",
+    "5th": "5",
+    sixieme: "6",
+    sixth: "6",
+    "6e": "6",
+    "6th": "6",
+  };
+  const mOrd = restNorm.match(
+    /\b(premiere|first|1ere|1st|deuxieme|second|2e|2nd|troisieme|third|3e|3rd|quatrieme|fourth|4e|4th|cinquieme|fifth|5e|5th|sixieme|sixth|6e|6th)\s+(?:annexe|schedule)\b/i,
+  );
+  if (mOrd) return `annexe-${ORDRE_ANNEXE[mOrd[1].toLowerCase()]}`;
+  if (
+    /^\s*(?:[,;:\s]*)(?:annexe|schedule)(?:\s+(?:de(?:\s+(?:la|le|les|l['’]))?|du|des|to(?:\s+the)?|of(?:\s+the)?))+\s*(?:[,;.)\]]|$)/i.test(
+      restNorm,
+    )
+  ) {
+    return "annexe";
+  }
   const mEspace = restNorm.match(isIG ? PSEUDO_ANNEXE_ESPACE_IG : PSEUDO_ANNEXE_ESPACE);
   if (mEspace) {
     const prefix = mEspace[1].toLowerCase() === "schedule" ? "annexe" : mEspace[1].toLowerCase();
@@ -1583,12 +1620,18 @@ function extractPseudoArticle(rest: string, isIG = false): string | null {
   if (PSEUDO_FINALES.test(restNorm)) return "finales";
   const mPreamb = restNorm.match(PSEUDO_PREAMBULE);
   if (mPreamb) return mPreamb[1].toLowerCase() === "preamble" ? "preamble" : "preambule";
+  if (/\b(?:annexe|schedule)\b/i.test(restNorm)) return "annexe";
   return null;
 }
 
 const STRIP_DATES_ET_SALLES = [
   /\b(?:(?:R\.?\s*L\.?\s*R\.?\s*Q\.?|L\.?\s*R\.?\s*Q\.?|R\.?\s*S\.?\s*Q\.?|C\.?\s*Q\.?\s*L\.?\s*R\.?|RLRQ|CQLR)(?:\s*,)?\s+)?(?:c\.|ch\.|chapitres?|chapters?)\s*[A-Za-z]{1,6}-[0-9][0-9.]*(?:(?:\s*,\s*|\s+)r\.\s*[0-9.]+)?/gi,
   /(?<![A-Za-z0-9-])(?:31-103|45-106|51-102)(?![A-Za-z0-9-])/gi,
+  /\b30\s*(?:&|et|and|-)\s*31\s*Vict\.?(?:\s*,\s*(?:c\.|ch\.)\s*3)?(?:\s*\(\s*(?:R\.-U\.|U\.K\.)\s*\))?/gi,
+  /\b(?:Schedule\s+B\s+to\s+(?:the\s+)?Canada\s+Act\s+1982|Annexe\s+B\s+de\s+la\s+Loi\s+de\s+1982\s+sur\s+le\s+Canada)(?:\s*\(\s*(?:U\.K\.|R\.-U\.)\s*\))?/gi,
+  /\b1982\s*,\s*(?:c\.|ch\.)\s*11\b(?:\s*\(\s*(?:U\.K\.|R\.-U\.)\s*\))?/gi,
+  /\b(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)\s*,?\s*\(?\s*1985\s*\)?\s*,\s*app(?:endice|endix|\.)?\s*II\s*,\s*n(?:o|º|°)\.?\s*(?:5|44)\b/gi,
+  /\(\s*(?:R\.-U\.|U\.K\.)\s*\)/gi,
   /\(\s*(?:Salles?|Rooms?)\s+\d+(?:\.\d+)?(?:(?:\s*,\s*|\s+(?:et|and)\s+)\d+(?:\.\d+)?)*\s*\)/gi,
   /\b(?:Salles|Rooms)\s+\d+(?:\.\d+)?(?:(?:\s*,\s*\d+(?:\.\d+)?)*\s+(?:et|and)\s+\d+(?:\.\d+)?|(?:\s*,\s*\d+(?:\.\d+)?)*(?=\s*(?:[,;—–-])\s*(?:\d|par|dir|art|r[eè]gle|rule|annexe|formulaire|schedule|§)))?/gi,
   /\b(?:Salle|Room)\s+\d+(?:\.\d+)?\b/gi,
@@ -1877,6 +1920,71 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
           /\b(?:l\.?\s*i\.?\s*(?:f[ée]d[ée]rale?|\(\s*(?:canada|ca|f[ée]d\.?)\s*\)|canada|ca|f[ée]d\.?)|loi\s+d['’]interpr[ée]tation\s+(?:f[ée]d[ée]rale|\(\s*canada\s*\))|federal\s+interpretation\s+act|interpretation\s+act\s*\(\s*canada\s*\))(?![A-Za-zÀ-ÿ0-9])/i;
       }
     } else if (
+      /\b(?:lois\s+constitutionnelles\s+de\s+1867\s+[àa]\s+1982|constitution\s+acts\s*,?\s*1867\s+to\s+1982)\b/i.test(
+        citation,
+      )
+    ) {
+      const cands = [byId.get("ca-const-1867"), byId.get("ca-const-1982")].filter(
+        (x): x is LawRow => Boolean(x),
+      );
+      if (cands.length > 1) {
+        ambigu = cands.map(toAmbiguous);
+      } else if (cands.length === 1) {
+        law = cands[0].id;
+        lawSource = "abreviation";
+      }
+      motif =
+        /\b(?:lois\s+constitutionnelles\s+de\s+1867\s+[àa]\s+1982|constitution\s+acts\s*,?\s*1867\s+to\s+1982)\b/i;
+    } else if (
+      /\b(?:charte\s+canadienne(?:\s+des\s+droits(?:\s+et\s+libert[ée]s)?)?|canadian\s+charter(?:\s+of\s+rights(?:\s+and\s+freedoms)?)?|charter\s+of\s+rights(?:\s+and\s+freedoms)?|annexe\s+b\s+de\s+la\s+loi\s+de\s+1982\s+sur\s+le\s+canada|schedule\s+b\s+to\s+(?:the\s+)?canada\s+act\s+1982)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:C\.?\s*c\.?\s*d\.?\s*l\.?|L\.?\s*C\.?\s*\(?\s*1982\s*\)?(?:\s*,\s*(?:c\.|ch\.)\s*11\b)?(?:\s*\(\s*(?:R\.-U\.|U\.K\.)\s*\))?(?!\s*,\s*(?:c\.|ch\.)\s*(?!11\b)\d))(?!\.?[A-Za-zÀ-ÿ0-9])|\b(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)\s*,?\s*\(?\s*1985\s*\)?\s*,\s*app(?:endice|endix|\.)?\s*II\s*,\s*n(?:o|º|°)\.?\s*44\b/i.test(
+        citation,
+      )
+    ) {
+      if (byId.has("ca-const-1982")) {
+        law = "ca-const-1982";
+        lawSource = "abreviation";
+      }
+      motif =
+        /\b(?:charte\s+canadienne(?:\s+des\s+droits(?:\s+et\s+libert[ée]s)?)?|canadian\s+charter(?:\s+of\s+rights(?:\s+and\s+freedoms)?)?|charter\s+of\s+rights(?:\s+and\s+freedoms)?|annexe\s+b\s+de\s+la\s+loi\s+de\s+1982\s+sur\s+le\s+canada|schedule\s+b\s+to\s+(?:the\s+)?canada\s+act\s+1982)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:C\.?\s*c\.?\s*d\.?\s*l\.?|L\.?\s*C\.?\s*\(?\s*1982\s*\)?(?:\s*,\s*(?:c\.|ch\.)\s*11\b)?(?:\s*\(\s*(?:R\.-U\.|U\.K\.)\s*\))?(?!\s*,\s*(?:c\.|ch\.)\s*(?!11\b)\d))(?!\.?[A-Za-zÀ-ÿ0-9])|\b(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)\s*,?\s*\(?\s*1985\s*\)?\s*,\s*app(?:endice|endix|\.)?\s*II\s*,\s*n(?:o|º|°)\.?\s*44\b/i;
+    } else if (
+      /\b(?:acte\s+de\s+l['’]am[ée]rique\s+du\s+nord\s+britannique(?:\s*,?\s*1867)?|british\s+north\s+america\s+act(?:\s*,?\s*1867)?|b\.?\s*n\.?\s*a\.?\s+act(?:\s*,?\s*1867)?)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:A\.?\s*A\.?\s*N\.?\s*B\.?|B\.?\s*N\.?\s*A\.?|L\.?\s*C\.?\s*\(?\s*1867\s*\)?(?:\s*,\s*(?:c\.|ch\.)\s*3\b)?(?:\s*\(\s*(?:R\.-U\.|U\.K\.)\s*\))?(?!\s*,\s*(?:c\.|ch\.)\s*(?!3\b)\d))(?!\.?[A-Za-zÀ-ÿ0-9])|\b30\s*(?:&|et|and|-)\s*31\s*Vict\.?(?:\s*,\s*(?:c\.|ch\.)\s*3)?(?:\s*\(\s*(?:R\.-U\.|U\.K\.)\s*\))?|\b(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)\s*,?\s*\(?\s*1985\s*\)?\s*,\s*app(?:endice|endix|\.)?\s*II\s*,\s*n(?:o|º|°)\.?\s*5\b/i.test(
+        citation,
+      )
+    ) {
+      if (byId.has("ca-const-1867")) {
+        law = "ca-const-1867";
+        lawSource = "abreviation";
+      }
+      motif =
+        /\b(?:acte\s+de\s+l['’]am[ée]rique\s+du\s+nord\s+britannique(?:\s*,?\s*1867)?|british\s+north\s+america\s+act(?:\s*,?\s*1867)?|b\.?\s*n\.?\s*a\.?\s+act(?:\s*,?\s*1867)?)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:A\.?\s*A\.?\s*N\.?\s*B\.?|B\.?\s*N\.?\s*A\.?|L\.?\s*C\.?\s*\(?\s*1867\s*\)?(?:\s*,\s*(?:c\.|ch\.)\s*3\b)?(?:\s*\(\s*(?:R\.-U\.|U\.K\.)\s*\))?(?!\s*,\s*(?:c\.|ch\.)\s*(?!3\b)\d))(?!\.?[A-Za-zÀ-ÿ0-9])|\b30\s*(?:&|et|and|-)\s*31\s*Vict\.?(?:\s*,\s*(?:c\.|ch\.)\s*3)?(?:\s*\(\s*(?:R\.-U\.|U\.K\.)\s*\))?|\b(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)\s*,?\s*\(?\s*1985\s*\)?\s*,\s*app(?:endice|endix|\.)?\s*II\s*,\s*n(?:o|º|°)\.?\s*5\b/i;
+    } else if (
+      /\b(?:charte\s+(?:des\s+droits\s+et\s+libert[ée]s\s+de\s+la\s+personne|qu[ée]b[ée]coise(?:\s+des\s+droits(?:\s+et\s+libert[ée]s)?)?)|(?:qu[ée]bec\s+)?charter\s+of\s+human\s+rights(?:\s+and\s+freedoms)?|qu[ée]bec\s+charter)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*)?C\.?\s*d\.?\s*l\.?\s*p\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i.test(
+        citation,
+      )
+    ) {
+      if (byId.has("c-12")) {
+        law = "c-12";
+        lawSource = "abreviation";
+      }
+      motif =
+        /\b(?:charte\s+(?:des\s+droits\s+et\s+libert[ée]s\s+de\s+la\s+personne|qu[ée]b[ée]coise(?:\s+des\s+droits(?:\s+et\s+libert[ée]s)?)?)|(?:qu[ée]bec\s+)?charter\s+of\s+human\s+rights(?:\s+and\s+freedoms)?|qu[ée]bec\s+charter)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*)?C\.?\s*d\.?\s*l\.?\s*p\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i;
+    } else if (
+      /\b(?:charte|charter)\b/i.test(norm) &&
+      !/\b(?:charte\s+(?:de\s+la\s+(?:langue|ville)|municipale|des\s+droits\s+du\s+contribuable)|charter\s+of\s+(?:the\s+(?:french|city)|taxpayer))\b/i.test(
+        norm,
+      )
+    ) {
+      const cands = [byId.get("c-12"), byId.get("ca-const-1982")].filter((x): x is LawRow =>
+        Boolean(x),
+      );
+      if (cands.length > 1) {
+        ambigu = cands.map(toAmbiguous);
+      } else if (cands.length === 1) {
+        law = cands[0].id;
+        lawSource = "abreviation";
+      }
+      motif = /\b(?:charte|charter)\b/i;
+    } else if (
       /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*I\.?(?!\.?[A-Za-zÀ-ÿ0-9])|\bloi\s+d['’]interpr[ée]tation\b|\binterpretation\s+act\b/i.test(
         citation,
       )
@@ -1967,16 +2075,16 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   if (extraStrip) rest = rest.replace(extraStrip, " ");
   for (const stripRe of STRIP_DATES_ET_SALLES) rest = rest.replace(stripRe, " ");
   rest = rest.replace(
-    /((?:\barticles?\b|\barts?\b\.?|\bparagraphes?\b|\bpara\.|\bpar\.|\bdir\.|\br[eè]gles?\b|\brules?\b|(?<![A-Za-zÀ-ÿ0-9.])a\.|(?<![A-Za-zÀ-ÿ0-9.])s\.|§)\s*)1(?:er|\u1d49\u02b3|re|\u02b3\u1d49)(?![A-Za-zÀ-ÿ0-9\u1d49\u02b3])/gi,
+    /((?:\barticles?\b|\barts?\b\.?|\bparagraphes?\b|\bpara\.|\bpar\.|\bdir\.|\br[eè]gles?\b|\brules?\b|(?<![A-Za-zÀ-ÿ0-9.])a\.|(?<![A-Za-zÀ-ÿ0-9.])ss?\.|§)\s*)1(?:er|\u1d49\u02b3|re|\u02b3\u1d49)(?![A-Za-zÀ-ÿ0-9\u1d49\u02b3])/gi,
     "$11",
   );
   const rangeMatch =
-    /(?:\b(?:articles?|arts?\.?|a\.|s\.)\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s*(?:[àa]|to|[–—-])\s*(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b|\b(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s+(?:[àa]|to)\s+(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b/i.exec(
+    /(?:\b(?:articles?|arts?\.?|a\.|ss?\.)\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s*(?:[àa]|to|[–—-])\s*(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b|\b(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\s+(?:[àa]|to)\s+(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*)\b/i.exec(
       rest,
     );
   const plageFin = rangeMatch ? (rangeMatch[2] ?? rangeMatch[4] ?? null) : null;
   const alineaMatch =
-    /(?:\b(?:articles?|arts?\.?|a\.|s\.)\s*\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*\s*,?\s*)\b(al\.?\s*\d+(?:\s*(?:et|[àa]|-)\s*\d+)?|alin[ée]as?\s+\d+|subpar\.?\s*\d+|par\.?\s*\d+°?)\b/i.exec(
+    /(?:\b(?:articles?|arts?\.?|a\.|ss?\.)\s*\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*\s*,?\s*)\b(al\.?\s*\d+(?:\s*(?:et|[àa]|-)\s*\d+)?|alin[ée]as?\s+\d+|subpar\.?\s*\d+|par\.?\s*\d+°?)\b/i.exec(
       rest,
     );
   const alinea = alineaMatch?.[1]?.trim() ?? null;

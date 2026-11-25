@@ -245,8 +245,8 @@
       "label_fr": "Droits et libertés fondamentaux",
       "label_en": "Fundamental Rights and Freedoms",
       "kind": "specialise",
-      "description_fr": "Charte québécoise : droits fondamentaux, égalité, recours; d'application transversale.",
-      "description_en": "Quebec Charter of human rights and freedoms: fundamental rights, equality, remedies; of transversal application."
+      "description_fr": "Charte québécoise et Charte canadienne des droits et libertés : libertés fondamentales, vie, liberté, sécurité, égalité, garanties juridiques, langues officielles, réparation, disposition dérogatoire; d'application transversale.",
+      "description_en": "Quebec Charter and Canadian Charter of Rights and Freedoms: fundamental freedoms, life, liberty, security, equality, legal rights, official languages, remedies, notwithstanding clause; of transversal application."
     },
     {
       "id": "interpretation-lois",
@@ -351,6 +351,14 @@
       "kind": "specialise",
       "description_fr": "Complot entre concurrents, cartel, fixation des prix, truquage des offres, abus de position dominante, fusionnement, préavis de fusion, maintien des prix, exclusivité, indications fausses ou trompeuses, télémarketing trompeur.",
       "description_en": "Conspiracy among competitors, cartel, price fixing, bid rigging, abuse of dominant position, merger, pre-merger notification, price maintenance, exclusive dealing, false or misleading representations, deceptive telemarketing."
+    },
+    {
+      "id": "droit-constitutionnel",
+      "label_fr": "Droit constitutionnel et partage des compétences",
+      "label_en": "Constitutional Law and Division of Powers",
+      "kind": "specialise",
+      "description_fr": "Constitution du Canada, fédéralisme, partage des compétences législatives, Parlement, législatures provinciales, paix ordre et bon gouvernement, propriété et droits civils, commerce, judicature, article 96, droits ancestraux et issus de traités, primauté de la Constitution, inopérabilité, modification constitutionnelle.",
+      "description_en": "Constitution of Canada, federalism, division of legislative powers, Parliament, provincial legislatures, peace order and good government, property and civil rights, trade and commerce, judicature, section 96, Aboriginal and treaty rights, primacy of the Constitution, inoperability, constitutional amendment."
     }
   ],
   "mappings": [
@@ -944,6 +952,19 @@
     {
       "subject": "valeurs-mobilieres",
       "law": "amf-ig-51-102"
+    },
+    {
+      "subject": "droit-constitutionnel",
+      "law": "ca-const-1867"
+    },
+    {
+      "subject": "droit-constitutionnel",
+      "law": "ca-const-1982"
+    },
+    {
+      "subject": "droits-libertes-fondamentaux",
+      "law": "ca-const-1982",
+      "division_path": "ph1:1"
     }
   ]
 }

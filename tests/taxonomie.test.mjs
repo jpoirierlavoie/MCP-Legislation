@@ -188,7 +188,7 @@ test("les matières qui franchissent le seuil de l'invariant 15 sont celles qu'o
 test("chaque loi mappée par un chemin de division l'est par un chemin Irosoft ou LIMS", () => {
   // La résolution réelle du chemin contre `divisions` est faite par load.py (qui REFUSE un
   // chemin introuvable) et par verify.py. Ici : la forme seule, qui ne demande pas de base.
-  const FORMES = /^(g[a-z]:|fh\d+:|annexe-|fs:|s_)/;
+  const FORMES = /^(g[a-z]:|fh\d+:|ph\d+:|annexe-|fs:|ps:|pp:|s_)/;
   const fautifs = taxonomy.mappings
     .filter((m) => m.division_path && !FORMES.test(m.division_path))
     .map((m) => `${m.subject} -> ${m.law}/${m.division_path}`);

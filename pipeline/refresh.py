@@ -651,7 +651,7 @@ def diff_all_mcp(
 
     by_lang_laws: dict[str, dict[str, dict[str, Any]]] = {}
     for lang in ("fr", "en"):
-        res = client.call_tool("list_laws", {"structure": False, "lang": lang})
+        res = client.call_tool("list_laws", {"domains": ["all"], "structure": False, "lang": lang})
         laws_list = (res.get("structuredContent") or {}).get("laws") or []
         by_lang_laws[lang] = {l["id"]: l for l in laws_list}
 
