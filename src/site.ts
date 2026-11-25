@@ -97,7 +97,7 @@ const DOMAINE: Record<string, [string, string]> = {
   "construction-immobilier": ["Construction et immobilier", "Construction & Real Estate"],
   "municipal-environnement": ["Municipal et environnement", "Municipal & Environment"],
   travail: ["Travail et emploi", "Labour & Employment"],
-  penal: ["Pénal et police", "Penal & Police"],
+  penal: ["Criminel, pénal et police", "Criminal, Penal & Police"],
   "propriete-intellectuelle": ["Propriété intellectuelle", "Intellectual Property"],
 };
 
@@ -456,10 +456,10 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
   <div class="avert">
   ${biP(
     [
-      "Ce qui n'est pas inclus (important) : seuls les textes actuellement en vigueur sont servis. Il n'y a aucune version historique ni aucun ancien article abrogé antérieur à la consolidation courante. En particulier, l'ancien Code de procédure civile (RLRQ, c. C-25, en vigueur avant le 1er janvier 2016) est volontairement exclu — si une référence à l'ancien Code est demandée, l'outil la refuse explicitement plutôt que de renvoyer par erreur à un article renuméroté du Code actuel (c. C-25.01). Sont également exclus le Code criminel et la Loi de l'impôt sur le revenu.",
+      "Ce qui n'est pas inclus (important) : seuls les textes actuellement en vigueur sont servis. Il n'y a aucune version historique ni aucun ancien article abrogé antérieur à la consolidation courante. En particulier, l'ancien Code de procédure civile (RLRQ, c. C-25, en vigueur avant le 1er janvier 2016) est volontairement exclu — si une référence à l'ancien Code est demandée, l'outil la refuse explicitement plutôt que de renvoyer par erreur à un article renuméroté du Code actuel (c. C-25.01). La Loi de l'impôt sur le revenu est également exclue.",
     ],
     [
-      "What is not included (important): only currently in-force consolidated texts are served — no historical point-in-time versions. In particular, the former Code of Civil Procedure (CQLR, c. C-25, replaced January 1, 2016) is intentionally excluded; citations to the old Code are explicitly declined rather than silently mapped to renumbered articles of the current Code (c. C-25.01). The Criminal Code and the Income Tax Act are also excluded.",
+      "What is not included (important): only currently in-force consolidated texts are served — no historical point-in-time versions. In particular, the former Code of Civil Procedure (CQLR, c. C-25, replaced January 1, 2016) is intentionally excluded; citations to the old Code are explicitly declined rather than silently mapped to renumbered articles of the current Code (c. C-25.01). The Income Tax Act is also excluded.",
     ],
   )}
   </div>
