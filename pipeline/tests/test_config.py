@@ -66,6 +66,8 @@ ORDRE_ATTENDU = [
     "t-15.1", "t-15.1-r.1.1", "c-27", "a-3.001", "s-2.1",
     "c-47.1", "a-19.1", "q-2", "p-41.1",
     "ca-p-4", "ca-i-9", "s-29.02",
+    # --- VAGUE 3 : silo criminel fédéral (`penal`, derrière CRIMINAL_CORPUS), ajoutées EN FIN ---
+    "ca-c-46", "ca-c-38.8", "ca-y-1.5",
 ]
 
 

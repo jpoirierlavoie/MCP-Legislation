@@ -40,6 +40,7 @@ export type LawFonction =
 export type CorpusGateEnv = {
   FEDERAL_CORPUS?: string;
   PDF_CORPUS?: string;
+  CRIMINAL_CORPUS?: string;
   DOMAIN_QUARANTINE?: string;
   VECTOR_DOMAIN_FILTER?: string;
 };
@@ -352,6 +353,7 @@ export function masqueAutreBout(env: CorpusGateEnv, col: string): string {
   const excl: string[] = [];
   if (!federalOuvert(env)) excl.push("jurisdiction <> 'qc'");
   if (!pdfOuvert(env)) excl.push("source = 'pdf'");
+  if (!criminalOuvert(env)) excl.push("(jurisdiction = 'ca' AND domain = 'penal')");
   return excl.length
     ? `AND NOT EXISTS (SELECT 1 FROM laws WHERE id = ${col} AND (${excl.join(" OR ")}))`
     : "";
@@ -482,12 +484,18 @@ export function pdfOuvert(env: CorpusGateEnv): boolean {
   return env.PDF_CORPUS === "1";
 }
 
-/** Clause SQL de masquage combinée (fédéral + PDF), à coller dans un WHERE. Vide si tout ouvert. */
+/** L'interrupteur du silo criminel fédéral (`penal`, R8 : fermé par défaut tant qu'il ne vaut pas "1"). */
+export function criminalOuvert(env: CorpusGateEnv): boolean {
+  return env.CRIMINAL_CORPUS === "1";
+}
+
+/** Clause SQL de masquage combinée (fédéral + PDF + criminel), à coller dans un WHERE. Vide si tout ouvert. */
 export function clauseCorpus(env: CorpusGateEnv, alias = "l"): string {
   const p = alias ? `${alias}.` : "";
   const conds: string[] = [];
   if (!federalOuvert(env)) conds.push(`${p}jurisdiction = 'qc'`);
   if (!pdfOuvert(env)) conds.push(`${p}source <> 'pdf'`);
+  if (!criminalOuvert(env)) conds.push(`NOT (${p}jurisdiction = 'ca' AND ${p}domain = 'penal')`);
   return conds.join(" AND ");
 }
 
@@ -1534,7 +1542,8 @@ const DIVISION_QCCS_NON_INGERE =
   /\bdivision\s+(?:de\s+l['’]|de\s+la\s+|de\s+|du\s+|des\s+|d['’]|of\s+)(?!montreal\b|mtl\b|quebec\b|qc\b|pratique\b|famille\b|civile?\b|criminel(?:le)?\b|commerciale?\b|faillite\b|administrat|appel\b|jeunesse\b)[a-z]/i;
 
 /** Pseudo-articles / annexes nommés (captés avant l'extraction de chiffre nu). */
-const PSEUDO_ANNEXE_TIRETS = /\b(annexe(?:-[a-z0-9]+)+|formulaire(?:-[a-z0-9]+)+)\b/i;
+const PSEUDO_ANNEXE_TIRETS =
+  /\b(annexe(?:-[a-z0-9]+)+|formulaire(?:-[a-z0-9]+)+|formule(?:-[a-z0-9]+)+|form(?:-[a-z0-9]+)+)\b/i;
 const ANNEXE_PREPS = "(?:de|du|des|d['’]|au|aux|a|sur|la|le|les|l['’])";
 const ANNEXE_LAW_NOUNS =
   "(?:loi|code|reglements?|regulations?|act|policy|directives?|mode|cour|court|qccs|qccq|qcca|rlrq|cqlr|lrq|rsq|lrc|cpc|ccq|c\\.|ch\\.|instruction\\s+generale|instructions?\\s+generales?\\s+(?:31-103|45-106|51-102|relati))";
@@ -1546,7 +1555,7 @@ function buildPseudoAnnexeEspace(stopMots: string): RegExp {
   const stop = `(?:${stopMots})\\b`;
   const subdiv = `(?:(?:\\s*,\\s*|\\s+)(?:partie|part|rubrique|item|appendice|appendix)\\s+[a-z0-9]+|\\s*,\\s*(?:indications?|instructions?(?!\\s+generales?\\s*(?:31-103|45-106|51-102|relati)|\\s+generale\\b)(?:\\s+generales?)?)(?:\\s+(?:a\\s+l['’]\\s*)?(?!${stop})${ANNEXE_MOT})*(?:\\s+\\d+)?|\\s*,\\s*[a-z]\\.\\s+(?!c\\.|ch\\.|r\\.|${stop})[a-z]{2,}[a-z0-9]*(?:\\s+(?:[–—-]\\s+)?(?:a\\s+l['’]\\s*)?(?!${stop})${ANNEXE_MOT})*)*`;
   const corps = `(?:(?:division|district)\\s+[a-z0-9]+|${ANNEXE_MOT}(?:\\s+(?:a\\s+l['’]\\s*)?(?!${stop})${ANNEXE_MOT})*)${subdiv}`;
-  return new RegExp(`\\b(annexe|schedule|formulaire)\\s+(${corps})\\b`, "i");
+  return new RegExp(`\\b(annexe|schedule|formulaire|formule|form)\\s+(${corps})\\b`, "i");
 }
 const PSEUDO_ANNEXE_ESPACE = buildPseudoAnnexeEspace(ANNEXE_STOP_MOTS);
 const PSEUDO_ANNEXE_ESPACE_IG = buildPseudoAnnexeEspace(ANNEXE_STOP_MOTS_IG);
@@ -1555,7 +1564,7 @@ const PSEUDO_PRELIM = /\b(?:dispositions?\s+pr[ée]liminaires?|pr[ée]liminaire)
 const PSEUDO_FINALES = /\b(?:dispositions?\s+finales?|finales)\b/i;
 const PSEUDO_PREAMBULE = /\b(pr[ée]ambule|preamble)\b/i;
 const STRIP_PSEUDO_NORM = new RegExp(
-  `\\b(?:(?:annexe|formulaire)(?:-[a-z0-9]+)+|${PSEUDO_ANNEXE_ESPACE.source}|note[- ]preliminaire|dispositions?[- ]preliminaires?|dispositions?[- ]finales?)\\b`,
+  `\\b(?:(?:annexe|formulaire|formule|form)(?:-[a-z0-9]+)+|${PSEUDO_ANNEXE_ESPACE.source}|note[- ]preliminaire|dispositions?[- ]preliminaires?|dispositions?[- ]finales?)\\b`,
   "gi",
 );
 
@@ -2024,6 +2033,18 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
         [
           "ca-c-7.75",
           /\b(?:loi\s+canadienne\s+sur\s+les\s+organisations\s+[àa]\s+but\s+non\s+lucratif|canada\s+not-?for-?profit\s+corporations?\s+act)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*C\.?\s*O\.?\s*B\.?\s*N\.?\s*L\.?|C\.?\s*N\.?\s*C\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])|(?:c\.|ch\.|chapitres?|chapters?)\s*C-7\.75(?![0-9.-])/i,
+        ],
+        [
+          "ca-c-38.8",
+          /\b(?:loi\s+r[ée]glementant\s+certaines\s+drogues\s+et\s+autres\s+substances|controlled\s+drugs\s+and\s+substances\s+act)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*R\.?\s*C\.?\s*D\.?\s*A\.?\s*S\.?|C\.?\s*D\.?\s*S\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])|(?:(?:L\.?\s*C\.?|S\.?\s*C\.?)[^,\n]*,\s*)?(?:c\.|ch\.|chapitres?|chapters?)\s*C-38\.8(?![0-9.-])/i,
+        ],
+        [
+          "ca-y-1.5",
+          /\b(?:loi\s+sur\s+le\s+syst[èe]me\s+de\s+justice\s+p[ée]nale\s+pour\s+les\s+adolescents|youth\s+criminal\s+justice\s+act)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*S\.?\s*J\.?\s*P\.?\s*A\.?|Y\.?\s*C\.?\s*J\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])|(?:(?:L\.?\s*C\.?|S\.?\s*C\.?)[^,\n]*,\s*)?(?:c\.|ch\.|chapitres?|chapters?)\s*Y-1\.5(?![0-9.-])/i,
+        ],
+        [
+          "ca-c-46",
+          /\b(?:code\s+criminel(?:\s+du\s+canada)?|criminal\s+code(?:\s+of\s+canada)?)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:C\.?\s*cr\.?|Cr\.?\s*C\.?)(?!\.?[A-Za-zÀ-ÿ0-9])|(?:(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)[^,\n]*,\s*)?(?:c\.|ch\.|chapitres?|chapters?)\s*C-46(?![0-9.-])/i,
         ],
         [
           "ca-dors-2002-156",

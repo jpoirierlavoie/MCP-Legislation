@@ -66,6 +66,6 @@ Ce document consigne l'architecture de quarantaine par domaine arrêtée avec Ja
 - **`propriete-intellectuelle` :** `ca-p-4` (*Loi sur les brevets* / *Patent Act*), `ca-i-9` (*Loi sur les dessins industriels* / *Industrial Design Act*).
 - **`financier` :** `s-29.02` (*Loi sur les sociétés de fiducie et les sociétés d'épargne*).
 
-### Vague 3 — Silo criminel (`penal`, PR dédiée derrière interrupteur R8 `CRIMINAL_CORPUS`)
-- **Ajouts :** `ca-c-46` (*Code criminel*), `ca-c-38.8` (*Loi réglementant certaines drogues et autres substances*), `ca-y-1.5` (*Loi sur le système de justice pénale pour les adolescents*) via `pipeline/parser_lims.py` (liste blanche `Body` + `Schedule` excluant impérativement `RelatedOrNotInForce` et `AmendedText`).
-- **Garde-fou :** `CRIMINAL_CORPUS="0"` par défaut jusqu'à validation complète de la calibration et du backfill `penal`, et maintien strict hors de `core`.
+### Vague 3 — Silo criminel (`penal`, PR dédiée derrière interrupteur R8 `CRIMINAL_CORPUS`, `feat/wave3-criminal-silo`)
+- **Ajouts :** `ca-c-46` (*Code criminel*), `ca-c-38.8` (*Loi réglementant certaines drogues et autres substances*), `ca-y-1.5` (*Loi sur le système de justice pénale pour les adolescents*) via `pipeline/parser_lims.py` (liste blanche `Body` + `Schedule` excluant impérativement `RelatedOrNotInForce`, `BillPiece` et `AmendedText`, avec support des balises `Keep`, `List`, `Item` et des annexes sans `<Section>`).
+- **Garde-fou :** `CRIMINAL_CORPUS="0"` par défaut en Phase 4A jusqu'à validation complète de l'ingestion, du backfill Vectorize `penal` et de la porte 21 cas, puis bascule `CRIMINAL_CORPUS="1"` en Phase 4B avec maintien strict hors de `core`.

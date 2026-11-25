@@ -3150,6 +3150,81 @@
       "numbering": "standard",
       "kind_epub": "cs",
       "domain": "financier"
+    },
+    {
+      "id": "ca-c-46",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Code criminel",
+      "name_en": "Criminal Code",
+      "official_cite": "L.R.C. (1985), ch. C-46",
+      "official_cite_en": "R.S.C. 1985, c. C-46",
+      "chapter": "C-46",
+      "xml": {
+        "fr": "fra/lois/C-46.xml",
+        "en": "eng/acts/C-46.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-46/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-46/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Transversal"
+      ],
+      "domain": "penal"
+    },
+    {
+      "id": "ca-c-38.8",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi réglementant certaines drogues et autres substances",
+      "name_en": "Controlled Drugs and Substances Act",
+      "official_cite": "L.C. 1996, ch. 19",
+      "official_cite_en": "S.C. 1996, c. 19",
+      "chapter": "C-38.8",
+      "xml": {
+        "fr": "fra/lois/C-38.8.xml",
+        "en": "eng/acts/C-38.8.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-38.8/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-38.8/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Transversal"
+      ],
+      "domain": "penal"
+    },
+    {
+      "id": "ca-y-1.5",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur le système de justice pénale pour les adolescents",
+      "name_en": "Youth Criminal Justice Act",
+      "official_cite": "L.C. 2002, ch. 1",
+      "official_cite_en": "S.C. 2002, c. 1",
+      "chapter": "Y-1.5",
+      "xml": {
+        "fr": "fra/lois/Y-1.5.xml",
+        "en": "eng/acts/Y-1.5.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/Y-1.5/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/Y-1.5/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Transversal"
+      ],
+      "domain": "penal"
     }
   ]
 }

@@ -173,6 +173,36 @@
       "to": "c-27.1",
       "rel_type": "connexe",
       "note": "Compétences réglementaires matérielles des municipalités locales et MRC exercées de concert avec le Code municipal du Québec."
+    },
+    {
+      "from": "ca-c-38.8",
+      "to": "ca-c-46",
+      "rel_type": "complete",
+      "note": "La Loi réglementant certaines drogues et autres substances complète le Code criminel pour les infractions de trafic, possession, production et confiscation en matière de substances désignées."
+    },
+    {
+      "from": "ca-y-1.5",
+      "to": "ca-c-46",
+      "rel_type": "complete",
+      "note": "La Loi sur le système de justice pénale pour les adolescents complète le Code criminel en établissant le régime distinct d'instruction, de mise en liberté et de détermination de la peine applicable aux adolescents."
+    },
+    {
+      "from": "ca-c-46",
+      "to": "ca-c-5",
+      "rel_type": "renvoie-a",
+      "note": "La Loi sur la preuve au Canada s'applique aux poursuites engagées en vertu du Code criminel sous réserve des règles particulières de ce code."
+    },
+    {
+      "from": "ca-c-46",
+      "to": "ca-const-1982",
+      "rel_type": "renvoie-a",
+      "note": "Les garanties juridiques de la Charte canadienne des droits et libertés (art. 7 à 14) et la réparation (art. 24) encadrent la procédure et les peines prévues au Code criminel."
+    },
+    {
+      "from": "c-52.2",
+      "to": "ca-c-46",
+      "rel_type": "renvoie-a",
+      "note": "La Loi sur la confiscation, l'administration et l'affectation des produits et instruments d'activités illégales interagit avec les poursuites et confiscations prévues au Code criminel."
     }
   ]
 }

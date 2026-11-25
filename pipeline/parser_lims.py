@@ -305,7 +305,7 @@ def schedule_refuse(sched: ET.Element) -> bool:
 _HORS_SERIALISATION = {"MarginalNote", "HistoricalNote", "HistoricalNoteSubItem", "Footnote"}
 
 # Éléments dont le Label s'écrit en tête de ligne, avec indentation par profondeur.
-_NIVEAUX = ["Subsection", "Paragraph", "Subparagraph", "Clause", "Subclause", "Subsubclause"]
+_NIVEAUX = ["Subsection", "Paragraph", "Subparagraph", "Clause", "Subclause", "Subsubclause", "Item"]
 
 # Le SPEC §3.5 : rattacher APRÈS l'énumération qu'ils ferment, sinon la phrase se disloque.
 _CONTINUES = {
@@ -324,6 +324,35 @@ def _verifie_balises(racine: ET.Element) -> None:
             f"Les classer dans pipeline/expected/lims_tags.json (traitement + justification) "
             f"avant d'ingérer — docs/phase0-structure-lims.md §6. Arrêt."
         )
+
+
+def _rend_list(el: ET.Element, profondeur: int) -> list[str]:
+    """Sérialise une `<List>` structurée d'éléments `<Item>` (annexes C-38.8, etc.)."""
+    lignes: list[str] = []
+    prefixe = "  " * profondeur
+    for sub in el:
+        snom = _sans_ns(sub.tag)
+        if snom in _HORS_SERIALISATION or snom in _HORS_TEXTE or snom in _IGNORE:
+            continue
+        if snom == "Item":
+            lignes += serialise(sub, profondeur, racine_section=False)
+        else:
+            t = _plat(sub)
+            if t:
+                lignes.append(f"{prefixe}{t}".rstrip())
+    return lignes
+
+
+def _heading_ligne(el: ET.Element) -> str:
+    """Formate un intertitre interne (`Heading` / `GroupHeading`) en une ligne lisible."""
+    partes: list[str] = []
+    for nom in ("Label", "TitleText"):
+        child = el.find(nom)
+        if child is not None:
+            t = _plat(child)
+            if t:
+                partes.append(t)
+    return " — ".join(partes) or _plat(el)
 
 
 def serialise(el: ET.Element, profondeur: int = 0, racine_section: bool = True) -> list[str]:
@@ -359,6 +388,8 @@ def serialise(el: ET.Element, profondeur: int = 0, racine_section: bool = True) 
             lignes.append(f"{prefixe}{_plat(enfant)}".rstrip())
         elif nom == "Repealed":
             lignes.append(f"{prefixe}{_plat(enfant)}".rstrip())
+        elif nom == "List":
+            lignes += _rend_list(enfant, profondeur + 1)
         elif nom in ("TableGroup", "table", "FormGroup", "FormulaGroup"):
             lignes += _rend_bloc(enfant, profondeur)
         elif nom in _STRUCTURE or nom in _TEXTE:
@@ -375,7 +406,7 @@ def serialise(el: ET.Element, profondeur: int = 0, racine_section: bool = True) 
 
 
 def _rend_bloc(el: ET.Element, profondeur: int) -> list[str]:
-    """Rendu TABULAIRE d'un TableGroup/table CALS, d'un FormGroup ou d'une formule.
+    """Rendu TABULAIRE d'un TableGroup/table CALS, d'un FormGroup structuré ou d'une formule.
 
     Le SPEC §3.5 exige « un rendu tabulaire propre, PAS d'aplatissement en bouillie ». Les
     cellules d'une ligne sont jointes par ' : ' — même convention que le parseur EPUB
@@ -383,6 +414,29 @@ def _rend_bloc(el: ET.Element, profondeur: int) -> list[str]:
     """
     prefixe = "  " * profondeur
     lignes: list[str] = []
+    if any(
+        _sans_ns(c.tag) in ("Provision", "List", "FormGroup", "Heading", "Group", "GroupHeading", "DocumentInternal")
+        for c in el
+    ):
+        for c in el:
+            cn = _sans_ns(c.tag)
+            if cn == "ScheduleFormHeading" or cn in _HORS_SERIALISATION or cn in _HORS_TEXTE or cn in _IGNORE:
+                continue
+            if cn == "Provision":
+                lignes += serialise(c, profondeur, racine_section=False)
+            elif cn == "List":
+                lignes += _rend_list(c, profondeur)
+            elif cn in ("TableGroup", "table", "FormGroup", "FormulaGroup", "DocumentInternal", "Group"):
+                lignes += _rend_bloc(c, profondeur)
+            elif cn in ("Heading", "GroupHeading"):
+                t = _heading_ligne(c)
+                if t:
+                    lignes.append(f"{prefixe}{t}".rstrip())
+            else:
+                t = _plat(c)
+                if t:
+                    lignes.append(f"{prefixe}{t}".rstrip())
+        return [l for l in lignes if l.strip()]
     cap = el.find("Caption")
     if cap is not None:
         lignes.append(f"{prefixe}{_plat(cap)}")
@@ -397,11 +451,35 @@ def _rend_bloc(el: ET.Element, profondeur: int) -> list[str]:
             if cellules:
                 lignes.append(f"{prefixe}{' : '.join(cellules)}")
         return lignes
-    # Pas de table CALS : formule ou formulaire. On garde l'ordre du document.
+    # Pas de table CALS : formule ou formulaire simple. On garde l'ordre du document.
     t = _plat(el)
     if t:
         lignes.append(f"{prefixe}{t}")
     return lignes
+
+
+def _serialise_annexe(sched: ET.Element) -> str:
+    """Sérialise le corps d'une annexe dépourvue de `<Section>` (formulaires, listes, tableaux)."""
+    lignes: list[str] = []
+    for c in sched:
+        cn = _sans_ns(c.tag)
+        if cn == "ScheduleFormHeading" or cn in _HORS_SERIALISATION or cn in _HORS_TEXTE or cn in _IGNORE:
+            continue
+        if cn == "Provision":
+            lignes += serialise(c, 0, racine_section=False)
+        elif cn == "List":
+            lignes += _rend_list(c, 0)
+        elif cn in ("TableGroup", "table", "FormGroup", "FormulaGroup", "DocumentInternal", "Group"):
+            lignes += _rend_bloc(c, 0)
+        elif cn in ("Heading", "GroupHeading"):
+            t = _heading_ligne(c)
+            if t:
+                lignes.append(t)
+        else:
+            t = _plat(c)
+            if t:
+                lignes.append(t)
+    return "\n".join(l for l in lignes if l.strip())
 
 
 def _historique(el: ET.Element) -> str | None:
@@ -633,7 +711,7 @@ def parse_lims(
             # rendrait 9e15 (numéro non numérique) et l'enverrait en fin de corpus.
             sort_key=0,
         ))
-        b.preambule += 1
+        b.preambule += sum(1 for e in preamb.iter() if _sans_ns(e.tag) == "Section")
 
     # --- le corps -------------------------------------------------------------
     body = racine.find("Body")
@@ -770,18 +848,36 @@ def parse_lims(
         # québécois, dont le parseur EPUB fabrique déjà `annexe-i`.
         base = etiquette or f"annexe {idx}"
         slug = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-") or f"annexe-{idx}"
-        for sec in [s for s in sched.iter() if _sans_ns(s.tag) == "Section"]:
-            if statut_section(sec, parents) == "refuse":
-                b.refuse_ancetre += 1
-                continue
-            brut = numero_de_label(sec.find("Label"))
-            numero = f"{slug}-{brut}" if brut else slug
-            # Numéro non numérique ⇒ pseudo-article : on fixe l'ordre nous-mêmes, après le
-            # corps, exactement comme le parseur EPUB le fait pour ses annexes.
-            cle = DISPOSITION_SORT_BASE + disp_idx * 1_000_000
-            disp_idx += 1
-            ajoute_article(sec, chemin, numero, cle)
-            b.annexe += 1
+        secs_sched = [s for s in sched.iter() if _sans_ns(s.tag) == "Section"]
+        if secs_sched:
+            for sec in secs_sched:
+                if statut_section(sec, parents) == "refuse":
+                    b.refuse_ancetre += 1
+                    continue
+                brut = numero_de_label(sec.find("Label"))
+                numero = f"{slug}-{brut}" if brut else slug
+                # Numéro non numérique ⇒ pseudo-article : on fixe l'ordre nous-mêmes, après le
+                # corps, exactement comme le parseur EPUB le fait pour ses annexes.
+                cle = DISPOSITION_SORT_BASE + disp_idx * 1_000_000
+                disp_idx += 1
+                ajoute_article(sec, chemin, numero, cle)
+                b.annexe += 1
+        elif not any(_sans_ns(d.tag) in REFUS_ANCETRE for d in sched.iter()):
+            corps_annexe = _serialise_annexe(sched)
+            if corps_annexe:
+                vus_numeros = {a.number for a in articles}
+                numero_ann = slug if slug not in vus_numeros else f"{slug}-{idx}"
+                cle = DISPOSITION_SORT_BASE + disp_idx * 1_000_000
+                disp_idx += 1
+                articles.append(Article(
+                    law_id=law.id, lang=lang, number=numero_ann,
+                    text=corps_annexe,
+                    division_path=chemin,
+                    history=_historique(sched),
+                    repealed=1 if sched.find("Repealed") is not None or _ABROGE.match(corps_annexe) else 0,
+                    footnotes=_notes(sched),
+                    sort_key=cle,
+                ))
 
     # TOUTE Section du fichier doit avoir été comptée quelque part. C'est ce contrôle qui
     # remplace l'invariant §4.1, lequel s'équilibre des deux côtés et ne voit donc rien.

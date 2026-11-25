@@ -391,6 +391,14 @@
       "kind": "specialise",
       "description_fr": "Aménagement du territoire, urbanisme, environnement et zone agricole : schéma d'aménagement, règlement de zonage, lotissement, dérogation mineure, usage dérogatoire, autorisation environnementale, étude d'impact, contamination des sols, milieux humides, CPTAQ, aliénation en zone agricole.",
       "description_en": "Land use planning, urbanism, environment and agricultural zone: land use planning and development plan, zoning bylaw, subdivision, minor exemption, non-conforming use, environmental authorization, impact assessment, soil contamination, wetlands, CPTAQ, agricultural land preservation."
+    },
+    {
+      "id": "droit-criminel",
+      "label_fr": "Droit criminel et substances désignées",
+      "label_en": "Criminal Law and Controlled Substances",
+      "kind": "specialise",
+      "description_fr": "Infractions criminelles, Code criminel, mens rea, voie de fait, vol, fraude, homicide, mandat de perquisition, arrestation, mise en liberté, détermination de la peine, substances désignées (LRCDAS, fentanyl, cocaïne, cannabis, précurseurs) et justice pénale pour les adolescents (LSJPA).",
+      "description_en": "Criminal offences, Criminal Code, mens rea, assault, theft, fraud, homicide, search warrant, arrest, judicial interim release, sentencing, controlled substances (CDSA, fentanyl, cocaine, precursors), and youth criminal justice (YCJA)."
     }
   ],
   "mappings": [
@@ -1073,6 +1081,18 @@
     {
       "subject": "institutions-depots-assureurs",
       "law": "s-29.02"
+    },
+    {
+      "subject": "droit-criminel",
+      "law": "ca-c-46"
+    },
+    {
+      "subject": "droit-criminel",
+      "law": "ca-c-38.8"
+    },
+    {
+      "subject": "droit-criminel",
+      "law": "ca-y-1.5"
     }
   ]
 }

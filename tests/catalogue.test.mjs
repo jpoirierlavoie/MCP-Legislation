@@ -296,21 +296,40 @@ test("served.json est un SOUS-ENSEMBLE cohérent de laws.config.json", () => {
   );
   assert.equal(new Set(served.ids).size, served.ids.length, "doublon dans served.ids");
   assert.ok(
-    ["FEDERAL_CORPUS", "PDF_CORPUS"].includes(served.flag),
+    ["FEDERAL_CORPUS", "PDF_CORPUS", "CRIMINAL_CORPUS"].includes(served.flag),
     "l'interrupteur nommé par served.json doit être un drapeau de corpus reconnu de wrangler.jsonc",
   );
 
-  // Si TOUT le corpus est déclaré servi, l'interrupteur doit être ouvert — sinon le README
-  // annonce plus que ce que la production rend.
-  const federaux = laws.filter((l) => l.jurisdiction === "ca").map((l) => l.id);
+  // Si TOUT le corpus fédéral hors silo criminel est déclaré servi, l'interrupteur FEDERAL_CORPUS est ouvert.
+  const federaux = laws
+    .filter((l) => l.jurisdiction === "ca" && l.domain !== "penal")
+    .map((l) => l.id);
   const federauxServis = federaux.filter((id) => served.ids.includes(id));
   if (federauxServis.length) {
     assert.equal(
       federauxServis.length,
       federaux.length,
-      "servir une PARTIE du fédéral n'est pas un état prévu : l'interrupteur est global",
+      "servir une PARTIE du fédéral hors silo criminel n'est pas un état prévu : l'interrupteur est global",
     );
   }
+
+  // Silo criminel fédéral (`jurisdiction === "ca" && domain === "penal"`) : tout-ou-rien aligné sur CRIMINAL_CORPUS.
+  const wranglerCfg = JSON.parse(
+    lire("wrangler.jsonc")
+      .split("\n")
+      .filter((l) => !/^\s*\/\//.test(l))
+      .join("\n"),
+  );
+  const criminels = laws
+    .filter((l) => l.jurisdiction === "ca" && l.domain === "penal")
+    .map((l) => l.id);
+  const criminelsServis = criminels.filter((id) => served.ids.includes(id));
+  const criminelAttendu = wranglerCfg.vars?.CRIMINAL_CORPUS === "1" ? criminels.length : 0;
+  assert.equal(
+    criminelsServis.length,
+    criminelAttendu,
+    "le silo criminel fédéral dans served.json doit concorder tout-ou-rien avec CRIMINAL_CORPUS dans wrangler.jsonc",
+  );
 
   const pdfs = laws.filter((l) => l.source === "pdf").map((l) => l.id);
   const pdfsServis = pdfs.filter((id) => served.ids.includes(id));

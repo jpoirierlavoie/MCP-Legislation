@@ -72,7 +72,7 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 |---|---|---|
 | `find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats (`core` par défaut ; `domains`, `jurisdiction`, `forum` + radar `other_domains`), avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
 | `list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, domaine, loi habilitante, plan des grands codes ; filtres `domains`/`jurisdiction`/`fonction`/`forum`/`subject` (`core` par défaut ; `domains=["all"]` pour les 8 domaines) | `fonction=tarif, domains=["all"]` → les 4 tarifs |
-| `list_subjects` | Les 49 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
+| `list_subjects` | Les 50 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
 | `related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées (`preseance-sur`, `interprete`…) | `law=cpc` → ses 6 règlements de cour |
 
 ### Extraction

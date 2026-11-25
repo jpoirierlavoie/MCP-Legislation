@@ -1,5 +1,5 @@
 {
-  "_comment": "PROPOSITION ⛔ — classement des balises LIMS, relevé au SHA 855cdfc65207a6906c414e09a77d7f93267c5356 sur les 44 fichiers du corpus arrêté (SPEC §9 + Vague 2). C'est la PORTE de la phase 0 : `parser_lims.py` doit refuser d'ingérer un fichier portant une balise absente de ce classement, au lieu de la traverser en silence. Les décisions marquées `justification_juridique` relèvent de la relecture de Jason — le code les applique, il ne les tranche pas. Régénérer le relevé : `python -m pipeline.discovery.recon_lims`.",
+  "_comment": "PROPOSITION ⛔ — classement des balises LIMS, relevé au SHA 855cdfc65207a6906c414e09a77d7f93267c5356 sur les 50 fichiers du corpus arrêté (SPEC §9 + Vague 2 + Vague 3). C'est la PORTE de la phase 0 : `parser_lims.py` doit refuser d'ingérer un fichier portant une balise absente de ce classement, au lieu de la traverser en silence. Les décisions marquées `justification_juridique` relèvent de la relecture de Jason — le code les applique, il ne les tranche pas. Régénérer le relevé : `python -m pipeline.discovery.recon_lims`.",
   "_traitements": {
     "texte": "Le contenu fait partie du TEXTE de l'article et doit être sérialisé. Une balise de cette classe que le walker ne descend pas produit un article amputé — servi, plausible, faux.",
     "structure": "Conteneur : on le traverse sans rien émettre soi-même.",
@@ -10,7 +10,7 @@
     "ignore": "Ni texte, ni métadonnée, ni refus : sans effet sur l'ingestion."
   },
   "ref": "855cdfc65207a6906c414e09a77d7f93267c5356",
-  "fichiers_releves": 44,
+  "fichiers_releves": 50,
   "chaines_ingerables": [
     "Statute < Body",
     "Regulation < Body",
@@ -20,24 +20,24 @@
   "balises": {
     "Definition": {
       "traitement": "texte",
-      "occurrences": 1842,
+      "occurrences": 2785,
       "note": "⚠️ LA PLUS IMPORTANTE DU CLASSEMENT. Le SPEC §3.5 ne la nomme PAS. Mesuré sur l'art. 2 de la L.F.I. : 51 blocs `Definition`, 13 736 caractères ; un walker qui ne les descend pas rend « Les définitions qui suivent s'appliquent à la présente loi. » — 59 caractères, soit 99,6 % de l'article perdu, sur la disposition la plus citée de toute loi.",
       "justification_juridique": "Une définition est du texte normatif : elle fixe le sens des termes employés par la loi."
     },
     "DefinitionEnOnly": {
       "traitement": "texte",
-      "occurrences": 15,
+      "occurrences": 18,
       "note": "Terme défini n'existant QUE dans la version anglaise. Asymétrie voulue par le législateur, pas un défaut d'extraction.",
       "justification_juridique": "Les deux versions font également foi ; un terme propre à l'une ne s'efface pas."
     },
     "DefinitionFrOnly": {
       "traitement": "texte",
-      "occurrences": 6,
+      "occurrences": 7,
       "note": "Miroir du précédent."
     },
     "ContinuedSubparagraph": {
       "traitement": "texte",
-      "occurrences": 2,
+      "occurrences": 3,
       "note": "Le SPEC §3.5 nomme `ContinuedSectionSubsection`, `ContinuedParagraph` et `ContinuedDefinition` mais OUBLIE celle-ci. Même famille, même règle : rattacher APRÈS l'énumération qu'elle ferme, sinon la phrase se disloque."
     },
     "ReadAsText": {
@@ -48,18 +48,18 @@
     },
     "Oath": {
       "traitement": "texte",
-      "occurrences": 6,
+      "occurrences": 32,
       "note": "Formule de serment prescrite.",
       "justification_juridique": "Une formule prescrite par la loi est du texte de la loi."
     },
     "Enacts": {
       "traitement": "texte",
-      "occurrences": 4,
+      "occurrences": 8,
       "note": "Formule d'édiction, sous `Introduction`."
     },
     "Footnote": {
       "traitement": "texte",
-      "occurrences": 30,
+      "occurrences": 63,
       "note": "Le SPEC nomme `FootnoteRef` (le renvoi en ligne) mais pas le CONTENU de la note. TRANCHÉ par Jason le 2026-09-11 : ingérée, ÉTIQUETÉE, et rendue À LA FIN de l'article — jamais insérée au fil du texte, où elle romprait la phrase. L'étiquette est un champ obligatoire de `structuredContent` (R4, corollaire structuré, décision 001) : une note servie sans elle se lirait comme du texte de loi.",
       "justification_juridique": "DÉCIDÉ. L'art. 14 de la Loi d'interprétation (L.R.C. (1985), ch. I-21) exclut du texte les notes marginales et les mentions de textes antérieurs ; il ne nomme PAS les notes en bas de page. Faute d'exclusion légale, la note est rendue — mais distinctement, parce que rien n'affirme qu'elle soit normative.",
       "rendu": "fin_d_article",
@@ -67,38 +67,38 @@
     },
     "FormBlank": {
       "traitement": "texte",
-      "occurrences": 68,
+      "occurrences": 202,
       "note": "Espace à remplir sur un formulaire prescrit. À rendre par un marqueur stable plutôt que par du vide."
     },
     "table": {
       "traitement": "texte",
-      "occurrences": 102,
+      "occurrences": 124,
       "note": "CALS. Le SPEC §3.5 exige un « rendu tabulaire propre, PAS d'aplatissement en bouillie »."
     },
     "tgroup": {
       "traitement": "structure",
-      "occurrences": 102
+      "occurrences": 124
     },
     "tbody": {
       "traitement": "structure",
-      "occurrences": 102
+      "occurrences": 124
     },
     "thead": {
       "traitement": "structure",
-      "occurrences": 22
+      "occurrences": 38
     },
     "row": {
       "traitement": "structure",
-      "occurrences": 1161
+      "occurrences": 1269
     },
     "entry": {
       "traitement": "texte",
-      "occurrences": 4400,
+      "occurrences": 4690,
       "note": "Cellule. La balise la plus fréquente du corpus."
     },
     "colspec": {
       "traitement": "ignore",
-      "occurrences": 295,
+      "occurrences": 355,
       "note": "Largeurs de colonnes : présentation."
     },
     "title": {
@@ -108,7 +108,7 @@
     },
     "Caption": {
       "traitement": "texte",
-      "occurrences": 8,
+      "occurrences": 14,
       "note": "Légende d'un `TableGroup`."
     },
     "FormulaGroup": {
@@ -143,16 +143,16 @@
     },
     "SignatureBlock": {
       "traitement": "texte",
-      "occurrences": 251,
+      "occurrences": 265,
       "note": "Bloc de signature d'un formulaire prescrit. Vit sous `Provision` (141) et `entry` (52), donc dans les annexes."
     },
     "SignatureName": {
       "traitement": "texte",
-      "occurrences": 282
+      "occurrences": 296
     },
     "SignatureLine": {
       "traitement": "texte",
-      "occurrences": 213
+      "occurrences": 227
     },
     "SignatureTitle": {
       "traitement": "texte",
@@ -160,16 +160,16 @@
     },
     "DocumentInternal": {
       "traitement": "structure",
-      "occurrences": 8,
+      "occurrences": 14,
       "note": "Conteneur d'annexe (T-13, D-3.4). C'est l'une des deux imbrications réelles de `Schedule` hors racine."
     },
     "Group": {
       "traitement": "structure",
-      "occurrences": 4
+      "occurrences": 22
     },
     "GroupHeading": {
       "traitement": "division",
-      "occurrences": 314,
+      "occurrences": 332,
       "note": "Intertitre interne d'annexe, sous `DocumentInternal`. Produit une division, donc entre dans le chemin positionnel de l'annexe."
     },
     "RegulationPiece": {
@@ -193,39 +193,39 @@
     },
     "ShortTitle": {
       "traitement": "metadonnee",
-      "occurrences": 38,
+      "occurrences": 44,
       "note": "Titre abrégé officiel (`status=\"official\"`). Source de `laws.name_fr`/`name_en` pour une LOI. Les règlements n'en ont pas."
     },
     "LongTitle": {
       "traitement": "metadonnee",
-      "occurrences": 44,
+      "occurrences": 50,
       "note": "Titre intégral. SEULE source de titre pour un RÈGLEMENT (36 = 32 lois + 4 règlements)."
     },
     "RunningHead": {
       "traitement": "ignore",
-      "occurrences": 38,
+      "occurrences": 44,
       "note": "Titre courant : présentation."
     },
     "BillHistory": {
       "traitement": "ignore",
-      "occurrences": 38
+      "occurrences": 44
     },
     "Stages": {
       "traitement": "ignore",
-      "occurrences": 42
+      "occurrences": 52
     },
     "Date": {
       "traitement": "metadonnee",
-      "occurrences": 54,
+      "occurrences": 64,
       "note": "Sous `ConsolidationDate` et `RegistrationDate`. NB : `Identification/ConsolidationDate` et l'attribut `lims:current-date` DIVERGENT d'un jour sur C.R.C. ch. 368 — le SPEC §3.7 tranche pour `lims:current-date`, et on s'y tient."
     },
     "MM": {
       "traitement": "structure",
-      "occurrences": 54
+      "occurrences": 64
     },
     "DD": {
       "traitement": "structure",
-      "occurrences": 54
+      "occurrences": 64
     },
     "ConsolidationDate": {
       "traitement": "metadonnee",
@@ -260,21 +260,21 @@
     },
     "Note": {
       "traitement": "hors_texte",
-      "occurrences": 6,
+      "occurrences": 8,
       "note": "Sous `Provision` (4) et `ReaderNote` (2) : note de l'éditeur."
     },
     "Amendment": {
       "traitement": "ignore",
-      "occurrences": 248,
+      "occurrences": 302,
       "note": "Vit UNIQUEMENT sous `RecentAmendments`, que le SPEC §3.1 exclut déjà. Vérifié : aucune occurrence ailleurs."
     },
     "AmendmentCitation": {
       "traitement": "ignore",
-      "occurrences": 248
+      "occurrences": 302
     },
     "AmendmentDate": {
       "traitement": "ignore",
-      "occurrences": 248
+      "occurrences": 302
     },
     "BillNumber": {
       "traitement": "ignore",
@@ -315,6 +315,23 @@
       "traitement": "ignore",
       "occurrences": 2,
       "note": "Nom du monarque sous `Identification > Parliament > RegnalYear` (loi annuelle)."
+    },
+    "Keep": {
+      "traitement": "texte",
+      "occurrences": 1,
+      "note": "Conteneur typographique d'insécabilité dans <Text> (observé à l'art. 696.75 EN du Code criminel autour de « authorized »).",
+      "justification_juridique": "Le mot encadré fait partie intégrante de la phrase édictée."
+    },
+    "List": {
+      "traitement": "structure",
+      "occurrences": 104,
+      "note": "Liste structurée d'éléments <Item> dans les annexes de substances désignées (C-38.8, annexes I à IV, VI et IX)."
+    },
+    "Item": {
+      "traitement": "texte",
+      "occurrences": 1030,
+      "note": "Entrée numérotée ou lettrée d'une <List> d'annexe (C-38.8), portant Label, Text et éventuellement sous-List.",
+      "justification_juridique": "Les substances inscrites aux annexes de la LRCDAS définissent l'élément matériel des infractions des art. 4 à 7."
     }
   },
   "_rendu": {
