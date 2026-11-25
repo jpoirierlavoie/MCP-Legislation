@@ -55,8 +55,8 @@
   // les textes `source = 'pdf'` redeviennent INVISIBLES à tous les outils, aux vecteurs et
   // aux décomptes de `GET /` — rollback = flip de variable.
   // CRIMINAL_CORPUS : l'interrupteur du silo criminel fédéral (`jurisdiction = 'ca'` et
-  // `domain = 'penal'`, Vague 3, R8). À "0" par défaut jusqu'à ingestion, backfill
-  // Vectorize et validation complète de la calibration; à "1" une fois validé.
+  // `domain = 'penal'`, Vague 3, R8). À "1" en production ; à "0" (ou absent), les trois
+  // textes redeviennent INVISIBLES à tous les outils, aux vecteurs et à `GET /` — rollback = flip.
   // MCP_ENABLED — COUPE-CIRCUIT DU BLOC /mcp, fermé par défaut.
   //
   // La polarité est « !== "true" ⇒ éteint » : variable absente, vide ou mal orthographiée
@@ -72,7 +72,7 @@
     "HYBRID_SEARCH": "1",
     "FEDERAL_CORPUS": "1",
     "PDF_CORPUS": "1",
-    "CRIMINAL_CORPUS": "0",
+    "CRIMINAL_CORPUS": "1",
     "DOMAIN_QUARANTINE": "1",
     "VECTOR_DOMAIN_FILTER": "1",
     "MCP_ENABLED": "true",
