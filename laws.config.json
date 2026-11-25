@@ -2677,6 +2677,479 @@
         "en": "https://laws-lois.justice.gc.ca/PDF/CONST_TRD.pdf"
       },
       "domain": "core"
+    },
+    {
+      "id": "c-11",
+      "name_fr": "Charte de la langue française",
+      "name_en": "Charter of the French language",
+      "official_cite": "RLRQ, c. C-11",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/C-11.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/C-11.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/C-11",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/C-11"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Transversal"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "core"
+    },
+    {
+      "id": "a-25",
+      "name_fr": "Loi sur l’assurance automobile",
+      "name_en": "Automobile Insurance Act",
+      "official_cite": "RLRQ, c. A-25",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/A-25.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/A-25.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/A-25",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/A-25"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Tribunal administratif du Québec",
+        "Cour supérieure",
+        "Cour du Québec"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "core"
+    },
+    {
+      "id": "c-37",
+      "name_fr": "Loi sur les commissions d’enquête",
+      "name_en": "Act respecting public inquiry commissions",
+      "official_cite": "RLRQ, c. C-37",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/C-37.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/C-37.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/C-37",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/C-37"
+      },
+      "fonction": "loi",
+      "forum": [],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "core"
+    },
+    {
+      "id": "c-81",
+      "name_fr": "Loi sur le curateur public",
+      "name_en": "Public Curator Act",
+      "official_cite": "RLRQ, c. C-81",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/C-81.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/C-81.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/C-81",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/C-81"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Cour supérieure"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "core"
+    },
+    {
+      "id": "n-3",
+      "name_fr": "Loi sur le notariat",
+      "name_en": "Notaries Act",
+      "official_cite": "RLRQ, c. N-3",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/N-3.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/N-3.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/N-3",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/N-3"
+      },
+      "fonction": "loi",
+      "forum": [],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "core"
+    },
+    {
+      "id": "ca-dors-2002-156",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Règles de la Cour suprême du Canada",
+      "name_en": "Rules of the Supreme Court of Canada",
+      "official_cite": "DORS/2002-156",
+      "official_cite_en": "SOR/2002-156",
+      "chapter": "DORS/2002-156",
+      "xml": {
+        "fr": "fra/reglements/DORS-2002-156.xml",
+        "en": "eng/regulations/SOR-2002-156.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/reglements/DORS-2002-156/",
+        "en": "https://lois-laws.justice.gc.ca/eng/regulations/SOR-2002-156/"
+      },
+      "fonction": "regles-procedure",
+      "numbering": "decimal",
+      "unit": "regle",
+      "enabling": "ca-s-26",
+      "forum": [
+        "Cour suprême du Canada"
+      ],
+      "domain": "core"
+    },
+    {
+      "id": "ca-c-7.75",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi canadienne sur les organisations à but non lucratif",
+      "name_en": "Canada Not-for-profit Corporations Act",
+      "official_cite": "L.C. 2009, ch. 23",
+      "official_cite_en": "S.C. 2009, c. 23",
+      "chapter": "C-7.75",
+      "xml": {
+        "fr": "fra/lois/C-7.75.xml",
+        "en": "eng/acts/C-7.75.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/C-7.75/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/C-7.75/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure"
+      ],
+      "domain": "core"
+    },
+    {
+      "id": "t-15.1",
+      "name_fr": "Loi instituant le Tribunal administratif du travail",
+      "name_en": "Act to establish the Administrative Labour Tribunal",
+      "official_cite": "RLRQ, c. T-15.1",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/T-15.1.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/T-15.1.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/T-15.1",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/T-15.1"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Tribunal administratif du travail"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "travail"
+    },
+    {
+      "id": "t-15.1-r.1.1",
+      "name_fr": "Règles de preuve et de procédure du Tribunal administratif du travail",
+      "name_en": "Rules of evidence and procedure of the Administrative Labour Tribunal",
+      "official_cite": "RLRQ, c. T-15.1, r. 1.1",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cr/T-15.1,%20R.%201.1.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cr/T-15.1,%20R.%201.1.epub"
+      },
+      "consolidation": {
+        "fr": "2026-07-01",
+        "en": "2026-07-01"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cr/T-15.1,%20R.%201.1",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cr/T-15.1,%20R.%201.1"
+      },
+      "fonction": "regles-procedure",
+      "forum": [
+        "Tribunal administratif du travail"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cr",
+      "domain": "travail"
+    },
+    {
+      "id": "c-27",
+      "name_fr": "Code du travail",
+      "name_en": "Labour Code",
+      "official_cite": "RLRQ, c. C-27",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/C-27.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/C-27.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/C-27",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/C-27"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Tribunal administratif du travail"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "travail"
+    },
+    {
+      "id": "a-3.001",
+      "name_fr": "Loi sur les accidents du travail et les maladies professionnelles",
+      "name_en": "Act respecting industrial accidents and occupational diseases",
+      "official_cite": "RLRQ, c. A-3.001",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/A-3.001.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/A-3.001.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/A-3.001",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/A-3.001"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Tribunal administratif du travail"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "travail"
+    },
+    {
+      "id": "s-2.1",
+      "name_fr": "Loi sur la santé et la sécurité du travail",
+      "name_en": "Act respecting occupational health and safety",
+      "official_cite": "RLRQ, c. S-2.1",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/S-2.1.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/S-2.1.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/S-2.1",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/S-2.1"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Tribunal administratif du travail"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "travail"
+    },
+    {
+      "id": "c-47.1",
+      "name_fr": "Loi sur les compétences municipales",
+      "name_en": "Municipal Powers Act",
+      "official_cite": "RLRQ, c. C-47.1",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/C-47.1.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/C-47.1.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/C-47.1",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/C-47.1"
+      },
+      "fonction": "loi",
+      "forum": [],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
+    },
+    {
+      "id": "a-19.1",
+      "name_fr": "Loi sur l’aménagement et l’urbanisme",
+      "name_en": "Act respecting land use planning and development",
+      "official_cite": "RLRQ, c. A-19.1",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/A-19.1.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/A-19.1.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/A-19.1",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/A-19.1"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Cour supérieure"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
+    },
+    {
+      "id": "q-2",
+      "name_fr": "Loi sur la qualité de l’environnement",
+      "name_en": "Environment Quality Act",
+      "official_cite": "RLRQ, c. Q-2",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/Q-2.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/Q-2.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/Q-2",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/Q-2"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Tribunal administratif du Québec",
+        "Cour supérieure"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
+    },
+    {
+      "id": "p-41.1",
+      "name_fr": "Loi sur la protection du territoire et des activités agricoles",
+      "name_en": "Act respecting the preservation of agricultural land and agricultural activities",
+      "official_cite": "RLRQ, c. P-41.1",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/P-41.1.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/P-41.1.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/P-41.1",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/P-41.1"
+      },
+      "fonction": "loi",
+      "forum": [
+        "Tribunal administratif du Québec"
+      ],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
+    },
+    {
+      "id": "ca-p-4",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur les brevets",
+      "name_en": "Patent Act",
+      "official_cite": "L.R.C. (1985), ch. P-4",
+      "official_cite_en": "R.S.C. 1985, c. P-4",
+      "chapter": "P-4",
+      "xml": {
+        "fr": "fra/lois/P-4.xml",
+        "en": "eng/acts/P-4.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/P-4/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/P-4/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure",
+        "Cour fédérale"
+      ],
+      "domain": "propriete-intellectuelle"
+    },
+    {
+      "id": "ca-i-9",
+      "source": "lims",
+      "jurisdiction": "ca",
+      "name_fr": "Loi sur les dessins industriels",
+      "name_en": "Industrial Design Act",
+      "official_cite": "L.R.C. (1985), ch. I-9",
+      "official_cite_en": "R.S.C. 1985, c. I-9",
+      "chapter": "I-9",
+      "xml": {
+        "fr": "fra/lois/I-9.xml",
+        "en": "eng/acts/I-9.xml"
+      },
+      "official_source": {
+        "fr": "https://lois-laws.justice.gc.ca/fra/lois/I-9/",
+        "en": "https://lois-laws.justice.gc.ca/eng/acts/I-9/"
+      },
+      "fonction": "loi",
+      "numbering": "decimal",
+      "unit": "article",
+      "forum": [
+        "Cour supérieure",
+        "Cour fédérale"
+      ],
+      "domain": "propriete-intellectuelle"
+    },
+    {
+      "id": "s-29.02",
+      "name_fr": "Loi sur les sociétés de fiducie et les sociétés d’épargne",
+      "name_en": "Trust Companies and Savings Companies Act",
+      "official_cite": "RLRQ, c. S-29.02",
+      "epub": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/epub/cs/S-29.02.epub",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/epub/cs/S-29.02.epub"
+      },
+      "consolidation": {
+        "fr": "2026-10-15",
+        "en": "2026-10-15"
+      },
+      "consolidation_source": {
+        "fr": "https://www.legisquebec.gouv.qc.ca/fr/document/cs/S-29.02",
+        "en": "https://www.legisquebec.gouv.qc.ca/en/document/cs/S-29.02"
+      },
+      "fonction": "loi",
+      "forum": [],
+      "numbering": "standard",
+      "kind_epub": "cs",
+      "domain": "financier"
     }
   ]
 }

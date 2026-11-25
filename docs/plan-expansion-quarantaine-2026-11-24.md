@@ -46,12 +46,12 @@ Ce document consigne l'architecture de quarantaine par domaine arrêtée avec Ja
 
 ## 2. Feuille de route d'expansion (Vagues 1 à 3)
 
-### Vague 1 — Textes constitutionnels (`core`, PR dédiée)
+### Vague 1 — Textes constitutionnels (`core`, PR dédiée — **livré en prod, `c69a956`**)
 - **Ajouts en fin de `laws.config.json` (invariant 1) :** `ca-const-1867` (*Loi constitutionnelle de 1867*, art. 1–147) et `ca-const-1982` (*Loi constitutionnelle de 1982*, art. 1–61 — gardant la *Charte canadienne* art. 1–34 et l'art. 52 réunis).
 - **Ingestion :** `pipeline/parser_pdf.py` via deux profils déclaratifs bornés par plages de pages sur les PDF consolidés officiels FR/EN de Justice Canada (évite la collision des numéros 1–61 entre 1867 et 1982, zéro parseur HTML neuf).
 - **Citations (`resolve_reference`) :** Reconnaissance des abréviations *Charte canadienne*, *Canadian Charter*, *L.C. 1982*, *L.C. 1867*, *Constitution Act, 1867/1982*.
 
-### Vague 2 — Lois sectorielles provinciales et fédérales (PRs dédiées)
+### Vague 2 — Lois sectorielles provinciales et fédérales (19 textes, `feat/wave2-sectoral-statutes`)
 - **`core` :**
   - `c-11` — *Charte de la langue française*
   - `a-25` — *Loi sur l'assurance automobile* (immunité civile art. 83.57)

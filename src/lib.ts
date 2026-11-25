@@ -1969,6 +1969,17 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
       motif =
         /\b(?:charte\s+(?:des\s+droits\s+et\s+libert[ée]s\s+de\s+la\s+personne|qu[ée]b[ée]coise(?:\s+des\s+droits(?:\s+et\s+libert[ée]s)?)?)|(?:qu[ée]bec\s+)?charter\s+of\s+human\s+rights(?:\s+and\s+freedoms)?|qu[ée]bec\s+charter)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*)?C\.?\s*d\.?\s*l\.?\s*p\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i;
     } else if (
+      /\b(?:charte\s+de\s+la\s+langue\s+fran[çc]aise|charter\s+of\s+the\s+french\s+language|(?:loi|bill)\s+101)\b|(?<![A-Za-zÀ-ÿ0-9.])C\.?\s*l\.?\s*f\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i.test(
+        citation,
+      )
+    ) {
+      if (byId.has("c-11")) {
+        law = "c-11";
+        lawSource = "abreviation";
+      }
+      motif =
+        /\b(?:charte\s+de\s+la\s+langue\s+fran[çc]aise|charter\s+of\s+the\s+french\s+language|(?:loi|bill)\s+101)\b|(?<![A-Za-zÀ-ÿ0-9.])C\.?\s*l\.?\s*f\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i;
+    } else if (
       /\b(?:charte|charter)\b/i.test(norm) &&
       !/\b(?:charte\s+(?:de\s+la\s+(?:langue|ville)|municipale|des\s+droits\s+du\s+contribuable)|charter\s+of\s+(?:the\s+(?:french|city)|taxpayer))\b/i.test(
         norm,
@@ -2011,6 +2022,14 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
           /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*P\.?\s*R\.?\s*P\.?\s*D\.?\s*E\.?|P\.?\s*I\.?\s*P\.?\s*E\.?\s*D\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
         ],
         [
+          "ca-c-7.75",
+          /\b(?:loi\s+canadienne\s+sur\s+les\s+organisations\s+[àa]\s+but\s+non\s+lucratif|canada\s+not-?for-?profit\s+corporations?\s+act)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*C\.?\s*O\.?\s*B\.?\s*N\.?\s*L\.?|C\.?\s*N\.?\s*C\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])|(?:c\.|ch\.|chapitres?|chapters?)\s*C-7\.75(?![0-9.-])/i,
+        ],
+        [
+          "ca-dors-2002-156",
+          /\b(?:r[èe]gles\s+de\s+la\s+cour\s+supr[êe]me\s+du\s+canada|rules\s+of\s+the\s+supreme\s+court\s+of\s+canada)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:R\.?\s*C\.?\s*S\.?\s*C\.?|R\.?\s*S\.?\s*C\.?\s*C\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
           "ca-c-44",
           /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*C\.?\s*S\.?\s*A\.?|C\.?\s*B\.?\s*C\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
         ],
@@ -2028,12 +2047,20 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
         ],
         ["ca-c-42", /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*D\.?\s*A\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i],
         [
+          "ca-p-4",
+          /\b(?:loi\s+sur\s+les\s+brevets|patent\s+act)\b|(?:(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)[^,\n]*,\s*)?(?:c\.|ch\.|chapitres?|chapters?)\s*P-4(?![0-9.-])/i,
+        ],
+        [
+          "ca-i-9",
+          /\b(?:loi\s+sur\s+les\s+dessins\s+industriels|industrial\s+design\s+act)\b|(?:(?:L\.?\s*R\.?\s*C\.?|R\.?\s*S\.?\s*C\.?)[^,\n]*,\s*)?(?:c\.|ch\.|chapitres?|chapters?)\s*I-9(?![0-9.-])/i,
+        ],
+        [
           "ca-t-13",
           /(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*M\.?\s*C\.?|T\.?\s*M\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
         ],
         [
           "ca-l-2",
-          /(?<![A-Za-zÀ-ÿ0-9.])(?:C\.?\s*c\.?\s*t\.?|C\.?\s*L\.?\s*C\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+          /\b(?:code\s+canadien\s+du\s+travail|canada\s+labour\s+code)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:C\.?\s*c\.?\s*t\.?|C\.?\s*L\.?\s*C\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
         ],
         ["ca-c-5", /(?<![A-Za-zÀ-ÿ0-9.])C\.?\s*E\.?\s*A\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i],
         [
@@ -2055,6 +2082,43 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
         [
           "ca-d-3.4",
           /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*D\.?(?!\.?[A-Za-zÀ-ÿ0-9])(?!\s+[A-Za-z]\.(?!\s*\d))/i,
+        ],
+        // Abréviations et titres usuels québécois ajoutés à la Vague 2
+        [
+          "a-3.001",
+          /\bloi\s+sur\s+les\s+accidents\s+du\s+travail\s+et\s+les\s+maladies\s+professionnelles\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*A\.?\s*T\.?\s*M\.?\s*P\.?|A\.?\s*I\.?\s*A\.?\s*O\.?\s*D\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "p-41.1",
+          /\bloi\s+sur\s+la\s+protection\s+du\s+territoire\s+et\s+des\s+activit[ée]s\s+agricoles\b|(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*P\.?\s*T\.?\s*A\.?\s*A\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "t-15.1",
+          /\bloi\s+instituant\s+le\s+tribunal\s+administratif\s+du\s+travail\b|(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*I\.?\s*T\.?\s*A\.?\s*T\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "s-2.1",
+          /\bloi\s+sur\s+la\s+sant[ée]\s+et\s+la\s+s[ée]curit[ée]\s+du\s+travail\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*S\.?\s*S\.?\s*T\.?|A\.?\s*O\.?\s*H\.?\s*S\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "a-25",
+          /\b(?:loi\s+sur\s+l['’]assurance\s+automobile|automobile\s+insurance\s+act)\b|(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*A\.?\s*A\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "q-2",
+          /\b(?:loi\s+sur\s+la\s+qualit[ée]\s+de\s+l['’]environnement|environment\s+quality\s+act)\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*Q\.?\s*E\.?|E\.?\s*Q\.?\s*A\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "a-19.1",
+          /\bloi\s+sur\s+l['’]am[ée]nagement\s+et\s+l['’]urbanisme\b|(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*A\.?\s*U\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "c-47.1",
+          /\b(?:loi\s+sur\s+les\s+comp[ée]tences\s+municipales|municipal\s+powers\s+act)\b|(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*C\.?\s*M\.?(?!\.?[A-Za-zÀ-ÿ0-9])/i,
+        ],
+        [
+          "c-27",
+          /\b(?:code\s+du\s+travail(?:\s+du\s+qu[ée]bec)?|qu[ée]bec\s+labour\s+code)\b|(?<![A-Za-zÀ-ÿ0-9.])C\.?\s*t\.?(?!\.?[A-Za-zÀ-ÿ0-9])(?!\s*-)/i,
         ],
       ];
       for (const [id, re] of FEDERAL_ABBREVS) {

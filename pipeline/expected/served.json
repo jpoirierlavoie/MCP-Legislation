@@ -1,5 +1,5 @@
 {
-  "_comment": "CE QUE LE SERVEUR SERT sous PDF_CORPUS. 110 textes de laws.config.json (79 quebecois EPUB, 18 federaux LIMS, 13 QC source='pdf' : directives QCCS/QCCQ, reglements AMF et instructions generales). Ce fichier reste la source du decompte du README (tests/catalogue.test.mjs) ; le rollback R8 reste un flip de variable (FEDERAL_CORPUS / PDF_CORPUS).",
+  "_comment": "CE QUE LE SERVEUR SERT sous PDF_CORPUS. 131 textes de laws.config.json (94 quebecois EPUB, 22 federaux LIMS, 15 source='pdf' : 13 QC + 2 Lois constitutionnelles). Ce fichier reste la source du decompte du README (tests/catalogue.test.mjs) ; le rollback R8 reste un flip de variable (FEDERAL_CORPUS / PDF_CORPUS).",
   "flag": "PDF_CORPUS",
   "ids": [
     "ccq",
@@ -113,6 +113,25 @@
     "amf-ig-45-106",
     "amf-ig-51-102",
     "ca-const-1867",
-    "ca-const-1982"
+    "ca-const-1982",
+    "c-11",
+    "a-25",
+    "c-37",
+    "c-81",
+    "n-3",
+    "ca-dors-2002-156",
+    "ca-c-7.75",
+    "t-15.1",
+    "t-15.1-r.1.1",
+    "c-27",
+    "a-3.001",
+    "s-2.1",
+    "c-47.1",
+    "a-19.1",
+    "q-2",
+    "p-41.1",
+    "ca-p-4",
+    "ca-i-9",
+    "s-29.02"
   ]
 }

@@ -141,15 +141,15 @@ class TestClassementDesTextesSubordonnes(unittest.TestCase):
         ):
             self.assertEqual(R._is_regulation({"id": "x", "official_cite": cite}), attendu, cite)
 
-    def test_les_deux_reglements_federaux_sont_bien_classes_subordonnes(self):
+    def test_les_trois_reglements_federaux_sont_bien_classes_subordonnes(self):
         subordonnes = [l["id"] for l in config.load_all_laws()
                        if (l.get("jurisdiction") == "ca") and R._is_regulation(l)]
-        self.assertEqual(sorted(subordonnes), ["ca-crc-368", "ca-dors-98-106"])
+        self.assertEqual(sorted(subordonnes), ["ca-crc-368", "ca-dors-2002-156", "ca-dors-98-106"])
 
-    def test_les_16_lois_federales_sont_des_lois_habilitantes_candidates(self):
+    def test_les_19_lois_federales_sont_des_lois_habilitantes_candidates(self):
         by_root = R._carte(config.load_all_laws(), root=True, seulement_lois=True)
         federales = [v for k, v in by_root.items() if k[0] == "ca"]
-        self.assertEqual(len(federales), 16)
+        self.assertEqual(len(federales), 19)
 
 
 class _FausseBase:

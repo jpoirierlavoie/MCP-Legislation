@@ -5,8 +5,8 @@
       "label_fr": "Personnes",
       "label_en": "Persons",
       "kind": "prive-ccq",
-      "description_fr": "Personnalité juridique, capacité, majeurs protégés, personnes morales (Livre 1 C.c.Q.).",
-      "description_en": "Juridical personality, capacity, protected persons of full age, legal persons (Book One, C.C.Q.)."
+      "description_fr": "Personnalité juridique, capacité, majeurs protégés, Curateur public, tutelle, mandat de protection, personnes morales (Livre 1 C.c.Q. et Loi sur le curateur public).",
+      "description_en": "Juridical personality, capacity, protected persons of full age, Public Curator, tutorship, protection mandate, legal persons (Book One, C.C.Q. and Public Curator Act)."
     },
     {
       "id": "famille",
@@ -109,8 +109,8 @@
       "label_fr": "Droit administratif",
       "label_en": "Administrative Law",
       "kind": "specialise",
-      "description_fr": "Justice administrative, contrôle des décisions de l'Administration, TAQ.",
-      "description_en": "Administrative justice, review of decisions of the Administration, Administrative Tribunal of Québec (TAQ)."
+      "description_fr": "Justice administrative, contrôle des décisions de l'Administration, TAQ, commissions d'enquête publiques, assignation de témoins.",
+      "description_en": "Administrative justice, review of decisions of the Administration, Administrative Tribunal of Québec (TAQ), public inquiry commissions, summoning of witnesses."
     },
     {
       "id": "louage",
@@ -141,8 +141,8 @@
       "label_fr": "Sociétés par actions et compagnies",
       "label_en": "Business Corporations and Companies",
       "kind": "specialise",
-      "description_fr": "Sociétés par actions et compagnies : actionnaires, administrateurs, oppression.",
-      "description_en": "Business corporations and companies: shareholders, directors, oppression."
+      "description_fr": "Sociétés par actions, compagnies et organisations à but non lucratif : actionnaires, administrateurs, membres, oppression.",
+      "description_en": "Business corporations, companies and not-for-profit corporations: shareholders, directors, members, oppression."
     },
     {
       "id": "registraire-entreprises",
@@ -181,16 +181,16 @@
       "label_fr": "Institutions de dépôts, caisses et assureurs",
       "label_en": "Deposit Institutions, Credit Unions and Insurers",
       "kind": "specialise",
-      "description_fr": "Institution financière : institution de dépôts, caisse, assureur, activités monétaires.",
-      "description_en": "Financial institution: deposit institution, credit union (caisse), insurer, monetary activities."
+      "description_fr": "Institution financière : institution de dépôts, caisse, assureur, société de fiducie et société d'épargne, activités monétaires.",
+      "description_en": "Financial institution: deposit institution, credit union (caisse), insurer, trust company and savings company, monetary activities."
     },
     {
       "id": "assurances",
       "label_fr": "Assurances",
       "label_en": "Insurance",
       "kind": "specialise",
-      "description_fr": "Contrat d'assurance (C.c.Q.) et assureurs.",
-      "description_en": "Contract of insurance (C.C.Q.) and insurers."
+      "description_fr": "Contrat d'assurance (C.c.Q.), assureurs et assurance automobile (SAAQ, indemnisation du préjudice corporel).",
+      "description_en": "Contract of insurance (C.C.Q.), insurers and automobile insurance (SAAQ, bodily injury compensation)."
     },
     {
       "id": "travail-emploi",
@@ -213,8 +213,8 @@
       "label_fr": "Droit professionnel et déontologie",
       "label_en": "Professional Law and Ethics",
       "kind": "specialise",
-      "description_fr": "Ordres professionnels, Barreau, déontologie et normes d'exercice des avocats.",
-      "description_en": "Professional orders, the Barreau du Québec, code of professional conduct and practice standards of lawyers."
+      "description_fr": "Ordres professionnels, Barreau, notaires, Chambre des notaires, acte notarié en minute, déontologie et normes d'exercice.",
+      "description_en": "Professional orders, the Barreau du Québec, notaries, Chambre des notaires, notarial act en minute, code of professional conduct and practice standards."
     },
     {
       "id": "technologies-information",
@@ -229,8 +229,8 @@
       "label_fr": "Droit municipal",
       "label_en": "Municipal Law",
       "kind": "specialise",
-      "description_fr": "Cités et villes, municipalités locales, municipalités régionales de comté (MRC), communautés métropolitaines : Code municipal du Québec, contrats municipaux, éthique et déontologie municipales des élus.",
-      "description_en": "Municipality: cities and towns, local municipalities, regional county municipalities (RCM), metropolitan communities; Municipal Code of Québec, municipal contracts, ethics and professional conduct of municipal officers."
+      "description_fr": "Cités et villes, municipalités locales, municipalités régionales de comté (MRC), communautés métropolitaines : compétences municipales, Code municipal du Québec, règlements municipaux, voirie, sécurité, nuisances, contrats municipaux, éthique et déontologie municipales des élus.",
+      "description_en": "Municipality: cities and towns, local municipalities, regional county municipalities (RCM), metropolitan communities; municipal powers, Municipal Code of Québec, municipal bylaws, roads, safety, nuisances, municipal contracts, ethics and professional conduct of municipal officers."
     },
     {
       "id": "immobilier-courtage",
@@ -317,16 +317,16 @@
       "label_fr": "Propriété intellectuelle",
       "label_en": "Intellectual Property",
       "kind": "specialise",
-      "description_fr": "Droit d'auteur, droits moraux et marques de commerce : œuvre littéraire, artistique, dramatique ou musicale, titularité du droit d'auteur, plagiat, utilisation équitable, artiste-interprète, enregistrement sonore, radiodiffuseur, signal de communication, redevances, Commission du droit d'auteur, marque officielle, marque projetée, caractère distinctif, achalandage, registraire des marques de commerce.",
-      "description_en": "Copyright, moral rights and trademarks: literary, artistic, dramatic or musical works, authorship of copyright, plagiarism, fair dealing, performer, sound recording, broadcaster, communication signal, royalties, Copyright Board, official mark, proposed trademark, distinctiveness, goodwill, Registrar of Trademarks."
+      "description_fr": "Droit d'auteur, droits moraux, marques de commerce, brevets d'invention et dessins industriels : œuvre littéraire, artistique, dramatique ou musicale, titularité du droit d'auteur, plagiat, utilisation équitable, artiste-interprète, enregistrement sonore, radiodiffuseur, signal de communication, redevances, Commission du droit d'auteur, marque officielle, marque projetée, caractère distinctif, achalandage, registraire des marques de commerce, brevet, invention, revendication, contrefaçon de brevet, nouveauté, activité inventive, dessin industriel.",
+      "description_en": "Copyright, moral rights, trademarks, patents and industrial designs: literary, artistic, dramatic or musical works, authorship of copyright, plagiarism, fair dealing, performer, sound recording, broadcaster, communication signal, royalties, Copyright Board, official mark, proposed trademark, distinctiveness, goodwill, Registrar of Trademarks, patent, invention, claims, patent infringement, novelty, non-obviousness, industrial design."
     },
     {
       "id": "cours-federales",
       "label_fr": "Cours fédérales et Cour suprême",
       "label_en": "Federal Courts and Supreme Court",
       "kind": "specialise",
-      "description_fr": "Cours fédérales et Cour suprême du Canada : Règles des Cours fédérales, contrôle judiciaire, office fédéral, mandamus, certiorari, quo warranto, prohibition, amirauté, droit maritime, navigation.",
-      "description_en": "Federal Courts and Supreme Court of Canada: Federal Courts Rules, judicial review, federal board, mandamus, certiorari, quo warranto, prohibition, admiralty, maritime law, navigation."
+      "description_fr": "Cours fédérales et Cour suprême du Canada : Règles des Cours fédérales, Règles de la Cour suprême du Canada, demande d'autorisation d'appel, mémoire, contrôle judiciaire, office fédéral, mandamus, certiorari, quo warranto, prohibition, amirauté, droit maritime, navigation.",
+      "description_en": "Federal Courts and Supreme Court of Canada: Federal Courts Rules, Rules of the Supreme Court of Canada, application for leave to appeal, factum, judicial review, federal board, mandamus, certiorari, quo warranto, prohibition, admiralty, maritime law, navigation."
     },
     {
       "id": "poursuites-couronne-federale",
@@ -359,6 +359,38 @@
       "kind": "specialise",
       "description_fr": "Constitution du Canada, fédéralisme, partage des compétences législatives, Parlement, législatures provinciales, paix ordre et bon gouvernement, propriété et droits civils, commerce, judicature, article 96, droits ancestraux et issus de traités, primauté de la Constitution, inopérabilité, modification constitutionnelle.",
       "description_en": "Constitution of Canada, federalism, division of legislative powers, Parliament, provincial legislatures, peace order and good government, property and civil rights, trade and commerce, judicature, section 96, Aboriginal and treaty rights, primacy of the Constitution, inoperability, constitutional amendment."
+    },
+    {
+      "id": "langue-francaise",
+      "label_fr": "Langue française",
+      "label_en": "French Language",
+      "kind": "specialise",
+      "description_fr": "Charte de la langue française : langue officielle, langue du travail, du commerce et des affaires, affichage public et publicité commerciale, contrats d'adhésion, francisation des entreprises, Office québécois de la langue française (OQLF).",
+      "description_en": "Charter of the French language: official language, language of work, commerce and business, public signs and commercial advertising, contracts of adhesion, francization of enterprises, Office québécois de la langue française (OQLF)."
+    },
+    {
+      "id": "relations-travail-syndicats",
+      "label_fr": "Relations du travail et syndicats",
+      "label_en": "Labour Relations and Unions",
+      "kind": "specialise",
+      "description_fr": "Relations collectives du travail et Tribunal administratif du travail (TAT) : accréditation syndicale, syndicat, unité de négociation, convention collective, négociation, grève, lock-out, briseur de grève, arbitrage de griefs, pratique déloyale, maintien d'emploi.",
+      "description_en": "Collective labour relations and Administrative Labour Tribunal (ALT): union certification, trade union, bargaining unit, collective agreement, collective bargaining, strike, lock-out, replacement workers, grievance arbitration, unfair labour practice."
+    },
+    {
+      "id": "sante-securite-lesions-professionnelles",
+      "label_fr": "Santé, sécurité et lésions professionnelles",
+      "label_en": "Occupational Health, Safety and Workplace Injuries",
+      "kind": "specialise",
+      "description_fr": "Lésions professionnelles et prévention au travail (CNESST) : accident du travail, maladie professionnelle, indemnité de remplacement du revenu, réadaptation, assignation temporaire, financement des employeurs, immunité civile, droit de refus, retrait préventif, inspecteur.",
+      "description_en": "Employment injuries and workplace prevention (CNESST): industrial accident, occupational disease, income replacement indemnity, rehabilitation, temporary assignment, employer assessments, civil immunity, right of refusal, preventive withdrawal, inspector."
+    },
+    {
+      "id": "amenagement-environnement-agricole",
+      "label_fr": "Aménagement, environnement et territoire agricole",
+      "label_en": "Land Use Planning, Environment and Agricultural Land",
+      "kind": "specialise",
+      "description_fr": "Aménagement du territoire, urbanisme, environnement et zone agricole : schéma d'aménagement, règlement de zonage, lotissement, dérogation mineure, usage dérogatoire, autorisation environnementale, étude d'impact, contamination des sols, milieux humides, CPTAQ, aliénation en zone agricole.",
+      "description_en": "Land use planning, urbanism, environment and agricultural zone: land use planning and development plan, zoning bylaw, subdivision, minor exemption, non-conforming use, environmental authorization, impact assessment, soil contamination, wetlands, CPTAQ, agricultural land preservation."
     }
   ],
   "mappings": [
@@ -965,6 +997,82 @@
       "subject": "droits-libertes-fondamentaux",
       "law": "ca-const-1982",
       "division_path": "ph1:1"
+    },
+    {
+      "subject": "langue-francaise",
+      "law": "c-11"
+    },
+    {
+      "subject": "assurances",
+      "law": "a-25"
+    },
+    {
+      "subject": "droit-administratif",
+      "law": "c-37"
+    },
+    {
+      "subject": "personnes",
+      "law": "c-81"
+    },
+    {
+      "subject": "droit-professionnel",
+      "law": "n-3"
+    },
+    {
+      "subject": "cours-federales",
+      "law": "ca-dors-2002-156"
+    },
+    {
+      "subject": "societes-par-actions",
+      "law": "ca-c-7.75"
+    },
+    {
+      "subject": "relations-travail-syndicats",
+      "law": "t-15.1"
+    },
+    {
+      "subject": "relations-travail-syndicats",
+      "law": "t-15.1-r.1.1"
+    },
+    {
+      "subject": "relations-travail-syndicats",
+      "law": "c-27"
+    },
+    {
+      "subject": "sante-securite-lesions-professionnelles",
+      "law": "a-3.001"
+    },
+    {
+      "subject": "sante-securite-lesions-professionnelles",
+      "law": "s-2.1"
+    },
+    {
+      "subject": "droit-municipal",
+      "law": "c-47.1"
+    },
+    {
+      "subject": "amenagement-environnement-agricole",
+      "law": "a-19.1"
+    },
+    {
+      "subject": "amenagement-environnement-agricole",
+      "law": "q-2"
+    },
+    {
+      "subject": "amenagement-environnement-agricole",
+      "law": "p-41.1"
+    },
+    {
+      "subject": "propriete-intellectuelle",
+      "law": "ca-p-4"
+    },
+    {
+      "subject": "propriete-intellectuelle",
+      "law": "ca-i-9"
+    },
+    {
+      "subject": "institutions-depots-assureurs",
+      "law": "s-29.02"
     }
   ]
 }

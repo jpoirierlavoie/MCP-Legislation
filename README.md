@@ -1,6 +1,6 @@
 # Lois du Québec et du Canada — serveur MCP
 
-Serveur [MCP](https://modelcontextprotocol.io) public en **lecture seule** donnant aux assistants IA un accès verbatim au texte officiel de **112 lois, règlements et directives** : la législation du Québec (dont le Code civil du Québec et le Code de procédure civile), les lois fédérales utilisées en litige civil québécois — Lois constitutionnelles de 1867 et de 1982 (dont la Charte canadienne des droits et libertés), faillite, divorce, sociétés par actions, droit d'auteur, preuve, Cours fédérales — ainsi que les directives de pratique des tribunaux du Québec (Cour supérieure, Cour du Québec) et des textes de l'Autorité des marchés financiers (AMF). En **français et en anglais** (les directives et textes PDF sont en français seulement lorsqu'aucune version anglaise officielle n'existe), avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres → dispositions ou paragraphes) et recherche plein texte.
+Serveur [MCP](https://modelcontextprotocol.io) public en **lecture seule** donnant aux assistants IA un accès verbatim au texte officiel de **131 lois, règlements et directives** : la législation du Québec (dont le Code civil du Québec et le Code de procédure civile), les lois fédérales utilisées en litige civil québécois — Lois constitutionnelles de 1867 et de 1982 (dont la Charte canadienne des droits et libertés), faillite, divorce, sociétés par actions et organisations à but non lucratif, brevets, droit d'auteur, marques de commerce et dessins industriels, preuve, Cours fédérales et Cour suprême — ainsi que les directives de pratique des tribunaux du Québec (Cour supérieure, Cour du Québec) et des textes de l'Autorité des marchés financiers (AMF). En **français et en anglais** (les directives et textes PDF sont en français seulement lorsqu'aucune version anglaise officielle n'existe), avec dates de consolidation, hiérarchie complète (Livres → Titres → Chapitres → dispositions ou paragraphes) et recherche plein texte.
 
 > **In English:** Read-only public-interest MCP server providing AI assistants with verbatim access to Québec statutes and regulations, federal statutes relevant to Québec civil litigation, Québec court practice directives, and AMF securities texts (French and English where officially published). Part of [`droit-civil-quebecois`](https://github.com/jpoirierlavoie/droit-civil-quebecois), reserved for active members in good standing of the Barreau du Québec via [`acces.poirierlavoie.ca`](https://acces.poirierlavoie.ca). Query text is never logged.
 
@@ -40,8 +40,8 @@ Le code source et les scripts d'ingestion sont publiés gratuitement sous licenc
 | Catégorie | Textes |
 |---|---|
 | Codes | Code civil du Québec, Code de procédure civile |
-| Lois sectorielles | Charte des droits et libertés, protection du consommateur, normes du travail, renseignements personnels (Loi 25) et accès aux documents publics, valeurs mobilières (dont `V-1.1, r. 10`, `r. 21` et `r. 24` tirés des PDF officiels de l'AMF, `fonction='reglement'`), assureurs, coopératives de services financiers, police et déontologie policière, bâtiment (Code de construction, Code de sécurité), courtage immobilier, cités et villes, fiscalité et éthique municipales, expropriation, contrats des organismes publics et municipaux, fonction publique, procédure pénale… |
-| Règles de procédure | Règlements des cours (appel, supérieure, Québec), du TAQ, du TAL, du TAMF, de la déontologie policière et de la Régie du bâtiment |
+| Lois sectorielles | Chartes (droits et libertés, langue française), protection du consommateur, assurance automobile, curateur public, notariat, commissions d'enquête, travail et SST (normes, Code du travail, TAT, LATMP, LSST), renseignements personnels (Loi 25) et accès aux documents publics, valeurs mobilières (dont `V-1.1, r. 10`, `r. 21` et `r. 24` tirés des PDF officiels de l'AMF, `fonction='reglement'`), assureurs, fiducies, coopératives de services financiers, police et déontologie policière, bâtiment (Code de construction, Code de sécurité), courtage immobilier, municipal/aménagement/environnement (cités et villes, compétences municipales, LAU, LQE, LPTAA, fiscalité et éthique), expropriation, contrats des organismes publics et municipaux, fonction publique, procédure pénale… |
+| Règles de procédure | Règlements et règles des cours (Cour suprême, appel, supérieure, Québec, Cours fédérales), du TAT, du TAQ, du TAL, du TAMF, de la déontologie policière et de la Régie du bâtiment |
 | Tarifs | Tarif judiciaire, tarifs du TAQ, du TAL et du TAMF |
 | Directives judiciaires | Directives de pratique de la Cour supérieure (Montréal — District et Division — et Québec) et de la Cour du Québec (règles simplifiées, pratique civile et administrative à Montréal, liste commune DAA) — source PDF, non législatives, français seulement |
 | Orientations (AMF) | *Instructions générales* 31-103, 45-106 et 51-102 de l'Autorité des marchés financiers — source PDF, indicatives et sans force de loi, français seulement |
@@ -58,7 +58,7 @@ actuel (c. C-25.01), **n'y figure pas** : c'est une décision de portée, pas un
 Comme la recodification a **renuméroté** le code, l'article N de l'ancien n'est pas
 l'article N du nouveau — aussi `resolve_reference` refuse-t-il NOMMÉMENT une
 citation de l'ancien code (« ancien C.p.c. », « c. C-25 », « C.p.c. de 1965 ») plutôt que de
-la rabattre en silence sur son successeur. Côté fédéral, la portée couvre 18 lois et 2 règlements
+la rabattre en silence sur son successeur. Côté fédéral, la portée couvre 21 lois et 3 règlements
 pertinents au litige civil québécois — dont les Lois constitutionnelles de 1867 et de 1982 —
 et exclut le Code criminel et la Loi de l'impôt sur le revenu.
 
@@ -72,7 +72,7 @@ Le patron d'usage est en deux temps : **s'orienter** (découverte), puis **extra
 |---|---|---|
 | `find_relevant` | Le routeur : d'un problème en langage libre vers les lois et chapitres candidats (`core` par défaut ; `domains`, `jurisdiction`, `forum` + radar `other_domains`), avec le *pourquoi* de chaque rapprochement | `« vice caché »` → C.c.Q. Livre 5 (Obligations) + L.p.c. |
 | `list_laws` | Carte du corpus : noms FR/EN, citation RLRQ, dates, matières, domaine, loi habilitante, plan des grands codes ; filtres `domains`/`jurisdiction`/`fonction`/`forum`/`subject` (`core` par défaut ; `domains=["all"]` pour les 8 domaines) | `fonction=tarif, domains=["all"]` → les 4 tarifs |
-| `list_subjects` | Les 45 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
+| `list_subjects` | Les 49 matières de la taxonomie (droit privé du C.c.Q. + matières spécialisées), bilingues | — |
 | `related_laws` | Graphe d'une loi : règlements pris sous elle, loi habilitante, renvois, relations curées (`preseance-sur`, `interprete`…) | `law=cpc` → ses 6 règlements de cour |
 
 ### Extraction
