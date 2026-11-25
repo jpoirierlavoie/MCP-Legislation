@@ -6,14 +6,14 @@
       "title_en": "Source discovery — heuristic",
       "groupe": "orientation",
       "page_fr": [
-        "Le point d'entrée quand on part d'un problème plutôt que d'une loi. On décrit la situation en langage libre — « vice caché maison », « congédiement sans préavis », « bail commercial » — et l'outil rend une liste de lois et de chapitres candidats, chacun accompagné du motif de son rapprochement.",
-        "Le classement est entièrement déterministe : aucun modèle de langue n'intervient. Quatre signaux se cumulent — la matière de la taxonomie, l'intitulé des divisions, le nom des lois, et le voisinage dans le graphe des textes. Chaque candidat expose ses preuves, de sorte que le rapprochement est vérifiable plutôt que devinable.",
-        "C'est une aide au repérage, pas une réponse juridique : elle ne détermine pas le droit applicable. Le résultat sert à choisir où lire, puis on extrait le texte avec les outils de structure et d'article."
+        "Le point d'entrée lorsque vous partez d'une situation concrète plutôt que d'une loi connue (p. ex. « vice caché maison », « congédiement sans préavis », « bail commercial »). L'outil rend une liste de lois et de chapitres possibles en expliquant pourquoi chacun est proposé.",
+        "Le classement suit des règles fixes et reproductibles, sans intelligence artificielle générative : il croise la matière juridique, les titres de chapitres, le nom des lois et leurs textes associés.",
+        "Il s'agit d'une aide au repérage, et non d'un avis juridique : elle vous indique où lire, afin que votre assistant extraye ensuite le texte officiel exact."
       ],
       "page_en": [
-        "The entry point when you start from a problem rather than from a statute. You describe the situation in free language — “latent defect house”, “dismissal without notice”, “commercial lease” — and the tool returns candidate statutes and chapters, each with the reason it was matched.",
-        "Ranking is entirely deterministic: no language model is involved. Four signals accumulate — the taxonomy subject, division headings, statute names, and adjacency in the graph of related texts. Every candidate exposes its evidence, so a match can be checked rather than guessed.",
-        "This is a retrieval aid, not a legal answer: it does not determine the applicable law. Its output tells you where to read; you then extract the text with the structure and article tools."
+        "The starting point when you begin with a practical issue rather than a known statute (e.g., 'latent defect house', 'dismissal without notice', 'commercial lease'). It returns candidate statutes and chapters and states why each one matched.",
+        "Ranking follows fixed, reproducible rules with no generative AI: it combines legal subject area, chapter headings, statute titles, and related enactments.",
+        "This is a search aid, not legal advice: it points your assistant to the right chapters so it can retrieve the official text verbatim."
       ]
     },
     "list_laws": {
@@ -36,14 +36,12 @@
       "title_en": "Taxonomy subjects",
       "groupe": "orientation",
       "page_fr": [
-        "La taxonomie qui organise le corpus, en deux familles : les matières du droit privé, calquées sur les Livres du Code civil du Québec, et les matières spécialisées, qui regroupent les lois sectorielles et leurs règlements.",
-        "Chaque matière porte un libellé et une description bilingues, ainsi que le nombre de lois et de divisions qui lui sont rattachées. Elle sert à choisir un domaine, puis à filtrer la carte du corpus.",
-        "Les mots d'une recherche sont directement comparés à la description de chaque matière pour orienter le repérage vers les lois pertinentes."
+        "Classe les textes en deux grands ensembles : le droit privé (calqué sur les Livres du Code civil du Québec) et les matières spécialisées regroupant les lois sectorielles et leurs règlements.",
+        "Chaque matière porte un libellé bilingue, une description et le nombre de textes rattachés, ce qui permet de cibler un domaine puis de filtrer la liste des lois."
       ],
       "page_en": [
-        "The taxonomy that organizes the corpus, in two families: private-law subjects, mapped onto the Books of the Civil Code of Québec, and specialized subjects, which group sectoral statutes with their regulations.",
-        "Each subject carries a bilingual label and description, along with the number of statutes and divisions attached to it. It is used to pick a domain, then to filter the corpus map.",
-        "Search terms are matched directly against each subject's description to guide discovery toward relevant statutes."
+        "Organizes all texts into two groups: private law (mapped onto the Books of the Civil Code of Québec) and specialized subjects grouping sectoral statutes with their regulations.",
+        "Each subject includes a bilingual label, description, and text count, helping your assistant narrow down a domain before filtering the statute list."
       ]
     },
     "related_laws": {
@@ -51,16 +49,12 @@
       "title_en": "Related statutes",
       "groupe": "orientation",
       "page_fr": [
-        "Le graphe d'interconnexion d'une loi : les règlements pris sous son autorité, la loi qui l'habilite, les renvois qu'elle fait vers d'autres textes, et les relations curées à la main lorsqu'un lien juridique mérite d'être qualifié — met en œuvre, applique, complète, encadré par, connexe, préséance sur (preseance-sur) et interprète (interprete).",
-        "Les arêtes peuvent être suivies dans les deux sens, filtrées par type, et limitées en nombre. Chaque relation indique si elle a été dérivée automatiquement ou curée, et les relations curées portent une note expliquant le lien.",
-        "L'outil signale explicitement les textes cités qui ne font pas partie du corpus chargé, plutôt que de les passer sous silence.",
-        "Les noms de lois suivent la langue demandée. Les notes des relations curées, elles, n'existent qu'en français : sous une demande anglaise elles sont rendues MARQUÉES [fr] plutôt que maquillées en traduction, et l'étiquette voyage aussi dans les données structurées."
+        "Montre tout ce qui entoure une loi : les règlements adoptés en vertu de celle-ci, sa loi habilitante, les autres textes qu'elle cite ainsi que les liens juridiques documentés à la main (mise en œuvre, application, préséance d'une directive ou interprétation).",
+        "Les résultats précisent si un texte lié manque au corpus plutôt que de l'ignorer en silence, et signalent lorsqu'une note explicative n'est disponible qu'en français."
       ],
       "page_en": [
-        "A statute's interconnection graph: regulations made under its authority, the statute that enables it, cross-references it makes to other texts, and hand-curated relations where a legal link deserves to be characterized — implements, applies, supplements, governed by, related, precedence over (preseance-sur), and interprets (interprete).",
-        "Edges can be followed in either direction, filtered by type, and capped in number. Each relation states whether it was derived automatically or curated, and curated relations carry a note explaining the link.",
-        "The tool explicitly flags referenced statutes that are not in the loaded corpus, rather than silently dropping them.",
-        "Statute names follow the requested language. The notes attached to curated relations, however, exist only in French: under an English request they are returned MARKED [fr] rather than passed off as a translation, and the label travels in the structured payload as well."
+        "Shows a statute's surrounding framework: regulations adopted under it, its enabling statute, cross-references to other texts, and hand-curated legal links (implements, applies, precedence, or interprets).",
+        "It explicitly flags any referenced statute not yet included in the corpus instead of silently omitting it, and marks French-only notes clearly."
       ]
     },
     "get_article": {
@@ -68,14 +62,12 @@
       "title_en": "Official text of an article",
       "groupe": "extraction",
       "page_fr": [
-        "Le texte officiel d'un article ou d'un paragraphe de directive, restitué verbatim, avec sa citation, sa position dans la hiérarchie du texte, sa date de consolidation, sa ligne d'historique et, le cas échéant, son statut normatif non législatif (directive ou orientation) et les hyperliens officiels d'annexe. Les articles abrogés sont rendus et signalés comme tels.",
-        "Les numéros décimaux et alphanumériques (ex. '2A.1') sont pris en charge, de même que les dispositions sans numéro ('préliminaire', 'finales') et les annexes ('annexe-1', 'annexe-a'). Lorsqu'un texte PDF n'est publié qu'en français, une demande avec lang='en' le signale explicitement sans deviner ni traduire à la volée.",
-        "Si le numéro demandé n'existe pas, l'outil ne devine pas : il propose les articles voisins. Un article manquant est signalé, jamais remplacé par son plus proche parent."
+        "Rend le texte officiel mot pour mot d'un article de loi, d'un paragraphe de directive de pratique ou d'une annexe, avec sa citation, sa place dans le plan du texte, sa date de mise à jour et son historique. Les articles abrogés sont identifiés comme tels.",
+        "Si un numéro demandé n'existe pas, l'outil ne devine jamais : il signale l'absence et propose les numéros voisins. Lorsqu'un PDF officiel n'existe qu'en français, une demande en anglais l'indique clairement."
       ],
       "page_en": [
-        "The official text of a section or directive paragraph, returned verbatim, with its citation, its position in the text's hierarchy, its consolidation date, its history line and, where applicable, its non-legislative normative status (directive or policy statement) and official annex links. Repealed provisions are returned and flagged as such.",
-        "Decimal and alphanumeric numbering (e.g. '2A.1') is supported, as are unnumbered provisions ('préliminaire', 'finales') and annexes ('annexe-1', 'annexe-a'). Where a PDF text is published in French only, a lang='en' request states this explicitly rather than guessing or translating on the fly.",
-        "If the requested number does not exist, the tool does not guess: it offers the neighbouring provisions. A missing provision is reported, never substituted with its nearest sibling."
+        "Returns the exact word-for-word official text of a statutory section, practice-directive paragraph, or schedule, together with its citation, place in the table of contents, consolidation date, and legislative history. Repealed provisions are clearly flagged.",
+        "If the requested number does not exist, the tool never guesses: it reports the gap and suggests neighbouring sections. Where an official PDF is published in French only, an English request says so clearly."
       ]
     },
     "get_articles": {
@@ -83,12 +75,12 @@
       "title_en": "Official texts in bulk",
       "groupe": "extraction",
       "page_fr": [
-        "Plusieurs articles en une seule demande, soit par plage continue, soit par liste explicite de numéros, avec le titre, la citation officielle et la date de consolidation du texte. La réponse est paginée, ce qui permet de parcourir un chapitre entier sans saturer le contexte.",
-        "Le mode plage respecte l'ordre réel des articles du texte, y compris les numéros décimaux insérés entre deux articles entiers — les bornes sont lues en base plutôt que recalculées, ce qui rend la plage insensible aux particularités de numérotation d'un texte donné. En mode liste (numbers), tout numéro demandé absent du texte est explicitement signalé plutôt qu'omis en silence."
+        "Permet à l'assistant de lire plusieurs articles d'un coup — soit une suite continue (p. ex. art. 1457 à 1465), soit une liste précise — avec le titre, la citation officielle et la date de mise à jour du texte.",
+        "Les numéros décimaux insérés dans la numérotation officielle (p. ex. 2926.1) sont respectés automatiquement, et tout article absent d'une liste demandée est explicitement signalé."
       ],
       "page_en": [
-        "Several articles in a single request, either as a continuous range or as an explicit list of numbers, together with the statute's title, official citation, and consolidation date. The response is paginated, which makes it possible to walk through an entire chapter without flooding the context.",
-        "Range mode follows the text's real article order, including decimal numbers inserted between two whole ones — the bounds are read from the database rather than recomputed, which makes ranges immune to a given text's numbering quirks. In list mode (numbers), any requested number absent from the text is explicitly reported rather than silently omitted."
+        "Lets your assistant read several sections at once — either a continuous range (e.g., ss. 1457–1465) or an explicit list — along with the statute's title, official citation, and consolidation date.",
+        "Decimal section numbers inserted into official numbering (e.g., 2926.1) are automatically included in range order, and any missing requested number is explicitly flagged."
       ]
     },
     "get_structure": {
@@ -96,14 +88,12 @@
       "title_en": "Structure of a statute (no text)",
       "groupe": "extraction",
       "page_fr": [
-        "L'arbre hiérarchique d'une loi — Livre, Titre, Chapitre, Section, Sous-section — sans le texte des articles. C'est l'outil qui permet de comprendre l'économie d'un texte avant d'en extraire quoi que ce soit.",
-        "Chaque nœud donne son type, son numéro, son intitulé et son chemin. Le chemin est la clé qui sert ensuite à demander une division précise. La profondeur d'affichage se règle, et l'on peut se restreindre à un sous-arbre.",
-        "Les chemins sont propres à chaque langue, puisqu'ils dérivent du balisage officiel. Un chemin obtenu en français reste néanmoins utilisable en anglais : il est traduit automatiquement par le pont des numéros d'articles."
+        "Affiche la table des matières d'une loi ou d'un code (Livre, Titre, Chapitre, Section) sans le texte complet des articles, afin de repérer le bon chapitre avant d'extraire les dispositions.",
+        "La profondeur affichée s'ajuste facilement et l'assistant peut cibler directement un chapitre précis, en français comme en anglais."
       ],
       "page_en": [
-        "The hierarchical tree of a statute — Book, Title, Chapter, Division, Subsection — without article text. This is the tool for understanding how a text is organized before extracting anything from it.",
-        "Each node gives its kind, number, heading and path. The path is the key used afterwards to request a specific division. Display depth is adjustable, and you can restrict the view to a subtree.",
-        "Paths are language-specific, since they derive from the official markup. A path obtained in French nonetheless remains usable in English: it is translated automatically through the article-number bridge."
+        "Displays a statute's or code's table of contents (Book, Title, Chapter, Division) without full article text, helping your assistant locate the right chapter before reading specific provisions.",
+        "Display depth is adjustable and your assistant can focus on a single chapter in either French or English."
       ]
     },
     "get_division": {
@@ -111,14 +101,12 @@
       "title_en": "Official text of a division",
       "groupe": "extraction",
       "page_fr": [
-        "Une division entière — un Livre, un Titre, un Chapitre, une Section — avec son intitulé, ses sous-divisions immédiates et les articles qu'elle contient, tout son sous-arbre compris. La réponse est paginée.",
-        "On peut ne demander que les numéros d'articles, sans leur texte, pour arpenter un gros chapitre à faible coût avant de cibler.",
-        "Lorsqu'un intitulé n'existe que dans une langue, celui de l'autre langue est rendu et marqué comme tel, plutôt que d'afficher un vide silencieux."
+        "Rend en bloc le contenu d'un chapitre ou d'une section entière (son intitulé, ses sous-sections et ses articles), en plusieurs pages au besoin pour les longs chapitres.",
+        "L'assistant peut aussi ne demander que les numéros d'articles d'abord pour parcourir rapidement un long chapitre, et les intitulés unilingues sont clairement signalés."
       ],
       "page_en": [
-        "A whole division — a Book, Title, Chapter or Division — with its heading, its immediate subdivisions and the articles it contains, across its entire subtree. The response is paginated.",
-        "You can request article numbers only, without their text, to survey a large chapter cheaply before narrowing down.",
-        "Where a heading exists in only one language, the other language's heading is returned and marked as such, rather than displaying a silent blank."
+        "Returns an entire chapter or division in bulk (its heading, subdivisions, and all contained sections), paginated cleanly for long chapters.",
+        "Your assistant can also request section numbers only to scan a large chapter quickly, and unilingual headings are marked clearly rather than left blank."
       ]
     },
     "search_text": {
@@ -126,14 +114,12 @@
       "title_en": "Full-text search — labelled fallbacks",
       "groupe": "extraction",
       "page_fr": [
-        "La recherche dans le texte même des articles, insensible aux accents, combinant un moteur lexical et un moteur sémantique. Chaque résultat arrive avec son fil d'Ariane complet et un extrait surligné, de sorte qu'on sait d'où il vient sans avoir à le demander.",
-        "Le trait déterminant de cet outil est qu'il dit toujours comment il a obtenu ses résultats. Si la correspondance exacte échoue, il élargit, relâche ou bascule au sémantique — mais il annonce lequel de ces chemins a produit la réponse, en prose comme dans les données structurées. Un résultat approché n'est jamais présenté comme une correspondance exacte.",
-        "Une recherche restreinte à une loi qui ne donne rien est automatiquement étendue au corpus ; une recherche restreinte qui donne des résultats signale tout de même ce qui existe ailleurs. Les résultats à l'échelle du corpus sont regroupés par loi, avec un plafond par loi, pour qu'un texte volumineux ne monopolise pas le classement."
+        "Cherche directement dans le texte de tous les articles, sans tenir compte des accents, en combinant recherche par mots exacts et recherche par sens. Chaque résultat affiche son chapitre et un extrait surligné.",
+        "L'outil indique toujours comment un résultat a été trouvé : si les mots exacts manquent, il élargit la recherche au reste du corpus ou aux termes voisins de sens en l'annonçant clairement — un résultat approximatif n'est jamais présenté comme une correspondance exacte."
       ],
       "page_en": [
-        "Search within the article text itself, accent-insensitive, combining a lexical engine and a semantic one. Each result arrives with its full breadcrumb and a highlighted excerpt, so you know where it comes from without having to ask.",
-        "The defining trait of this tool is that it always states how it obtained its results. When exact matching fails, it widens, relaxes, or falls back to semantic retrieval — but it announces which of those paths produced the answer, in prose and in the structured payload alike. An approximate result is never presented as an exact match.",
-        "A search restricted to one statute that returns nothing is automatically widened to the corpus; a restricted search that does return results still reports what exists elsewhere. Corpus-wide results are grouped by statute, with a per-statute cap, so that a voluminous text cannot monopolize the ranking."
+        "Searches directly inside the text of all provisions, accent-insensitively, combining exact-word matching with meaning-based search. Each result shows its chapter context and a highlighted excerpt.",
+        "The tool always discloses how a result was found: when exact words yield nothing, it widens the search or falls back to meaning-based matching and labels it transparently — an approximate match is never presented as exact."
       ]
     },
     "resolve_reference": {
@@ -141,14 +127,12 @@
       "title_en": "Citation resolution",
       "groupe": "extraction",
       "page_fr": [
-        "D'une citation écrite en langage libre vers l'article ou le paragraphe officiel qu'elle désigne. L'outil reconnaît le chapitre RLRQ de n'importe quelle loi du corpus, les abréviations usuelles des deux grands codes et des lois fédérales (L.F.I./B.I.A., L.C.S.A./C.B.C.A., L.A.C.C./C.C.A.A., L.D., etc.), les paragraphes de directives judiciaires (par./dir., Cour supérieure ou Cour du Québec) et les instructions générales de l'AMF (« IG 45-106, art. 2A.1 », distinctes du Règlement 45-106).",
-        "Il indique par quelle voie la citation a été reconnue, ce qui permet de vérifier la résolution plutôt que de la prendre pour acquise.",
-        "Un chapitre RLRQ absent du corpus ou une citation ambiguë (ex. « Directives C.S. » sans division ni district, ou « 45-106 » sans préciser règlement ni instruction générale) n'est jamais rabattu sur un voisin : l'outil refuse explicitement de résoudre plutôt que de rendre l'article d'un autre texte. Dans un outil juridique, un résultat faux rendu en silence est le pire défaut possible."
+        "Traduit une référence écrite librement (p. ex. « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 », « art. 69.3 L.F.I. », « par. 14 dir. C.S. » ou « IG 45-106, art. 2A.1 ») vers le texte officiel exact.",
+        "Si une loi est absente du corpus (comme l'ancien Code de procédure civile c. C-25) ou si la citation est ambiguë, l'outil refuse de répondre plutôt que de renvoyer un article voisin par erreur."
       ],
       "page_en": [
-        "From a citation written in free form to the official section or paragraph it designates. The tool recognizes the RLRQ chapter of any statute in the corpus, the usual abbreviations of the two major codes and federal statutes (L.F.I./B.I.A., L.C.S.A./C.B.C.A., L.A.C.C./C.C.A.A., L.D., etc.), court practice directive paragraphs (par./dir., Superior Court or Court of Québec), and AMF Policy Statements (« IG 45-106, art. 2A.1 », kept distinct from Regulation 45-106).",
-        "It reports how the citation was recognized, which lets you verify the resolution rather than take it on trust.",
-        "An RLRQ chapter absent from the corpus or an ambiguous citation (e.g. « Directives C.S. » without division or district, or « 45-106 » without specifying regulation or policy statement) is never rounded to a neighbour: the tool explicitly declines to resolve rather than return a provision from another text. In a legal tool, a wrong result delivered silently is the worst possible defect."
+        "Resolves a free-form legal citation (such as 'art. 1457 C.C.Q.', 'CQLR, c. T-16, s. 12', 's. 69.3 B.I.A.', 'dir. C.S. par. 14', or 'IG 45-106, s. 2A.1') to the exact official provision.",
+        "If a statute is outside the corpus (such as the pre-2016 Code of Civil Procedure, c. C-25) or ambiguous, the tool explicitly declines rather than substituting a neighbouring provision by mistake."
       ]
     }
   },
