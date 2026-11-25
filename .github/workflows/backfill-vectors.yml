@@ -90,11 +90,11 @@ jobs:
               exit 1
               ;;
           esac
-          if ! printf '%s' "$LAWS" | grep -Eq '^[a-z0-9.,-]*$'; then
+          if [ -n "$LAWS" ] && ! [[ "$LAWS" =~ ^[a-z0-9.,-]+$ ]]; then
             echo "::error title=Paramètre laws invalide::Format attendu : identifiants séparés par des virgules."
             exit 1
           fi
-          if ! printf '%s' "$KINDS" | grep -Eq '^(articles|divisions)(,(articles|divisions))?$'; then
+          if ! [[ "$KINDS" =~ ^(articles|divisions)(,(articles|divisions))?$ ]]; then
             echo "::error title=Paramètre kinds invalide::Attendu articles, divisions, ou articles,divisions."
             exit 1
           fi
