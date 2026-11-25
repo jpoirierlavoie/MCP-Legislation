@@ -31,7 +31,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 ```
              ┌────────────────────────────────────────────────────────┐
-             │      droit-civil-quebecois (Plugin Cadre v3.1.1)       │
+             │      droit-civil-quebecois (Plugin Cadre v3.2.1)       │
              │   10 compétences · 59 feuilles · 4 scripts stdlib      │
              └──────┬───────────────────────┬──────────────────┬──────┘
                     │                       │                  │
