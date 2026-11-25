@@ -37,7 +37,7 @@ class TestColonnes(unittest.TestCase):
         QUÉBÉCOIS : `list_laws(jurisdiction='ca')` rendrait zéro résultat.
         """
         for col in ("official_cite", "official_cite_en", "chapter", "jurisdiction",
-                    "in_force", "last_amended", "unit", "source"):
+                    "in_force", "last_amended", "unit", "source", "domain"):
             self.assertIn(col, load._LAW_COLS, f"laws.{col} n'arriverait pas en base")
         for col in ("marginal_note", "footnotes", "links"):
             self.assertIn(col, load._ART_COLS, f"articles.{col} n'arriverait pas en base")

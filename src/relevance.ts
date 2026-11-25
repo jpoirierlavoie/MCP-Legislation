@@ -6,6 +6,22 @@
 // ⚠️ Les poids vivent ICI et nulle part ailleurs (§4.5) : ils se calibrent avec les évals
 // (tests/evals.mjs), jamais en dur dans une requête SQL.
 
+export const ALL_DOMAINS = [
+  "core",
+  "cours-federales",
+  "financier",
+  "construction-immobilier",
+  "municipal-environnement",
+  "travail",
+  "penal",
+  "propriete-intellectuelle",
+] as const;
+
+export type LawDomain = (typeof ALL_DOMAINS)[number];
+
+/** Poids de la colonne `marginal_note` dans `bm25(articles_fts, 1.0, MARGINAL_NOTE_WEIGHT)`. */
+export const MARGINAL_NOTE_WEIGHT = 0.5;
+
 /** Poids des signaux (§4.4). Un seul point de vérité. */
 export const WEIGHTS = {
   /** S1 — token dans le libellé / l'id / la description d'un sujet -> entités mappées. */
@@ -906,6 +922,9 @@ export interface LawLite {
   name_fr: string;
   name_norm: string | null;
   fonction?: string | null;
+  domain?: string | null;
+  jurisdiction?: string | null;
+  forum?: string | null;
 }
 export interface DivisionLite {
   law_id: string;

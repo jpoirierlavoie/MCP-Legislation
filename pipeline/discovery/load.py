@@ -57,7 +57,8 @@ def seed_laws(db, only_laws: set[str] | None = None) -> int:
                 f"name_fr = {q(l['name_fr'])}", f"name_norm = {q(normalize(l['name_fr']))}",
                 f"source = {q(l.get('source', 'epub'))}",
                 f"unit = {q(l.get('unit', 'article'))}",
-                f"jurisdiction = {q(l.get('jurisdiction', 'qc'))}"]
+                f"jurisdiction = {q(l.get('jurisdiction', 'qc'))}",
+                f"domain = {q(l.get('domain', 'core'))}"]
 
         # ⚠️ LES DATES DE CONSOLIDATION NE SONT ÉCRASÉES QUE SI LA CONFIG LES DÉCLARE.
         #

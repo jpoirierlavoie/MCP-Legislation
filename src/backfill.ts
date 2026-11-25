@@ -155,6 +155,8 @@ async function chargerPageBackfill(
   db: D1Database,
   law: string,
   lawNameFr: string,
+  lawDomain: string,
+  lawJurisdiction: string,
   kind: "articles" | "divisions",
   count: number,
   offset: number,
@@ -169,11 +171,16 @@ async function chargerPageBackfill(
     const rows = (
       await db
         .prepare(
-          `SELECT number, division_path, text FROM articles
+          `SELECT number, division_path, text, marginal_note FROM articles
            WHERE law_id = ? AND lang = 'fr' ORDER BY sort_key, id LIMIT ? OFFSET ?`,
         )
         .bind(law, count, offset)
-        .all<{ number: string; division_path: string; text: string }>()
+        .all<{
+          number: string;
+          division_path: string;
+          text: string;
+          marginal_note: string | null;
+        }>()
     ).results;
     const chains = await breadcrumbChains(
       db,
@@ -185,7 +192,8 @@ async function chargerPageBackfill(
       const crumb = chain
         .map((n) => [n.kind, n.number, n.heading].filter(Boolean).join(" "))
         .join(" › ");
-      let text = `${lawNameFr} — ${crumb} — art. ${r.number}. ${r.text}`;
+      const mNote = r.marginal_note?.trim() ? ` (${r.marginal_note.trim()})` : "";
+      let text = `${lawNameFr} — ${crumb} — art. ${r.number}${mNote}. ${r.text}`;
       if (text.length > MAX_CHARS) {
         text = text.slice(0, MAX_CHARS);
         overruns++;
@@ -195,7 +203,15 @@ async function chargerPageBackfill(
         id: await artVectorId(law, r.number),
         text,
         contentHash: await sha256Hex(text),
-        metadata: { law, article: r.number, path: r.division_path, heading, type: "article" },
+        metadata: {
+          law,
+          article: r.number,
+          path: r.division_path,
+          heading,
+          type: "article",
+          domain: lawDomain,
+          jurisdiction: lawJurisdiction,
+        },
       });
     }
   } else {
@@ -225,7 +241,14 @@ async function chargerPageBackfill(
         id: await divVectorId(law, r.path),
         text,
         contentHash: await sha256Hex(text),
-        metadata: { law, path: r.path, heading: r.heading ?? "", type: "division" },
+        metadata: {
+          law,
+          path: r.path,
+          heading: r.heading ?? "",
+          type: "division",
+          domain: lawDomain,
+          jurisdiction: lawJurisdiction,
+        },
       });
     }
   }
@@ -327,9 +350,9 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
   }
 
   const lawRow = await db
-    .prepare("SELECT id, name_fr FROM laws WHERE id = ?")
+    .prepare("SELECT id, name_fr, domain, jurisdiction FROM laws WHERE id = ?")
     .bind(law)
-    .first<{ id: string; name_fr: string }>();
+    .first<{ id: string; name_fr: string; domain: string | null; jurisdiction: string | null }>();
   if (!lawRow) return json({ error: `loi inconnue : ${law}` }, 404);
 
   if (mode === "prune") {
@@ -353,6 +376,8 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
     db,
     law,
     lawRow.name_fr,
+    lawRow.domain ?? "core",
+    lawRow.jurisdiction ?? "qc",
     kind,
     count,
     offset,

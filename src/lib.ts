@@ -12,14 +12,18 @@ import {
 } from "./paths";
 import type { DivisionLite, LawLite, RelationLite, SubjectLite, SubjectMapLite } from "./relevance";
 import {
+  ALL_DOMAINS,
   DIVISION_MATCH_MAX,
   DIVISION_MATCH_MIN_SCORE,
   FONCTION_WEIGHTS,
   fonctionWeight,
+  type LawDomain,
+  MARGINAL_NOTE_WEIGHT,
   normalize,
   RELAX_MIN_LOO_TOTAL,
   RRF_K,
   SEMANTIC_MIN_SCORE,
+  tokenize,
   VECTOR_TOP_K,
 } from "./relevance";
 
@@ -33,7 +37,12 @@ export type LawFonction =
   | "directive"
   | "orientation";
 
-export type CorpusGateEnv = { FEDERAL_CORPUS?: string; PDF_CORPUS?: string };
+export type CorpusGateEnv = {
+  FEDERAL_CORPUS?: string;
+  PDF_CORPUS?: string;
+  DOMAIN_QUARANTINE?: string;
+  VECTOR_DOMAIN_FILTER?: string;
+};
 
 export interface LawRow {
   id: string;
@@ -67,6 +76,8 @@ export interface LawRow {
   consol_date_en: string | null;
   /** Provenance d'ingestion ('epub' | 'lims' | 'pdf', migration 0007). */
   source?: LawSource;
+  /** Domaine de quarantaine ('core' | silo sectoriel, migration 0008). */
+  domain?: string | null;
   chapter?: string | null;
   jurisdiction?: string;
   in_force?: number;
@@ -362,11 +373,67 @@ export interface LawSummary extends LawRow {
 }
 
 export interface LawFilters {
+  domains?: readonly string[];
   fonction?: string;
   forum?: string;
   subject?: string;
   /** Ordre de gouvernement : 'qc' | 'ca'. */
   jurisdiction?: string;
+}
+
+/** Interrupteur de quarantaine par domaine (R8 : actif sauf DOMAIN_QUARANTINE === "0"). */
+export function quarantaineDomaineActive(env: CorpusGateEnv): boolean {
+  return env.DOMAIN_QUARANTINE !== "0";
+}
+
+/** Interrupteur du filtrage vectoriel par métadonnées Vectorize (R8 : "1" après création d'index). */
+export function vectorDomainFilterActif(env: CorpusGateEnv): boolean {
+  return env.VECTOR_DOMAIN_FILTER === "1";
+}
+
+const VALID_DOMAINS = new Set<string>(ALL_DOMAINS);
+
+/** Résout la portée de domaines active : défaut `['core']` sous quarantaine, ou explicite / `['all']`. */
+export function resolveActiveDomains(
+  rawDomains: readonly string[] | undefined,
+  env: CorpusGateEnv = {},
+): { active: LawDomain[]; excluded: LawDomain[]; explicit: boolean; isAll: boolean } {
+  const explicit = Boolean(rawDomains && rawDomains.length > 0);
+  let active: LawDomain[];
+  if (!explicit) {
+    active = quarantaineDomaineActive(env) ? ["core"] : [...ALL_DOMAINS];
+  } else if (rawDomains!.includes("all")) {
+    active = [...ALL_DOMAINS];
+  } else {
+    const picked = new Set<LawDomain>();
+    for (const d of rawDomains!) {
+      if (VALID_DOMAINS.has(d)) picked.add(d as LawDomain);
+    }
+    active = picked.size > 0 ? ALL_DOMAINS.filter((d) => picked.has(d)) : ["core"];
+  }
+  const excluded = ALL_DOMAINS.filter((d) => !active.includes(d));
+  return { active, excluded, explicit, isAll: excluded.length === 0 };
+}
+
+/**
+ * Filtre de forum pour find_relevant et search_text : les textes sans forum ou marqués
+ * 'Transversal' restent toujours actifs ; seuls les règlements/directives d'un autre forum
+ * sont écartés.
+ */
+export function matchesForumScope(
+  lawForum: string | null | undefined,
+  requestedForum: string | undefined,
+): boolean {
+  const req = requestedForum?.trim();
+  if (!req) return true;
+  if (!lawForum?.trim()) return true;
+  const hay = normalize(lawForum);
+  return hay.includes("transversal") || hay.includes(normalize(req));
+}
+
+function forumScopeSqlClause(alias = "l"): string {
+  const p = alias ? `${alias}.` : "";
+  return `(${p}forum IS NULL OR ${p}forum = '' OR ${p}forum LIKE '%Transversal%' OR ${p}forum LIKE ?)`;
 }
 
 /**
@@ -437,6 +504,14 @@ export async function listLaws(
   if (filters.jurisdiction) {
     where.push("l.jurisdiction = ?");
     binds.push(filters.jurisdiction);
+  }
+  if (
+    filters.domains &&
+    filters.domains.length > 0 &&
+    filters.domains.length < ALL_DOMAINS.length
+  ) {
+    where.push(`l.domain IN (${filters.domains.map(() => "?").join(",")})`);
+    binds.push(...filters.domains);
   }
   if (filters.fonction) {
     where.push("l.fonction = ?");
@@ -523,6 +598,50 @@ export async function listLaws(
         }),
     };
   });
+}
+
+/** Compte les lois conformes aux filtres dans les domaines exclus de la portée courante. */
+export async function countExcludedDomainLaws(
+  db: D1Database,
+  excludedDomains: readonly string[],
+  filters: Omit<LawFilters, "domains"> = {},
+  env: CorpusGateEnv = {},
+): Promise<{ domain: string; laws_count: number }[]> {
+  if (!excludedDomains.length) return [];
+  const where: string[] = [];
+  const binds: unknown[] = [];
+  const masque = clauseCorpus(env);
+  if (masque) where.push(masque);
+  where.push(`l.domain IN (${excludedDomains.map(() => "?").join(",")})`);
+  binds.push(...excludedDomains);
+  if (filters.jurisdiction) {
+    where.push("l.jurisdiction = ?");
+    binds.push(filters.jurisdiction);
+  }
+  if (filters.fonction) {
+    where.push("l.fonction = ?");
+    binds.push(filters.fonction);
+  }
+  if (filters.forum) {
+    where.push("l.forum LIKE ?");
+    binds.push(`%${filters.forum}%`);
+  }
+  if (filters.subject) {
+    where.push(
+      "EXISTS (SELECT 1 FROM subject_map sm WHERE sm.law_id = l.id AND sm.subject_id = ?)",
+    );
+    binds.push(filters.subject);
+  }
+  const clause = where.join(" AND ");
+  const rows = (
+    await db
+      .prepare(
+        `SELECT l.domain AS domain, COUNT(*) AS n FROM laws l WHERE ${clause} GROUP BY l.domain ORDER BY n DESC, l.domain ASC`,
+      )
+      .bind(...binds)
+      .all<{ domain: string; n: number }>()
+  ).results;
+  return rows.map((r) => ({ domain: r.domain, laws_count: r.n }));
 }
 
 // --- pont entre les chemins de divisions FR et EN -----------------------------
@@ -735,6 +854,7 @@ export interface SubjectSummary {
   description_en: string | null;
   laws_count: number;
   divisions_count: number;
+  domains: string[];
 }
 
 export async function listSubjects(
@@ -747,19 +867,34 @@ export async function listSubjects(
   // absent. `laws_count` est un fait VIVANT (R10) : non masqué, il annoncerait « 8 lois » pour
   // une matière dont `list_laws` n'en rend que 6, sans qu'aucun test ne le voie.
   const m = masqueLawId(env, "sm.law_id");
-  return (
+  const rows = (
     await db
       .prepare(
         `SELECT s.id, s.label_fr, s.label_en, s.kind, s.description_fr, s.description_en,
               COUNT(DISTINCT sm.law_id) AS laws_count,
-              COALESCE(SUM(CASE WHEN sm.division_path <> '' THEN 1 ELSE 0 END), 0) AS divisions_count
+              COALESCE(SUM(CASE WHEN sm.division_path <> '' THEN 1 ELSE 0 END), 0) AS divisions_count,
+              GROUP_CONCAT(DISTINCT ls.domain) AS domains_csv
        FROM subjects s
        LEFT JOIN subject_map sm ON sm.subject_id = s.id ${m}
+       LEFT JOIN laws ls ON ls.id = sm.law_id
        GROUP BY s.id, s.label_fr, s.label_en, s.kind, s.description_fr, s.description_en
        ORDER BY s.kind, s.id`,
       )
-      .all<SubjectSummary>()
+      .all<
+        Omit<SubjectSummary, "domains"> & {
+          domains_csv: string | null;
+        }
+      >()
   ).results;
+  return rows.map(({ domains_csv, ...rest }) => ({
+    ...rest,
+    domains: domains_csv
+      ? domains_csv
+          .split(",")
+          .filter(Boolean)
+          .sort((a, b) => ALL_DOMAINS.indexOf(a as LawDomain) - ALL_DOMAINS.indexOf(b as LawDomain))
+      : [],
+  }));
 }
 
 export interface RelationRow {
@@ -1929,13 +2064,20 @@ export async function loadRelevanceData(
     db
       .prepare(`SELECT subject_id, law_id, division_path FROM subject_map WHERE 1=1 ${mLaw}`)
       .all<SubjectMapLite>(),
-    db.prepare(`SELECT id, name_fr, name_en, name_norm, fonction FROM laws ${mId}`).all<{
-      id: string;
-      name_fr: string;
-      name_en: string;
-      name_norm: string | null;
-      fonction: string | null;
-    }>(),
+    db
+      .prepare(
+        `SELECT id, name_fr, name_en, name_norm, fonction, domain, jurisdiction, forum FROM laws ${mId}`,
+      )
+      .all<{
+        id: string;
+        name_fr: string;
+        name_en: string;
+        name_norm: string | null;
+        fonction: string | null;
+        domain: string | null;
+        jurisdiction: string | null;
+        forum: string | null;
+      }>(),
     db
       .prepare(
         `SELECT from_law_id, to_law_id, rel_type, source, in_corpus, note FROM law_relations ` +
@@ -1999,6 +2141,9 @@ export async function loadRelevanceData(
     name_fr: lang === "en" ? l.name_en || l.name_fr : l.name_fr,
     name_norm: lang === "en" ? normalize(l.name_en || l.name_fr) : l.name_norm,
     fonction: l.fonction,
+    domain: l.domain ?? "core",
+    jurisdiction: l.jurisdiction ?? "qc",
+    forum: l.forum,
   }));
 
   // S1 apparie le libellé ET la description : sans leur version anglaise, le signal le plus
@@ -2017,6 +2162,31 @@ export async function loadRelevanceData(
     divisions,
     relations: relations.results,
     mappedHeadings,
+  };
+}
+
+/** Restreint en mémoire les données de pertinence à une portée (domaines, juridiction, forum). */
+export function scopeRelevanceData(
+  data: RelevanceData,
+  scope: { domains: readonly string[]; jurisdiction?: string; forum?: string },
+): RelevanceData {
+  const domainSet = new Set(scope.domains);
+  const laws = data.laws.filter(
+    (l) =>
+      domainSet.has(l.domain ?? "core") &&
+      (!scope.jurisdiction || (l.jurisdiction ?? "qc") === scope.jurisdiction) &&
+      matchesForumScope(l.forum, scope.forum),
+  );
+  const allowedIds = new Set(laws.map((l) => l.id));
+  return {
+    subjects: data.subjects,
+    subjectMap: data.subjectMap.filter((m) => allowedIds.has(m.law_id)),
+    laws,
+    divisions: data.divisions.filter((d) => allowedIds.has(d.law_id)),
+    relations: data.relations.filter(
+      (r) => allowedIds.has(r.from_law_id) && (!r.in_corpus || allowedIds.has(r.to_law_id)),
+    ),
+    mappedHeadings: data.mappedHeadings,
   };
 }
 
@@ -2137,6 +2307,7 @@ export interface LawMeta {
   source: LawSource;
   fonction: string | null;
   unit: string | null;
+  domain?: string | null;
 }
 
 export async function lawMetas(
@@ -2148,7 +2319,7 @@ export async function lawMetas(
   const rows = (
     await db
       .prepare(
-        `SELECT id, name_fr, name_en, source, fonction, unit FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) ` +
+        `SELECT id, name_fr, name_en, source, fonction, unit, domain FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) ` +
           `${masqueLawId(env, "id")}`,
       )
       .bind(...ids)
@@ -2369,11 +2540,16 @@ export interface SearchOutcome {
   elsewhere: { total: number; hits: SearchHit[] } | null;
   /** Correspondances de STRUCTURE (intitulés de divisions) par repérage sémantique. */
   divisions?: DivisionMatch[];
+  /** Signal radar : domaines exclus ayant des correspondances lexicales. */
+  otherDomains?: { domain: string; lexical_hits: number }[];
 }
 
 interface MatchScope {
   law?: string;
   notLaw?: string;
+  domains?: readonly string[];
+  jurisdiction?: string;
+  forum?: string;
 }
 
 async function runMatch(
@@ -2386,20 +2562,10 @@ async function runMatch(
   env: CorpusGateEnv = {},
 ): Promise<{ hits: SearchHit[]; total: number }> {
   const clauses: string[] = [];
-  // MATCH BORNÉ À LA COLONNE `text`, et c'est une décision de calibration, pas un détail.
-  //
-  // Depuis la migration 0004, `articles_fts` indexe AUSSI `marginal_note`. Or
-  // `bm25(articles_fts)` est appelé sans poids de colonne (plus bas), donc une colonne
-  // indexée de plus repondère TOUTE la recherche des 79 lois québécoises — et
-  // `src/lib.ts` SOMME ces scores pour choisir quel terme le leave-one-out omet, ce qui
-  // déplacerait jusqu'à l'étiquette `fallback` (R7) et le jeu rendu.
-  //
-  // Mesuré : à poids par défaut, une note marginale de trois mots est un « document » très
-  // court, donc un signal disproportionné — une ligne fédérale a pris la 1re place devant
-  // l'ancien 1er. On BORNE donc, ce qui préserve jeu et ordre à l'identique, et l'ouverture
-  // de `marginal_note` en canal SÉPARÉ ET ÉTIQUETÉ reste à faire, avec des poids explicites
-  // importés de src/relevance.ts et une mesure des 21 cas.
-  const binds: unknown[] = [`{text} : (${match})`, lang];
+  // MATCH sur `text` (poids 1.0) et `marginal_note` (poids MARGINAL_NOTE_WEIGHT = 0.5) ;
+  // `snippet(articles_fts, 0, …)` demeure borné à la colonne 0 (`text`) pour ne jamais
+  // servir une note marginale hors texte comme extrait officiel (art. 14 L.i., R4).
+  const binds: unknown[] = [`{text marginal_note} : (${match})`, lang];
   if (scope.law) {
     clauses.push("AND articles_fts.law_id = ?");
     binds.push(scope.law);
@@ -2407,6 +2573,26 @@ async function runMatch(
   if (scope.notLaw) {
     clauses.push("AND articles_fts.law_id <> ?");
     binds.push(scope.notLaw);
+  }
+  if (!scope.law) {
+    const subConds: string[] = [];
+    if (scope.domains && scope.domains.length > 0 && scope.domains.length < ALL_DOMAINS.length) {
+      subConds.push(`lsub.domain IN (${scope.domains.map(() => "?").join(",")})`);
+      binds.push(...scope.domains);
+    }
+    if (scope.jurisdiction) {
+      subConds.push("lsub.jurisdiction = ?");
+      binds.push(scope.jurisdiction);
+    }
+    if (scope.forum?.trim()) {
+      subConds.push(forumScopeSqlClause("lsub"));
+      binds.push(`%${scope.forum.trim()}%`);
+    }
+    if (subConds.length) {
+      clauses.push(
+        `AND articles_fts.law_id IN (SELECT lsub.id FROM laws lsub WHERE ${subConds.join(" AND ")})`,
+      );
+    }
   }
   // `articles_fts` ne porte PAS de colonne `jurisdiction` (et lui en ajouter une exigerait
   // de recréer la table), donc le masque passe par une sous-requête sur `laws`.
@@ -2429,9 +2615,10 @@ async function runMatch(
   const weightExpr =
     `(CASE l.fonction WHEN 'directive' THEN ${FONCTION_WEIGHTS.directive} ` +
     `WHEN 'orientation' THEN ${FONCTION_WEIGHTS.orientation} ELSE 1.0 END)`;
+  const bm25Expr = `bm25(articles_fts, 1.0, ${MARGINAL_NOTE_WEIGHT}, 0.0, 0.0, 0.0)`;
   const weightedBm25 =
-    `(CASE WHEN bm25(articles_fts) < 0 THEN bm25(articles_fts) * ${weightExpr} ` +
-    `ELSE bm25(articles_fts) / ${weightExpr} END)`;
+    `(CASE WHEN ${bm25Expr} < 0 THEN ${bm25Expr} * ${weightExpr} ` +
+    `ELSE ${bm25Expr} / ${weightExpr} END)`;
   const scoreCol = withScore ? `, ${weightedBm25} AS score` : "";
   const hits = (
     await db
@@ -2487,16 +2674,41 @@ async function embedQuery(v: VectorBackend, query: string): Promise<number[] | n
   }
 }
 
+interface VectorQueryScope {
+  lawId?: string;
+  domains?: readonly string[];
+  jurisdiction?: string;
+  useMetadataDomainFilter?: boolean;
+}
+
 async function queryVectors(
   v: VectorBackend,
   values: number[],
-  lawId: string | undefined,
+  vecScope: VectorQueryScope,
 ): Promise<VectorHits | null> {
   try {
+    let filter: VectorizeVectorMetadataFilter | undefined;
+    if (vecScope.lawId) {
+      filter = { law: vecScope.lawId };
+    } else if (vecScope.useMetadataDomainFilter) {
+      const f: VectorizeVectorMetadataFilter = {};
+      if (
+        vecScope.domains &&
+        vecScope.domains.length > 0 &&
+        vecScope.domains.length < ALL_DOMAINS.length
+      ) {
+        f.domain =
+          vecScope.domains.length === 1 ? vecScope.domains[0] : { $in: [...vecScope.domains] };
+      }
+      if (vecScope.jurisdiction) {
+        f.jurisdiction = vecScope.jurisdiction;
+      }
+      if (Object.keys(f).length > 0) filter = f;
+    }
     const res = await v.index.query(values, {
       topK: VECTOR_TOP_K,
       returnMetadata: "all",
-      ...(lawId ? { filter: { law: lawId } } : {}),
+      ...(filter ? { filter } : {}),
     });
     const out: VectorHits = { arts: [], divs: [] };
     for (const m of res.matches ?? []) {
@@ -2533,27 +2745,40 @@ async function queryVectors(
  * son texte n'est jamais rendu. Écarté après la fusion, il aurait dégradé le classement sans
  * apparaître nulle part.
  *
- * Aucun vecteur fédéral n'existe aujourd'hui (le backfill n'a pas tourné depuis l'ingestion
- * d'`ca-i-15`), donc ce filtre est neutre — mais c'est la phase 6 qui les posera, et la vraie
- * garde d'alors est l'index de métadonnées `jurisdiction` déclaré AVANT le premier upsert
- * (invariant 8 : ces index ne sont pas rétroactifs). Ce filtre-ci reste le filet du cas où
- * l'ordre serait manqué.
- *
- * Coût nul dans l'état visé : interrupteur ouvert, on rend `vec` sans toucher à D1.
+ * Applique aussi les filtres `domains`, `jurisdiction` et `forum` contre D1 lorsque le
+ * filtrage natif Vectorize par métadonnées (`VECTOR_DOMAIN_FILTER`) n'est pas encore armé.
  */
 async function filtreVecteurs(
   db: D1Database,
   vec: VectorHits | null,
   env: CorpusGateEnv,
+  scope?: { domains?: readonly string[]; jurisdiction?: string; forum?: string },
 ): Promise<VectorHits | null> {
   const c = clauseCorpus(env, "");
-  if (!vec || !c) return vec;
+  const extraConds: string[] = [];
+  const extraBinds: unknown[] = [];
+  if (scope?.domains && scope.domains.length > 0 && scope.domains.length < ALL_DOMAINS.length) {
+    extraConds.push(`domain IN (${scope.domains.map(() => "?").join(",")})`);
+    extraBinds.push(...scope.domains);
+  }
+  if (scope?.jurisdiction) {
+    extraConds.push("jurisdiction = ?");
+    extraBinds.push(scope.jurisdiction);
+  }
+  if (scope?.forum?.trim()) {
+    extraConds.push(forumScopeSqlClause(""));
+    extraBinds.push(`%${scope.forum.trim()}%`);
+  }
+  if (!vec || (!c && extraConds.length === 0)) return vec;
   const ids = [...new Set([...vec.arts.map((a) => a.law), ...vec.divs.map((d) => d.law_id)])];
   if (!ids.length) return vec;
+  const extraSql = extraConds.length ? ` AND ${extraConds.join(" AND ")}` : "";
   const rows = (
     await db
-      .prepare(`SELECT id FROM laws WHERE id IN (${ids.map(() => "?").join(",")}) AND ${c}`)
-      .bind(...ids)
+      .prepare(
+        `SELECT id FROM laws WHERE id IN (${ids.map(() => "?").join(",")})${c ? ` AND ${c}` : ""}${extraSql}`,
+      )
+      .bind(...ids, ...extraBinds)
       .all<{ id: string }>()
   ).results;
   // Liste BLANCHE : un id absent de `laws` (vecteur périmé) est écarté lui aussi, plutôt que
@@ -2720,31 +2945,125 @@ async function fuseHybrid(
   return hits;
 }
 
+async function countExcludedDomainsFts(
+  db: D1Database,
+  query: string,
+  matchExact: string,
+  lang: Lang,
+  excludedDomains: readonly string[],
+  scope: { jurisdiction?: string; forum?: string },
+  relax: boolean,
+  env: CorpusGateEnv,
+): Promise<{ domain: string; lexical_hits: number }[]> {
+  if (!excludedDomains.length) return [];
+  const subClauses: string[] = [`l.domain IN (${excludedDomains.map(() => "?").join(",")})`];
+  const subBinds: unknown[] = [...excludedDomains];
+  if (scope.jurisdiction) {
+    subClauses.push("l.jurisdiction = ?");
+    subBinds.push(scope.jurisdiction);
+  }
+  if (scope.forum?.trim()) {
+    subClauses.push(forumScopeSqlClause("l"));
+    subBinds.push(`%${scope.forum.trim()}%`);
+  }
+  const m = masqueLawId(env, "articles_fts.law_id");
+  const runRadar = async (expr: string) =>
+    (
+      await db
+        .prepare(
+          `SELECT l.domain AS domain, COUNT(*) AS n FROM articles_fts
+           JOIN laws l ON l.id = articles_fts.law_id
+           WHERE articles_fts MATCH ? AND articles_fts.lang = ? AND ${subClauses.join(" AND ")} ${m}
+           GROUP BY l.domain ORDER BY n DESC, l.domain ASC`,
+        )
+        .bind(`{text marginal_note} : (${expr})`, lang, ...subBinds)
+        .all<{ domain: string; n: number }>()
+    ).results;
+
+  let rows = await runRadar(matchExact);
+  if (rows.length === 0 && relax) {
+    const sigTokens = tokenize(query);
+    if (sigTokens.length >= 2) {
+      const orExpr = [...new Set(sigTokens.flatMap(ligatureVariants))]
+        .map(quoteSingleTok)
+        .join(" OR ");
+      rows = await runRadar(orExpr);
+    }
+  }
+  return rows.map((r) => ({ domain: r.domain, lexical_hits: r.n }));
+}
+
 export async function searchText(
   db: D1Database,
   query: string,
   lang: Lang,
   lawId: string | undefined,
   page: Page,
-  opts: { relax?: boolean; vector?: VectorBackend; env?: CorpusGateEnv } = {},
+  opts: {
+    relax?: boolean;
+    vector?: VectorBackend;
+    env?: CorpusGateEnv;
+    domains?: readonly string[];
+    explicitDomains?: boolean;
+    lawDomain?: string;
+    jurisdiction?: string;
+    forum?: string;
+  } = {},
 ): Promise<SearchOutcome> {
   const env = opts.env ?? {};
   const match = toFtsQuery(query);
   if (!match) return { hits: [], total: 0, fallback: null, elsewhere: null };
-  const scope: MatchScope = lawId ? { law: lawId } : {};
+  const activeDomains = opts.domains ?? ALL_DOMAINS;
+  const excludedDomains = lawId ? [] : ALL_DOMAINS.filter((d) => !activeDomains.includes(d));
+  const scope: MatchScope = lawId
+    ? { law: lawId }
+    : { domains: activeDomains, jurisdiction: opts.jurisdiction, forum: opts.forum };
+  const wideDomains = opts.explicitDomains
+    ? activeDomains
+    : opts.lawDomain
+      ? [opts.lawDomain]
+      : activeDomains;
+  const wideScope: MatchScope = {
+    domains: wideDomains,
+    jurisdiction: opts.jurisdiction,
+    forum: opts.forum,
+  };
 
   // Hybride (plan v2, 2.3) : embed de la requête EN PARALLÈLE du FTS exact — une seule
   // fois, réutilisé par tous les barreaux. Pagination au-delà de la 1re page : FTS pur
   // (une liste fusionnée ne se pagine pas).
   const useVector = !!opts.vector && page.offset === 0;
-  const [exact, qVec] = await Promise.all([
+  const activeVecScope: VectorQueryScope = lawId
+    ? { lawId }
+    : {
+        domains: activeDomains,
+        jurisdiction: opts.jurisdiction,
+        useMetadataDomainFilter: vectorDomainFilterActif(env),
+      };
+  const activeFilterScope = lawId
+    ? undefined
+    : { domains: activeDomains, jurisdiction: opts.jurisdiction, forum: opts.forum };
+  const [exact, qVec, otherDomains] = await Promise.all([
     runMatch(db, match, lang, scope, page, false, env),
     useVector ? embedQuery(opts.vector!, query) : Promise.resolve(null),
+    excludedDomains.length
+      ? countExcludedDomainsFts(
+          db,
+          query,
+          match,
+          lang,
+          excludedDomains,
+          { jurisdiction: opts.jurisdiction, forum: opts.forum },
+          opts.relax !== false,
+          env,
+        )
+      : Promise.resolve([]),
   ]);
   const vec = await filtreVecteurs(
     db,
-    qVec ? await queryVectors(opts.vector!, qVec, lawId) : null,
+    qVec ? await queryVectors(opts.vector!, qVec, activeVecScope) : null,
     env,
+    activeFilterScope,
   );
   const rawSemDivs = (vec?.divs ?? []).filter((d) => d.score >= DIVISION_MATCH_MIN_SCORE);
   let semDivs = rawSemDivs;
@@ -2758,14 +3077,29 @@ export async function searchText(
   }
   semDivs = semDivs.slice(0, DIVISION_MATCH_MAX);
   // vecteurs corpus entier (embedding réutilisé), pour les barreaux élargis — paresseux
+  const wideVecScope: VectorQueryScope = {
+    domains: wideDomains,
+    jurisdiction: opts.jurisdiction,
+    useMetadataDomainFilter: vectorDomainFilterActif(env),
+  };
+  const wideFilterScope = {
+    domains: wideDomains,
+    jurisdiction: opts.jurisdiction,
+    forum: opts.forum,
+  };
   let vecWideCache: Awaited<ReturnType<typeof queryVectors>> | undefined;
   const vecWide = async () => {
     if (vecWideCache === undefined) {
       // Le barreau ELARGI repose le filtre : sans lawId, la requete Vectorize porte sur
-      // tout l'index, donc c'est le chemin le PLUS expose au corpus federal.
+      // tout l'index (ou la portée du domaine), donc c'est le chemin le PLUS expose.
       vecWideCache =
         lawId && qVec
-          ? await filtreVecteurs(db, await queryVectors(opts.vector!, qVec, undefined), env)
+          ? await filtreVecteurs(
+              db,
+              await queryVectors(opts.vector!, qVec, wideVecScope),
+              env,
+              wideFilterScope,
+            )
           : vec;
     }
     return vecWideCache;
@@ -2790,7 +3124,7 @@ export async function searchText(
         db,
         match,
         lang,
-        { notLaw: lawId },
+        { notLaw: lawId, ...wideScope },
         { limit: 3, offset: 0 },
         false,
         env,
@@ -2803,12 +3137,13 @@ export async function searchText(
       fallback: null,
       elsewhere,
       divisions: semDivs,
+      otherDomains,
     };
   }
 
-  // 2) élargissement automatique au corpus (plan v2, 1.1)
+  // 2) élargissement automatique dans la portée du domaine (plan v2, 1.1)
   if (lawId) {
-    const wide = await runMatch(db, match, lang, {}, page, false, env);
+    const wide = await runMatch(db, match, lang, wideScope, page, false, env);
     if (wide.total > 0) {
       return {
         hits: await fuse(wide, await vecWide()),
@@ -2816,6 +3151,7 @@ export async function searchText(
         fallback: "widened",
         elsewhere: null,
         divisions: semDivs,
+        otherDomains,
       };
     }
   }
@@ -2845,11 +3181,12 @@ export async function searchText(
         fallback: { loo: best.omitted },
         elsewhere: null,
         divisions: semDivs,
+        otherDomains,
       };
     }
   }
 
-  // 4) OU + bm25 (plan v2, 1.2) : portée demandée, puis corpus. Termes composés éclatés
+  // 4) OU + bm25 (plan v2, 1.2) : portée demandée, puis domaine élargi. Termes composés éclatés
   //    (« non-concurrence » -> non, concurrence).
   if (relaxable) {
     const orTerms = [
@@ -2867,10 +3204,11 @@ export async function searchText(
           fallback: "or_relax",
           elsewhere: null,
           divisions: semDivs,
+          otherDomains,
         };
       }
       if (lawId) {
-        const wideOr = await runMatch(db, matchOr, lang, {}, page, true, env);
+        const wideOr = await runMatch(db, matchOr, lang, wideScope, page, true, env);
         if (wideOr.total > 0) {
           return {
             hits: await fuse(wideOr, await vecWide()),
@@ -2878,13 +3216,14 @@ export async function searchText(
             fallback: "or_relax",
             elsewhere: null,
             divisions: semDivs,
+            otherDomains,
           };
         }
       }
     }
   }
 
-  // 5) repérage sémantique SEUL (au-dessus du plancher) : portée demandée, puis corpus
+  // 5) repérage sémantique SEUL (au-dessus du plancher) : portée demandée, puis domaine élargi
   for (const v of [vec, lawId ? await vecWide() : null]) {
     if (v?.arts.length) {
       const hits = await fuseHybrid(db, lang, { hits: [], total: 0 }, v, page.limit, env);
@@ -2900,10 +3239,18 @@ export async function searchText(
           fallback: "semantic",
           elsewhere: null,
           divisions: semDivs,
+          otherDomains,
         };
       }
     }
   }
 
-  return { hits: [], total: 0, fallback: null, elsewhere: null, divisions: semDivs };
+  return {
+    hits: [],
+    total: 0,
+    fallback: null,
+    elsewhere: null,
+    divisions: semDivs,
+    otherDomains,
+  };
 }

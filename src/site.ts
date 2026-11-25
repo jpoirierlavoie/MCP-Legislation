@@ -29,6 +29,7 @@ import {
 } from "./lib";
 import {
   FONCTION_WEIGHTS,
+  MARGINAL_NOTE_WEIGHT,
   MAX_PER_FONCTION_SOUPLE,
   MAX_PER_SUBJECT,
   MAX_SUFFIX,
@@ -87,6 +88,17 @@ const FONCTION: Record<string, [string, string]> = {
   tarif: ["Tarif", "Tariff"],
   directive: ["Directive de pratique", "Practice directive"],
   orientation: ["Orientation (IG)", "Policy statement"],
+};
+
+const DOMAINE: Record<string, [string, string]> = {
+  core: ["Socle (core)", "Core"],
+  "cours-federales": ["Cours fédérales", "Federal Courts"],
+  financier: ["Financier et AMF", "Financial & AMF"],
+  "construction-immobilier": ["Construction et immobilier", "Construction & Real Estate"],
+  "municipal-environnement": ["Municipal et environnement", "Municipal & Environment"],
+  travail: ["Travail et emploi", "Labour & Employment"],
+  penal: ["Pénal et police", "Penal & Police"],
+  "propriete-intellectuelle": ["Propriété intellectuelle", "Intellectual Property"],
 };
 
 const nb = (n: number) => n.toLocaleString("fr-CA").replace(/ /g, " ");
@@ -421,7 +433,7 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
           ? `<a data-l="${lg}"${attrLg} href="${esc(u)}" rel="noopener">${esc(t)}</a>`
           : `<span data-l="${lg}"${attrLg}>${esc(t)}</span>`;
       };
-      return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}">
+      return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}" data-d="${esc(l.domain ?? "core")}">
       <td class="cite">${esc(citeOf(l))}</td>
       <td>${lien(src?.fr, l.name_fr, "fr")}${lien(src?.en, l.name_en, "en")}</td>
       <td>${bi(ffr, fen)}</td>
@@ -467,6 +479,13 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
       <option value="orientation">Orientation · Policy statement</option>`
           : ""
       }
+    </select>
+    <label class="sr" for="dm">${bi("Filtrer par domaine", "Filter by domain")}</label>
+    <select id="dm">
+      <option value="">Tous domaines · All domains</option>
+      ${Object.entries(DOMAINE)
+        .map(([k, [fr, en]]) => `<option value="${esc(k)}">${esc(fr)} · ${esc(en)}</option>`)
+        .join("\n      ")}
     </select>
     <span id="cpt" class="m" role="status" aria-live="polite"></span>
   </search>
@@ -583,6 +602,7 @@ function reperage(): string {
     )}</li>
     <li>${bi("pondération normative", "normative weighting")} <b>directive ×${FONCTION_WEIGHTS.directive} · orientation ×${FONCTION_WEIGHTS.orientation}</b></li>
     <li>${bi("plafond fonction souple", "soft-function cap")} <b>${MAX_PER_FONCTION_SOUPLE}</b></li>
+    <li>${bi("note marginale FTS", "FTS marginal note")} <b>×${MARGINAL_NOTE_WEIGHT}</b></li>
   </ul>`;
 
   const sec = (s: { titre_fr: string; titre_en: string; corps_fr: string[]; corps_en: string[] }) =>
@@ -864,7 +884,7 @@ const JS = String.raw`
 
   var t=d.getElementById('t'); if(!t) return;
   var body=t.tBodies[0], rows=[].slice.call(body.rows);
-  var q=d.getElementById('q'), f=d.getElementById('f'), cpt=d.getElementById('cpt');
+  var q=d.getElementById('q'), f=d.getElementById('f'), dm=d.getElementById('dm'), cpt=d.getElementById('cpt');
 
   function fold(s){
     s=s.toLowerCase().normalize('NFD');
@@ -876,10 +896,11 @@ const JS = String.raw`
   for(var r0=0;r0<rows.length;r0++) idx.set(rows[r0],fold(rows[r0].textContent));
 
   function filtre(){
-    var needle=fold(q?q.value:''), fonction=f?f.value:'', n=0;
+    var needle=fold(q?q.value:''), fonction=f?f.value:'', dom=dm?dm.value:'', n=0;
     for(var i=0;i<rows.length;i++){
       var r=rows[i];
       var ok=(!fonction||r.getAttribute('data-f')===fonction) &&
+             (!dom||r.getAttribute('data-d')===dom) &&
              (!needle||(idx.get(r)||'').indexOf(needle)>-1);
       r.hidden=!ok; if(ok)n++;
     }
@@ -887,6 +908,7 @@ const JS = String.raw`
   }
   if(q) q.addEventListener('input',filtre);
   if(f) f.addEventListener('change',filtre);
+  if(dm) dm.addEventListener('change',filtre);
   filtre();
 
   var ths=t.tHead.rows[0].cells;

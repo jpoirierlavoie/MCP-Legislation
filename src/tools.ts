@@ -12,6 +12,7 @@ import {
   citationOf,
   citeOf,
   consolOf,
+  countExcludedDomainLaws,
   getArticle,
   getDivision,
   getLaw,
@@ -34,7 +35,9 @@ import {
   parseCitation,
   parseLinks,
   relatedLaws,
+  resolveActiveDomains,
   type StructureNode,
+  scopeRelevanceData,
   searchText,
   translateDivisionPath,
   unitLabel,
@@ -294,6 +297,8 @@ export function construireOutils(
     lang: Lang = "fr",
   ): string => {
     const attrs = [
+      `domaine: ${l.domain ?? "core"}`,
+      `juridiction: ${l.jurisdiction ?? "qc"}`,
       l.fonction ? `fonction: ${l.fonction}` : null,
       l.forum ? `forum: ${l.forum}` : null,
       l.parent_law_id ? `loi habilitante: ${l.parent_law_id}` : null,
@@ -322,12 +327,16 @@ export function construireOutils(
   };
 
   const H_LIST_LAWS = async ({
+    domains,
+    jurisdiction,
     fonction,
     forum,
     subject,
     structure: structureArg,
     lang: langArg,
   }: {
+    domains?: string[];
+    jurisdiction?: "qc" | "ca";
     fonction?: string;
     forum?: string;
     subject?: string;
@@ -337,7 +346,16 @@ export function construireOutils(
     // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const structure = structureArg ?? true;
-    const laws = await listLaws(db, { fonction, forum, subject }, lang as Lang, env);
+    const scope = resolveActiveDomains(domains, env);
+    const [laws, otherDomains] = await Promise.all([
+      listLaws(
+        db,
+        { domains: scope.active, jurisdiction, fonction, forum, subject },
+        lang as Lang,
+        env,
+      ),
+      countExcludedDomainLaws(db, scope.excluded, { jurisdiction, fonction, forum, subject }, env),
+    ]);
     // 1.4 : le signal de repérage est souvent au Titre, pas au Livre (post-mortem :
     // Livre V C.p.c. muet, Titre IV parlant) — plan profondeur 2 des lois à Livres.
     const outlines =
@@ -348,8 +366,15 @@ export function construireOutils(
             (lang ?? "fr") as Lang,
             laws.map((l) => l.id).filter((id) => OUTLINE_LAWS.includes(id)),
           );
+    const radarHint = otherDomains.length
+      ? lang === "en"
+        ? `\n\nOther quarantined domain(s) available (${otherDomains.map((d) => `${d.domain}: ${d.laws_count}`).join(", ")}) — pass domains=[...] or domains=['all'] to include them.`
+        : `\n\nAutres domaines disponibles (en quarantaine par défaut : ${otherDomains.map((d) => `${d.domain} (${d.laws_count})`).join(", ")}) — passer domains=[...] ou domains=['all'] pour les inclure.`
+      : "";
     if (laws.length === 0) {
       const applied = [
+        !scope.isAll ? `domains=${JSON.stringify(scope.active)}` : null,
+        jurisdiction ? `jurisdiction='${jurisdiction}'` : null,
         fonction ? `fonction='${fonction}'` : null,
         forum ? `forum='${forum}'` : null,
         subject ? `subject='${subject}'` : null,
@@ -359,16 +384,25 @@ export function construireOutils(
       return err(
         applied
           ? `Aucune loi pour ${applied}. Vérifiez les valeurs (list_subjects pour les matières) ` +
-              "ou appelez list_laws sans filtre."
+              `ou appelez list_laws sans filtre.${radarHint}`
           : "Aucune loi chargée dans la base.",
       );
     }
-    const header = `${laws.length} loi(s) au corpus :`;
+    const header = `${laws.length} loi(s) dans la portée [${scope.active.join(", ")}] :`;
     const body = laws
       .map((l) => renderLaw(l, outlines.get(l.id), (lang ?? "fr") as Lang))
       .join("\n");
-    return ok(`${header}\n${body}`, {
-      filters: { fonction: fonction ?? null, forum: forum ?? null, subject: subject ?? null },
+    return ok(`${header}\n${body}${radarHint}`, {
+      filters: {
+        domains: scope.active,
+        jurisdiction: jurisdiction ?? null,
+        fonction: fonction ?? null,
+        forum: forum ?? null,
+        subject: subject ?? null,
+      },
+      domains_active: scope.active,
+      domains_excluded: scope.excluded,
+      other_domains: otherDomains,
       count: laws.length,
       laws: laws.map((l) => ({
         id: l.id,
@@ -379,6 +413,8 @@ export function construireOutils(
         // `official_cite` seul est un commit séparé, annoncé.
         rlrq_cite: citeOf(l),
         official_cite: citeOf(l),
+        domain: l.domain ?? "core",
+        jurisdiction: l.jurisdiction ?? "qc",
         langs: l.langs,
         consol_date_fr: l.consol_date_fr,
         consol_date_en: l.consol_date_en,
@@ -427,7 +463,8 @@ export function construireOutils(
             .map(
               (s) =>
                 `  • ${s.id} — ${libelle(s)} (${s.laws_count} ${en ? "law(s)" : "loi(s)"}` +
-                `${s.divisions_count ? `, ${s.divisions_count} division(s)` : ""})` +
+                `${s.divisions_count ? `, ${s.divisions_count} division(s)` : ""}` +
+                `${s.domains.length ? ` ; ${en ? "domains" : "domaines"}: ${s.domains.join(", ")}` : ""})` +
                 `${descr(s) ? `\n      ${descr(s)}` : ""}`,
             )
             .join("\n"),
@@ -446,6 +483,7 @@ export function construireOutils(
         description_en: s.description_en,
         laws_count: s.laws_count,
         divisions_count: s.divisions_count,
+        domains: s.domains,
       })),
     });
   };
@@ -529,10 +567,16 @@ export function construireOutils(
   // 1d) find_relevant ----------------------------------------------------
   const H_FIND_RELEVANT = async ({
     query,
+    domains,
+    jurisdiction,
+    forum,
     limit,
     lang: langArg,
   }: {
     query: string;
+    domains?: string[];
+    jurisdiction?: "qc" | "ca";
+    forum?: string;
     limit?: number;
     lang?: "fr" | "en";
   }) => {
@@ -547,14 +591,39 @@ export function construireOutils(
           "(ex. « bail de logement », « congédiement »), ou consultez list_subjects.",
       );
     }
-    const data = await loadRelevanceData(db, tokens, lang as Lang, env);
-    const cands = rank({ tokens, ...data }, page.limit);
+    const scope = resolveActiveDomains(domains, env);
+    const allData = await loadRelevanceData(db, tokens, lang as Lang, env);
+    const activeData = scopeRelevanceData(allData, {
+      domains: scope.active,
+      jurisdiction,
+      forum,
+    });
+    const cands = rank({ tokens, ...activeData }, page.limit);
+    const otherDomains: { domain: string; hits: number; top_score: number }[] = [];
+    for (const d of scope.excluded) {
+      const dData = scopeRelevanceData(allData, { domains: [d], jurisdiction, forum });
+      const dHits = rank({ tokens, ...dData }, 8);
+      if (dHits.length > 0) {
+        otherDomains.push({
+          domain: d,
+          hits: dHits.length,
+          top_score: dHits[0]!.score,
+        });
+      }
+    }
+    otherDomains.sort((a, b) => b.top_score - a.top_score || b.hits - a.hits);
+    const radarLine = otherDomains.length
+      ? lang === "en"
+        ? `Matches also exist in quarantined domain(s): ${otherDomains.map((o) => `${o.domain} (${o.hits})`).join(", ")} — re-run with domains=[${[...scope.active, otherDomains[0]!.domain].map((x) => `'${x}'`).join(",")}] if relevant.`
+        : `Pistes aussi repérées en domaine(s) exclu(s) : ${otherDomains.map((o) => `${o.domain} (${o.hits})`).join(", ")} — relancer avec domains=[${[...scope.active, otherDomains[0]!.domain].map((x) => `'${x}'`).join(",")}] si pertinent.`
+      : "";
     if (cands.length === 0) {
       return err(
-        `Aucun rapprochement trouvé (termes retenus : ${tokens.join(", ")}). ` +
+        `Aucun rapprochement trouvé dans [${scope.active.join(", ")}] (termes retenus : ${tokens.join(", ")}). ` +
           "Le corpus est une SÉLECTION FERMÉE de textes du Québec et du fédéral : une absence " +
           "ici ne dit rien de l'existence d'une règle ailleurs. " +
           "Voir les domaines avec list_subjects, ou chercher dans le texte avec search_text." +
+          (radarLine ? `\n\n${radarLine}` : "") +
           (langWarn ? `\n\n${langWarn}` : ""),
       );
     }
@@ -564,13 +633,22 @@ export function construireOutils(
         : `${c.law_id} (loi entière)`;
       return `${i + 1}. ${cible}  — score ${c.score}\n     pourquoi : ${c.pourquoi.join(" ; ")}`;
     });
+    const scopeLine =
+      lang === "en"
+        ? `Scope: domains [${scope.active.join(", ")}]${jurisdiction ? ` · jurisdiction '${jurisdiction}'` : ""}${forum ? ` · forum '${forum}'` : ""}.${radarLine ? ` ${radarLine}` : ""}`
+        : `Portée : domaines [${scope.active.join(", ")}]${jurisdiction ? ` · juridiction '${jurisdiction}'` : ""}${forum ? ` · forum '${forum}'` : ""}.${radarLine ? ` ${radarLine}` : ""}`;
     const prefixeLangWarn = langWarn ? `${langWarn}\n\n` : "";
     return ok(
       `${prefixeLangWarn}${cands.length} piste(s) repérée(s) (termes : ${tokens.join(", ")}) :\n` +
-        `${lines.join("\n")}\n\n${GARDE_FOU}`,
+        `${lines.join("\n")}\n\n${scopeLine}\n\n${GARDE_FOU}`,
       {
         query,
         lang,
+        domains_active: scope.active,
+        domains_excluded: scope.excluded,
+        jurisdiction: jurisdiction ?? null,
+        forum: forum ?? null,
+        other_domains: otherDomains,
         ...(langWarn ? { avertissement_langue: langWarn } : {}),
         tokens,
         weights: WEIGHTS,
@@ -1034,12 +1112,18 @@ export function construireOutils(
   const H_SEARCH_TEXT = async ({
     query,
     law: rawLaw,
+    domains,
+    jurisdiction,
+    forum,
     lang: langArg,
     limit,
     offset,
   }: {
     query: string;
     law?: string;
+    domains?: string[];
+    jurisdiction?: "qc" | "ca";
+    forum?: string;
     lang?: "fr" | "en";
     limit?: number;
     offset?: number;
@@ -1050,6 +1134,7 @@ export function construireOutils(
     const langWarn = detectLanguageMismatch(query, lang);
     const lawRow = law ? await getLaw(db, law, env) : null;
     if (law && !lawRow) return err(`Loi '${law}' inconnue.`);
+    const scope = resolveActiveDomains(domains, env);
     // Recherche corpus : viser 12-15 résultats (1.3) ; restreinte : 10 comme avant.
     const page = paginate(limit, offset, law ? 10 : 14, 50);
     let res;
@@ -1071,9 +1156,13 @@ export function construireOutils(
       res = await searchText(db, query, lang as Lang, law, fetchPage, {
         relax: flags.RELAX_SEARCH !== "0",
         vector: vectorActif && aiObserve ? { ai: aiObserve, index: env.VECTORS } : undefined,
-        // FEDERAL_CORPUS : sans ce passage, la recherche plein texte servait des
-        // résultats fédéraux pendant que `list_laws` annonçait 79 lois — mesuré.
+        // FEDERAL_CORPUS / DOMAIN_QUARANTINE
         env,
+        domains: scope.active,
+        explicitDomains: scope.explicit,
+        lawDomain: lawRow?.domain ?? "core",
+        jurisdiction,
+        forum,
       });
       if (!law) {
         const distinctIds = [...new Set(res.hits.map((h) => h.law_id))];
@@ -1164,6 +1253,13 @@ export function construireOutils(
     // présentée comme un fait. Deux causes dominent et se disent en une phrase : le corpus
     // est une sélection fermée, et l'appariement est LEXICAL (aucun stemming français,
     // mesuré : « congédiement » n'attrape pas « congédier »).
+    const otherDomains = res.otherDomains ?? [];
+    const radarLine =
+      !law && otherDomains.length > 0
+        ? lang === "en"
+          ? `Matches also exist in quarantined domain(s): ${otherDomains.map((o) => `${o.domain} (${o.lexical_hits})`).join(", ")} — re-run with domains=[${[...scope.active, otherDomains[0]!.domain].map((x) => `'${x}'`).join(",")}] if relevant.`
+          : `Correspondances aussi repérées en domaine(s) exclu(s) : ${otherDomains.map((o) => `${o.domain} (${o.lexical_hits})`).join(", ")} — relancer avec domains=[${[...scope.active, otherDomains[0]!.domain].map((x) => `'${x}'`).join(",")}] si pertinent.`
+        : "";
     if (res.hits.length === 0) {
       if (frOnlyLawNotice) {
         return err(
@@ -1177,11 +1273,12 @@ export function construireOutils(
         );
       }
       return err(
-        `Aucun résultat trouvé (${lang}). Cela ne signifie pas qu'aucune règle ` +
+        `Aucun résultat trouvé (${lang}${!law ? ` ; domaines [${scope.active.join(", ")}]` : ""}). Cela ne signifie pas qu'aucune règle ` +
           "n'existe : le corpus est une sélection fermée de textes, et l'appariement est " +
           "LEXICAL (pas de familles de mots — « congédiement » ne trouve pas « congédier »). " +
           "Essayer d'autres mots exacts du texte, ou find_relevant pour partir du " +
           "problème plutôt que des mots." +
+          (radarLine ? `\n\n${radarLine}` : "") +
           (noteHybrideDesactive ? ` ${noteHybrideDesactive}` : "") +
           (langWarn ? `\n\n${langWarn}` : ""),
       );
@@ -1337,15 +1434,29 @@ export function construireOutils(
     // vecteurs » : un article trouvé par les DEUX voies garde son SearchHit lexical et n'est
     // jamais marqué `semantic`, bien que la fusion RRF ait déplacé son rang.
     const nSem = res.hits.filter((h) => h.semantic).length;
+    const domainsActive = law ? [lawRow?.domain ?? "core"] : scope.active;
+    const domainsExcluded = law ? [] : scope.excluded;
+    const scopeFooter = !law
+      ? `\n\n${
+          lang === "en"
+            ? `Scope: domains [${domainsActive.join(", ")}]${jurisdiction ? ` · jurisdiction '${jurisdiction}'` : ""}${forum ? ` · forum '${forum}'` : ""}.${radarLine ? ` ${radarLine}` : ""}`
+            : `Portée : domaines [${domainsActive.join(", ")}]${jurisdiction ? ` · juridiction '${jurisdiction}'` : ""}${forum ? ` · forum '${forum}'` : ""}.${radarLine ? ` ${radarLine}` : ""}`
+        }`
+      : "";
     const suffixeHybride = noteHybrideDesactive ? `\n\n${noteHybrideDesactive}` : "";
     const prefixeLangWarn = langWarn ? `${langWarn}\n\n` : "";
     const prefixeFrOnly = frOnlyLawNotice ? `${frOnlyLawNotice}\n` : "";
     return ok(
-      `${prefixeLangWarn}${prefixeFrOnly}${header}\n${body}${structures}${elsewhere}${suffixeHybride}`,
+      `${prefixeLangWarn}${prefixeFrOnly}${header}\n${body}${structures}${elsewhere}${scopeFooter}${suffixeHybride}`,
       {
         query,
         lang,
         law: law ?? null,
+        domains_active: domainsActive,
+        domains_excluded: domainsExcluded,
+        jurisdiction: jurisdiction ?? null,
+        forum: forum ?? null,
+        other_domains: otherDomains,
         ...(langWarn ? { avertissement_langue: langWarn } : {}),
         ...(frOnlyLawNotice ? { fr_only_law: true } : {}),
         /** Appariements LEXICAUX au corpus, non paginés. Vaut 0 sur un repli sémantique seul. */

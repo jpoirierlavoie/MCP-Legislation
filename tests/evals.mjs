@@ -53,11 +53,18 @@ const EVALS = [
   },
   {
     query: "congédiement",
+    domains: ["core", "travail"],
     attendu: "n-1.1 + contrat de travail du C.c.Q.",
     present: [
       { law: "n-1.1" },
       { law: "ccq", pathPrefix: "ga:l_cinquieme-gb:l_deuxieme-gc:l_septieme" },
     ],
+  },
+  {
+    query: "congédiement",
+    attendu: "par défaut (core), contrat de travail du C.c.Q. + radar travail",
+    present: [{ law: "ccq", pathPrefix: "ga:l_cinquieme-gb:l_deuxieme-gc:l_septieme" }],
+    expectRadar: ["travail"],
   },
   {
     query: "appel civil",
@@ -100,6 +107,7 @@ const EVALS = [
   },
   {
     query: "courtage immobilier",
+    domains: ["core", "construction-immobilier"],
     attendu: "c-73.2",
     present: [{ law: "c-73.2" }],
   },
@@ -127,6 +135,7 @@ const EVALS = [
   {
     query: "unfair dismissal",
     lang: "en",
+    domains: ["core", "travail"],
     attendu: "miroir de « congédiement » : n-1.1 + contract of employment du C.c.Q.",
     present: [{ law: "n-1.1" }, { law: "ccq", pathPrefix: "ga:l_five-gb:l_two-gc:l_vii" }],
   },
@@ -163,6 +172,7 @@ const EVALS = [
     // trois candidats y portent la matière (b-1.1-r.2, b-1.1, b-1.1-r.1), soit exactement
     // MAX_PER_SUBJECT, et le Code de construction sort premier par son nom.
     query: "licence d'entrepreneur en construction et cautionnement",
+    domains: ["core", "construction-immobilier"],
     attendu: "Code de construction en tête, et la matière « bâtiment » plafonnée à 3 candidats",
     present: [{ law: "b-1.1-r.2" }],
     maxParMatiere: 3,
@@ -179,8 +189,14 @@ const EVALS = [
     // Aucun enrichissement de description ne pouvait corriger cela : ajouter des mots montait
     // les douze à égalité. Seule la réduction de la matière le fait.
     query: "pouvoirs de l'AMF",
+    domains: ["core", "financier"],
     attendu: "e-6.1, la loi qui crée l'Autorité, présente — elle était ABSENTE avant la scission",
     present: [{ law: "e-6.1" }],
+  },
+  {
+    query: "pouvoirs de l'AMF",
+    attendu: "par défaut (core), radar financier signale le coffre financier",
+    expectRadar: ["financier"],
   },
   {
     // Miroir du précédent, côté distribution. Avant la scission, les trois premiers étaient
@@ -189,6 +205,7 @@ const EVALS = [
     // justes arrivaient 5e, 6e et 8e.
     query:
       "plainte contre un représentant en épargne collective devant l'Autorité des marchés financiers",
+    domains: ["core", "financier"],
     attendu:
       "les textes de la distribution en tête, devant la Loi sur l'Autorité des marchés PUBLICS",
     top: { law: "d-9.2-r.10" },
@@ -234,6 +251,7 @@ const EVALS = [
   },
   {
     query: "congédiement sans cause juste et suffisante",
+    domains: ["core", "travail"],
     attendu: "n-1.1, le recours lui-même, en tête (quatre tokens dans son intitulé)",
     top: { law: "n-1.1", pathPrefix: "ga:l_v-gb:l_iii" },
   },
@@ -262,10 +280,12 @@ const matches = (cand, exp) =>
 const fmt = (c) => `${c.law}${c.division_path ? `›${c.division_path}` : ""}(${c.score})`;
 
 async function runEval(e) {
-  const res = await callTool(
-    "find_relevant",
-    e.lang ? { query: e.query, lang: e.lang } : { query: e.query },
-  );
+  const args = { query: e.query };
+  if (e.lang) args.lang = e.lang;
+  if (e.domains) args.domains = e.domains;
+  if (e.jurisdiction) args.jurisdiction = e.jurisdiction;
+  if (e.forum) args.forum = e.forum;
+  const res = await callTool("find_relevant", args);
   const cands = res.structuredContent?.candidates ?? [];
   const failures = [];
 
@@ -313,6 +333,12 @@ async function runEval(e) {
       if (n > e.maxParMatiere) failures.push(`matière trop représentée : ${m} × ${n}`);
     }
   }
+  for (const dom of e.expectRadar ?? []) {
+    const radar = res.structuredContent?.other_domains ?? [];
+    if (!radar.some((r) => r.domain === dom)) {
+      failures.push(`radar attendu pour domaine '${dom}', obtenu ${JSON.stringify(radar)}`);
+    }
+  }
   return { failures, cands };
 }
 
@@ -334,9 +360,23 @@ async function smokeTests() {
   const servis = JSON.parse(
     readFileSync(new URL("../pipeline/expected/served.json", import.meta.url), "utf8"),
   ).ids.length;
-  const laws = await callTool("list_laws", {});
+  const coreLaws = await callTool("list_laws", {});
+  const coreCount = coreLaws.structuredContent?.count ?? 0;
+  const otherSum = (coreLaws.structuredContent?.other_domains ?? []).reduce(
+    (s, r) => s + (r.laws_count ?? r.count ?? 0),
+    0,
+  );
   add(
-    `list_laws : ${servis} lois servies`,
+    "list_laws : quarantaine core par défaut + radar other_domains",
+    coreLaws.structuredContent?.domains_active?.join(",") === "core" &&
+      coreCount > 0 &&
+      coreCount + otherSum === servis,
+    `core=${coreCount}, other=${otherSum}, déclaré=${servis}`,
+  );
+
+  const laws = await callTool("list_laws", { domains: ["all"] });
+  add(
+    `list_laws : ${servis} lois servies (domains=['all'])`,
     laws.structuredContent?.count === servis,
     `count=${laws.structuredContent?.count}, déclaré=${servis}`,
   );
@@ -347,7 +387,7 @@ async function smokeTests() {
     `${ccq?.mapped_divisions?.length ?? 0} division(s) mappée(s)`,
   );
 
-  const filtered = await callTool("list_laws", { fonction: "tarif" });
+  const filtered = await callTool("list_laws", { fonction: "tarif", domains: ["all"] });
   add(
     "list_laws : filtre fonction='tarif'",
     filtered.structuredContent?.count === 4,
@@ -467,14 +507,14 @@ async function smokeTests() {
   // list_laws rendait les libellés de MATIÈRES toujours en français, même sous lang='en',
   // alors que label_en est peuplé sur les 43 matières. Contrôler les ENTRÉES, pas l'en-tête :
   // c'est la leçon déjà tirée pour list_subjects et jamais reportée ici.
-  const lawsEn = await callTool("list_laws", { lang: "en", structure: false });
+  const lawsEn = await callTool("list_laws", { lang: "en", structure: false, domains: ["all"] });
   const cmEn = lawsEn.structuredContent?.laws?.find((l) => l.id === "c-27.1");
   add(
     "list_laws (lang=en) : libellés de matières en ANGLAIS",
     (cmEn?.subjects ?? []).includes("Municipal Law"),
     `subjects=${JSON.stringify(cmEn?.subjects)}`,
   );
-  const lawsFr = await callTool("list_laws", { lang: "fr", structure: false });
+  const lawsFr = await callTool("list_laws", { lang: "fr", structure: false, domains: ["all"] });
   add(
     "list_laws (lang=fr) : libellés de matières en français",
     (lawsFr.structuredContent?.laws?.find((l) => l.id === "c-27.1")?.subjects ?? []).includes(

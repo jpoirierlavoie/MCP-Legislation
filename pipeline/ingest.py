@@ -81,6 +81,7 @@ def _law_from_config(cfg_law: dict) -> Law:
         jurisdiction=cfg_law.get("jurisdiction", "qc"),
         unit=cfg_law.get("unit", "article"),
         source=cfg_law.get("source", "epub"),
+        domain=cfg_law.get("domain", "core"),
     )
 
 

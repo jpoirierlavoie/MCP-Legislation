@@ -7,11 +7,13 @@
       "groupe": "orientation",
       "page_fr": [
         "Le point d'entrée lorsque vous partez d'une situation concrète plutôt que d'une loi connue (p. ex. « vice caché maison », « congédiement sans préavis », « bail commercial »). L'outil rend une liste de lois et de chapitres possibles en expliquant pourquoi chacun est proposé.",
+        "Par défaut, la recherche cible le tronc commun civil, commercial et procédural (`core`) ; les paramètres optionnels `domains`, `jurisdiction` et `forum` permettent d'ouvrir d'autres coffres spécialisés ou de cibler un ordre de gouvernement ou un tribunal, tout en signalant dans un radar (`other_domains`) les autres domaines pertinents.",
         "Le classement suit des règles fixes et reproductibles, sans intelligence artificielle générative : il croise la matière juridique, les titres de chapitres, le nom des lois et leurs textes associés.",
         "Il s'agit d'une aide au repérage, et non d'un avis juridique : elle vous indique où lire, afin que votre assistant extraye ensuite le texte officiel exact."
       ],
       "page_en": [
         "The starting point when you begin with a practical issue rather than a known statute (e.g., 'latent defect house', 'dismissal without notice', 'commercial lease'). It returns candidate statutes and chapters and states why each one matched.",
+        "By default, discovery targets the core civil, commercial, and procedural statutes (`core`); optional `domains`, `jurisdiction`, and `forum` parameters open specialized domain vaults or filter by jurisdiction or court while reporting matches in other vaults via `other_domains`.",
         "Ranking follows fixed, reproducible rules with no generative AI: it combines legal subject area, chapter headings, statute titles, and related enactments.",
         "This is a search aid, not legal advice: it points your assistant to the right chapters so it can retrieve the official text verbatim."
       ]
@@ -21,14 +23,14 @@
       "title_en": "Corpus map",
       "groupe": "orientation",
       "page_fr": [
-        "La carte complète du corpus : chaque texte avec son identifiant, ses titres français et anglais, sa citation officielle (RLRQ, fédérale ou directive/IG), les langues disponibles, sa date de consolidation et son nombre d'articles.",
+        "La carte complète du corpus : chaque texte avec son identifiant, ses titres français et anglais, sa citation officielle (RLRQ, fédérale ou directive/IG), son domaine et sa juridiction, les langues disponibles, sa date de consolidation et son nombre d'articles.",
         "S'y ajoutent les attributs de découverte : la fonction du texte (loi, règlement, règles de procédure, tarif, directive de pratique judiciaire ou orientation administrative AMF), le forum devant lequel il s'applique, les matières auxquelles il est rattaché, et la loi habilitante lorsqu'il s'agit d'un règlement. Pour les deux grands codes, le plan des Livres et de leurs Titres est inclus.",
-        "Trois filtres permettent de restreindre la carte : par fonction, par forum, ou par matière. C'est le point de départ pour explorer le corpus lorsqu'on sait ce qu'on cherche ; pour partir d'un problème concret, l'outil de repérage est plus direct."
+        "Cinq filtres permettent de restreindre ou d'élargir la carte : par domaine (défaut 'core' avec résumé des sept silos en quarantaine, ou ['all']), par juridiction ('qc' ou 'ca'), par fonction, par forum, ou par matière. C'est le point de départ pour explorer le corpus lorsqu'on sait ce qu'on cherche ; pour partir d'un problème concret, l'outil de repérage est plus direct."
       ],
       "page_en": [
-        "The full map of the corpus: each text with its identifier, French and English titles, official citation (RLRQ, federal, or directive/policy statement), available languages, consolidation date and article count.",
+        "The full map of the corpus: each text with its identifier, French and English titles, official citation (RLRQ, federal, or directive/policy statement), domain and jurisdiction, available languages, consolidation date and article count.",
         "Discovery attributes come with it: the text's function (statute, regulation, rules of procedure, tariff, court practice directive, or AMF administrative policy statement), the forum it governs, the subjects it belongs to, and the enabling statute where the text is a regulation. For the two major codes, the outline of Books and their Titles is included.",
-        "Three filters narrow the map: by function, by forum, or by subject. This is where to start when exploring a known corpus; to start from a concrete problem, the discovery tool is more direct."
+        "Five filters narrow or expand the map: by domain (defaulting to 'core' with a summary of the seven quarantined vaults, or ['all']), by jurisdiction ('qc' or 'ca'), by function, by forum, or by subject. This is where to start when exploring a known corpus; to start from a concrete problem, the discovery tool is more direct."
       ]
     },
     "list_subjects": {
@@ -114,12 +116,14 @@
       "title_en": "Full-text search — labelled fallbacks",
       "groupe": "extraction",
       "page_fr": [
-        "Cherche directement dans le texte de tous les articles, sans tenir compte des accents, en combinant recherche par mots exacts et recherche par sens. Chaque résultat affiche son chapitre et un extrait surligné.",
-        "L'outil indique toujours comment un résultat a été trouvé : si les mots exacts manquent, il élargit la recherche au reste du corpus ou aux termes voisins de sens en l'annonçant clairement — un résultat approximatif n'est jamais présenté comme une correspondance exacte."
+        "Cherche directement dans le texte des articles (ainsi que dans la note marginale fédérale pondérée), sans tenir compte des accents, en combinant recherche par mots exacts et recherche par sens. Chaque résultat affiche son chapitre et un extrait surligné.",
+        "Sans paramètre `law`, la recherche vise par défaut le tronc commun (`core`) et accepte `domains`, `jurisdiction` et `forum`, tout en signalant dans `other_domains` les correspondances présentes dans les coffres spécialisés exclus ; lorsqu'une loi précise est demandée (`law`), la recherche reste ouverte à tout le corpus.",
+        "L'outil indique toujours comment un résultat a été trouvé : si les mots exacts manquent, il élargit la recherche dans la portée active ou aux termes voisins de sens en l'annonçant clairement — un résultat approximatif n'est jamais présenté comme une correspondance exacte."
       ],
       "page_en": [
-        "Searches directly inside the text of all provisions, accent-insensitively, combining exact-word matching with meaning-based search. Each result shows its chapter context and a highlighted excerpt.",
-        "The tool always discloses how a result was found: when exact words yield nothing, it widens the search or falls back to meaning-based matching and labels it transparently — an approximate match is never presented as exact."
+        "Searches directly inside the text of all provisions (and weighted federal marginal notes), accent-insensitively, combining exact-word matching with meaning-based search. Each result shows its chapter context and a highlighted excerpt.",
+        "Without `law`, search defaults to the core civil/commercial statutes (`core`) and accepts `domains`, `jurisdiction`, and `forum`, while reporting hits in excluded domain vaults via `other_domains`; when targeting a specific `law`, lookup stays open corpus-wide.",
+        "The tool always discloses how a result was found: when exact words yield nothing, it widens the search within the active scope or falls back to meaning-based matching and labels it transparently — an approximate match is never presented as exact."
       ]
     },
     "resolve_reference": {
@@ -186,7 +190,8 @@
         "Every rung sets a label that travels with the response — in the rendered text and in the structured payload alike. You can therefore always tell whether you are looking at an exact match, a result obtained by ignoring a term, or a purely semantic association. Falling back is permitted; falling back silently is not."
       ],
       "constantes": [
-        "RELAX_MIN_LOO_TOTAL"
+        "RELAX_MIN_LOO_TOTAL",
+        "MARGINAL_NOTE_WEIGHT"
       ]
     },
     "hybride": {
