@@ -15,7 +15,7 @@
   // workers.dev fermé hors rattrapage (surface minimale). Pour un futur backfill
   // (rafraîchissement semestriel), le réactiver temporairement : le WAF de la zone
   // bloque les rafales de POST du pilote sur le domaine personnalisé.
-  "workers_dev": true,
+  "workers_dev": false,
 
   // Ancien Durable Object `QclawMCP` retiré : l'endpoint `/mcp` est sans état (socle).
   "migrations": [
@@ -70,7 +70,7 @@
     "FEDERAL_CORPUS": "1",
     "PDF_CORPUS": "1",
     "DOMAIN_QUARANTINE": "1",
-    "VECTOR_DOMAIN_FILTER": "0",
+    "VECTOR_DOMAIN_FILTER": "1",
     "MCP_ENABLED": "true",
     // Commit dont la version en ligne est issue, annoncé sur /health.
     // Posé à la volée par `scripts/deployer.mjs` via `--var COMMIT:<sha>`.
