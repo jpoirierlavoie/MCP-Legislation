@@ -14,6 +14,17 @@ from urllib.parse import unquote, urlsplit
 from pipeline import config
 from pipeline.ingest import _id_base
 
+DOMAINES_VALIDES = (
+    "core",
+    "cours-federales",
+    "financier",
+    "construction-immobilier",
+    "municipal-environnement",
+    "travail",
+    "penal",
+    "propriete-intellectuelle",
+)
+
 # Ordre figé au moment de la fusion des deux configurations. On AJOUTE en fin de liste.
 ORDRE_ATTENDU = [
     "ccq", "cpc",
@@ -84,8 +95,12 @@ class ConfigTest(unittest.TestCase):
         réduire au tronc commun laisserait passer une entrée québécoise sans EPUB.
         """
         for law in config.load_all_laws():
-            for champ in ("id", "name_fr", "official_cite", "fonction"):
+            for champ in ("id", "name_fr", "official_cite", "fonction", "domain"):
                 self.assertIn(champ, law, f"{law.get('id')} : champ '{champ}' manquant")
+            self.assertIn(
+                law["domain"], DOMAINES_VALIDES,
+                f"{law['id']} : domaine invalide {law.get('domain')!r}",
+            )
 
             if law.get("source") == "lims":
                 # Fédéral : les chemins XML des deux langues, et le chapitre — c'est sur LUI

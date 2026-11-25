@@ -73,7 +73,9 @@ _LAW_COLS = ["id", "name_fr", "name_en", "official_cite", "consol_date_fr",
              # 0004
              "official_cite_en", "chapter", "jurisdiction", "in_force", "last_amended", "unit",
              # 0007
-             "source"]
+             "source",
+             # 0008
+             "domain"]
 _NUM_COLS = ["law_id", "lang", "number", "article_id"]
 
 # PONT nom de COLONNE -> nom de CHAMP, pour les cas où les deux diffèrent.

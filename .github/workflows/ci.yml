@@ -184,4 +184,8 @@ jobs:
           npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('articles') WHERE name='links'" \
             | grep -q '"n": *1' || { echo "articles.links absente apres 0007"; exit 1; }
+          # 0008 : colonne laws.domain (quarantaine par domaine).
+          npx wrangler d1 execute legislation --local --persist-to "$T" --json \
+            --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='domain'" \
+            | grep -q '"n": *1' || { echo "laws.domain absente apres 0008"; exit 1; }
           rm -rf "$T"

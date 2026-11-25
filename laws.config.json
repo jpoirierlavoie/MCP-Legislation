@@ -19,7 +19,8 @@
       },
       "fonction": "loi",
       "numbering": "decimal",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "cpc",
@@ -40,7 +41,8 @@
       },
       "fonction": "loi",
       "numbering": "recodified-2016",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "c-25.01-r.0.2.01",
@@ -64,7 +66,8 @@
         "Cour d'appel"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "c-25.01-r.0.2.2",
@@ -88,7 +91,8 @@
         "Cour supérieure"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "c-25.01-r.0.2.3",
@@ -112,7 +116,8 @@
         "Cour supérieure"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "c-25.01-r.9",
@@ -136,7 +141,8 @@
         "Cour du Québec"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "t-16",
@@ -160,7 +166,8 @@
         "Transversal"
       ],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "t-16-r.10",
@@ -184,7 +191,8 @@
         "Transversal"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "c-12",
@@ -208,7 +216,8 @@
         "Transversal"
       ],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "i-16",
@@ -232,7 +241,8 @@
         "Transversal"
       ],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "c-25.01-r.0.2.4",
@@ -256,7 +266,8 @@
         "Cour supérieure"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "c-25.01-r.0.2.1",
@@ -280,7 +291,8 @@
         "Cour supérieure"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "j-3",
@@ -304,7 +316,8 @@
         "Tribunal administratif du Québec"
       ],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "j-3-r.3.01",
@@ -328,7 +341,8 @@
         "Tribunal administratif du Québec"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "j-3-r.3.2",
@@ -352,7 +366,8 @@
         "Tribunal administratif du Québec"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "i-13.2.2",
@@ -374,7 +389,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "b-9",
@@ -396,7 +412,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "t-15.01-r.5",
@@ -420,7 +437,8 @@
         "Tribunal administratif du logement"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "t-15.01",
@@ -444,7 +462,8 @@
         "Tribunal administratif du logement"
       ],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "t-15.01-r.6",
@@ -468,7 +487,8 @@
         "Tribunal administratif du logement"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "p-40.1",
@@ -490,7 +510,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "b-1",
@@ -512,7 +533,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "b-1-r.3.1",
@@ -534,7 +556,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "b-1-r.5",
@@ -556,7 +579,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "c-1.1",
@@ -578,7 +602,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "c-19",
@@ -600,7 +625,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "c-26",
@@ -622,7 +648,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "c-38",
@@ -644,7 +671,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "c-73.2",
@@ -666,7 +694,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "construction-immobilier"
     },
     {
       "id": "e-6.1",
@@ -688,7 +717,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "d-9.2",
@@ -710,7 +740,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "e-12.000001",
@@ -732,7 +763,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "i-14.01",
@@ -754,7 +786,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "n-1.1",
@@ -776,7 +809,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "travail"
     },
     {
       "id": "p-39.1",
@@ -798,7 +832,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "p-44.1",
@@ -820,7 +855,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "s-31.1",
@@ -842,7 +878,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "t-11.002",
@@ -864,7 +901,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "v-1.1",
@@ -886,7 +924,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "a-2.1",
@@ -908,7 +947,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "core"
     },
     {
       "id": "a-32.1",
@@ -930,7 +970,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "f-2.1",
@@ -952,7 +993,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "c-25.1",
@@ -974,7 +1016,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "penal"
     },
     {
       "id": "c-67.3",
@@ -996,7 +1039,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "ccq-r.8",
@@ -1018,7 +1062,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "ccq-r.6",
@@ -1040,7 +1085,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "core"
     },
     {
       "id": "a-33.01",
@@ -1062,7 +1108,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "financier"
     },
     {
       "id": "e-6.1-r.2",
@@ -1086,7 +1133,8 @@
         "Tribunal administratif des marchés financiers"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "financier"
     },
     {
       "id": "e-6.1-r.0.3",
@@ -1110,7 +1158,8 @@
         "Tribunal administratif des marchés financiers"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "financier"
     },
     {
       "id": "d-9.2-r.2",
@@ -1132,7 +1181,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "financier"
     },
     {
       "id": "d-9.2-r.10",
@@ -1154,7 +1204,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "financier"
     },
     {
       "id": "d-9.2-r.19",
@@ -1176,7 +1227,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "financier"
     },
     {
       "id": "d-9.2-r.20",
@@ -1198,7 +1250,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "financier"
     },
     {
       "id": "p-13.1",
@@ -1220,7 +1273,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "penal"
     },
     {
       "id": "p-13.1-r.1",
@@ -1242,7 +1296,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "penal"
     },
     {
       "id": "p-13.1-r.2.02",
@@ -1264,7 +1319,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "penal"
     },
     {
       "id": "p-13.1-r.2.1",
@@ -1288,7 +1344,8 @@
         "Tribunal administratif de déontologie policière"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "penal"
     },
     {
       "id": "b-1.1",
@@ -1310,7 +1367,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "construction-immobilier"
     },
     {
       "id": "b-1.1-r.1",
@@ -1332,7 +1390,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "b-1.1-r.2",
@@ -1354,7 +1413,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "b-1.1-r.3",
@@ -1376,7 +1436,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "b-1.1-r.3.1",
@@ -1398,7 +1459,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "b-1.1-r.8",
@@ -1420,7 +1482,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "b-1.1-r.10",
@@ -1444,7 +1507,8 @@
         "Régie du bâtiment du Québec"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "c-73.2-r.1",
@@ -1466,7 +1530,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "c-73.2-r.4",
@@ -1488,7 +1553,8 @@
       "fonction": "reglement",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "c-73.2-r.6",
@@ -1512,7 +1578,8 @@
         "Organisme d’autoréglementation du courtage immobilier du Québec"
       ],
       "numbering": "standard",
-      "kind_epub": "cr"
+      "kind_epub": "cr",
+      "domain": "construction-immobilier"
     },
     {
       "id": "e-15.1.0.1",
@@ -1534,7 +1601,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "e-25",
@@ -1556,7 +1624,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "e-6",
@@ -1578,7 +1647,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "travail"
     },
     {
       "id": "f-3.1",
@@ -1600,7 +1670,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "travail"
     },
     {
       "id": "a-33.2.1",
@@ -1622,7 +1693,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "c-65.1",
@@ -1644,7 +1716,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "c-65.01",
@@ -1666,7 +1739,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "c-37.01",
@@ -1688,7 +1762,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "d-11.1",
@@ -1710,7 +1785,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "travail"
     },
     {
       "id": "p-33.01",
@@ -1732,7 +1808,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "travail"
     },
     {
       "id": "c-52.2",
@@ -1754,7 +1831,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "penal"
     },
     {
       "id": "c-27.1",
@@ -1776,7 +1854,8 @@
       "fonction": "loi",
       "forum": [],
       "numbering": "standard",
-      "kind_epub": "cs"
+      "kind_epub": "cs",
+      "domain": "municipal-environnement"
     },
     {
       "id": "ca-b-3",
@@ -1800,7 +1879,8 @@
       "unit": "article",
       "forum": [
         "Cour supérieure"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-c-36",
@@ -1824,7 +1904,8 @@
       "unit": "article",
       "forum": [
         "Cour supérieure"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-d-3.4",
@@ -1848,7 +1929,8 @@
       "unit": "article",
       "forum": [
         "Cour supérieure"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-c-44",
@@ -1872,7 +1954,8 @@
       "unit": "article",
       "forum": [
         "Cour supérieure"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-c-34",
@@ -1896,7 +1979,8 @@
       "unit": "article",
       "forum": [
         "Cour supérieure"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-c-42",
@@ -1921,7 +2005,8 @@
       "forum": [
         "Cour supérieure",
         "Cour fédérale"
-      ]
+      ],
+      "domain": "propriete-intellectuelle"
     },
     {
       "id": "ca-t-13",
@@ -1945,7 +2030,8 @@
       "unit": "article",
       "forum": [
         "Cour fédérale"
-      ]
+      ],
+      "domain": "propriete-intellectuelle"
     },
     {
       "id": "ca-l-2",
@@ -1969,7 +2055,8 @@
       "unit": "article",
       "forum": [
         "Transversal"
-      ]
+      ],
+      "domain": "travail"
     },
     {
       "id": "ca-p-8.6",
@@ -1993,7 +2080,8 @@
       "unit": "article",
       "forum": [
         "Cour fédérale"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-i-21",
@@ -2017,7 +2105,8 @@
       "unit": "article",
       "forum": [
         "Transversal"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-c-5",
@@ -2041,7 +2130,8 @@
       "unit": "article",
       "forum": [
         "Transversal"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-f-7",
@@ -2066,7 +2156,8 @@
       "forum": [
         "Cour fédérale",
         "Cour d'appel fédérale"
-      ]
+      ],
+      "domain": "cours-federales"
     },
     {
       "id": "ca-s-26",
@@ -2090,7 +2181,8 @@
       "unit": "article",
       "forum": [
         "Cour suprême du Canada"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-c-50",
@@ -2115,7 +2207,8 @@
       "forum": [
         "Cour fédérale",
         "Cour supérieure"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-i-15",
@@ -2139,7 +2232,8 @@
       "unit": "article",
       "forum": [
         "Transversal"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-b-4",
@@ -2163,7 +2257,8 @@
       "unit": "article",
       "forum": [
         "Cour supérieure"
-      ]
+      ],
+      "domain": "core"
     },
     {
       "id": "ca-dors-98-106",
@@ -2189,7 +2284,8 @@
         "Cour fédérale",
         "Cour d'appel fédérale"
       ],
-      "enabling": "ca-f-7"
+      "enabling": "ca-f-7",
+      "domain": "cours-federales"
     },
     {
       "id": "ca-crc-368",
@@ -2214,7 +2310,8 @@
       "forum": [
         "Cour supérieure"
       ],
-      "enabling": "ca-b-3"
+      "enabling": "ca-b-3",
+      "domain": "core"
     },
     {
       "id": "qccs-dist-mtl",
@@ -2237,7 +2334,8 @@
       },
       "consolidation_source": {
         "fr": "https://coursuperieureduquebec.ca/fileadmin/cour-superieure/Districts_judiciaires/Montreal/Directives_et_Annexes_Montreal/2026-02-23_Directives_District_Montreal.pdf"
-      }
+      },
+      "domain": "core"
     },
     {
       "id": "qccs-div-mtl",
@@ -2260,7 +2358,8 @@
       },
       "consolidation_source": {
         "fr": "https://coursuperieureduquebec.ca/division-de-montreal/directives-et-annexes-en-vigueur"
-      }
+      },
+      "domain": "core"
     },
     {
       "id": "qccs-div-qc",
@@ -2283,7 +2382,8 @@
       },
       "consolidation_source": {
         "fr": "https://coursuperieureduquebec.ca/fileadmin/cour-superieure/Pdf_Word_par_district/districts/quebec-tous-les-districts/2022-01-31_Directives_concernant_le_fonctionnement_de_la_division_de_Quebec.pdf"
-      }
+      },
+      "domain": "core"
     },
     {
       "id": "qccq-regles-simplifiees",
@@ -2306,7 +2406,8 @@
       },
       "consolidation_source": {
         "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/chambre-civile/ChCivile_DirectiveReglesParticulieres.pdf"
-      }
+      },
+      "domain": "core"
     },
     {
       "id": "qccq-mtl-prat-civile",
@@ -2329,7 +2430,8 @@
       },
       "consolidation_source": {
         "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/regions/montreal/MtlCivil_ModeFonctDivPratCivile.pdf"
-      }
+      },
+      "domain": "core"
     },
     {
       "id": "qccq-mtl-prat-admin",
@@ -2352,7 +2454,8 @@
       },
       "consolidation_source": {
         "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/regions/montreal/MtlCivil_ModeFonctDivPratAdmin.pdf"
-      }
+      },
+      "domain": "core"
     },
     {
       "id": "qccq-daa-jurisprudence",
@@ -2375,7 +2478,8 @@
       },
       "consolidation_source": {
         "fr": "https://courduquebec.ca/fileadmin/cour-du-quebec/centre-de-documentation/chambre-civile/DAA_DirectiveListeCommuneJuris.pdf"
-      }
+      },
+      "domain": "core"
     },
     {
       "id": "v-1.1-r.10",
@@ -2398,7 +2502,8 @@
       },
       "consolidation_source": {
         "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/31-103/2026-07-04/2026juil04-31-103-vofficielle-fr.pdf"
-      }
+      },
+      "domain": "financier"
     },
     {
       "id": "v-1.1-r.21",
@@ -2421,7 +2526,8 @@
       },
       "consolidation_source": {
         "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/45-106/2025-09-19/2025sept19-45-106-vofficielle-fr.pdf"
-      }
+      },
+      "domain": "financier"
     },
     {
       "id": "v-1.1-r.24",
@@ -2444,7 +2550,8 @@
       },
       "consolidation_source": {
         "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/51-102/2026-09-22/2026sept22-51-102-vofficielle-fr.pdf"
-      }
+      },
+      "domain": "financier"
     },
     {
       "id": "amf-ig-31-103",
@@ -2468,7 +2575,8 @@
       },
       "consolidation_source": {
         "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/31-103/2026-07-04/2026juil04-31-103-ig-vconsolidee-fr.pdf"
-      }
+      },
+      "domain": "financier"
     },
     {
       "id": "amf-ig-45-106",
@@ -2492,7 +2600,8 @@
       },
       "consolidation_source": {
         "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/45-106/2023-06-09/2023juin09-45-106-ig-vconsolidee-fr.pdf"
-      }
+      },
+      "domain": "financier"
     },
     {
       "id": "amf-ig-51-102",
@@ -2516,7 +2625,8 @@
       },
       "consolidation_source": {
         "fr": "https://lautorite.qc.ca/fileadmin/lautorite/reglementation/valeurs-mobilieres/51-102/2026-09-22/2026sept22-51-102-ig-vadmin-fr.pdf"
-      }
+      },
+      "domain": "financier"
     }
   ]
 }

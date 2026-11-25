@@ -25,12 +25,36 @@ export interface DescripteurPublie {
 export const LIST_LAWS: DescripteurPublie = {
   title: titre("list_laws"),
   description:
-    "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, date de consolidation, nombre d'articles, et les attributs de découverte (fonction, forum, matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). Inclut les directives de cour et orientations AMF (source PDF). Filtres optionnels : fonction, forum, subject. Point de départ pour explorer le corpus ; pour partir d'un problème concret, préférer find_relevant.",
+    "Carte du corpus : toutes les lois avec identifiant, noms FR/EN, citation RLRQ, langues, date de consolidation, nombre d'articles, et les attributs de découverte (domaine, juridiction, fonction, forum, matières, loi habilitante ; pour les grands codes, les Livres avec leur matière). Inclut les directives de cour et orientations AMF (source PDF). Filtres optionnels : domains (défaut ['core'], ou ['all']), jurisdiction ('qc'|'ca'), fonction, forum, subject. Point de départ pour explorer le corpus ; pour partir d'un problème concret, préférer find_relevant.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
     additionalProperties: false,
     properties: {
+      domains: {
+        description:
+          "Domaines à inclure (défaut ['core'], ou ['all'] pour tout le corpus) : 'core', 'cours-federales', 'financier', 'construction-immobilier', 'municipal-environnement', 'travail', 'penal', 'propriete-intellectuelle', 'all'.",
+        type: "array",
+        items: {
+          type: "string",
+          enum: [
+            "core",
+            "cours-federales",
+            "financier",
+            "construction-immobilier",
+            "municipal-environnement",
+            "travail",
+            "penal",
+            "propriete-intellectuelle",
+            "all",
+          ],
+        },
+      },
+      jurisdiction: {
+        description: "Filtrer par ordre de gouvernement : 'qc' (Québec) ou 'ca' (fédéral).",
+        type: "string",
+        enum: ["qc", "ca"],
+      },
       fonction: {
         description:
           "Filtrer par fonction : 'loi', 'regles-procedure', 'tarif', 'reglement', 'directive', 'orientation'.",
@@ -152,7 +176,7 @@ export const RELATED_LAWS: DescripteurPublie = {
 export const FIND_RELEVANT: DescripteurPublie = {
   title: titre("find_relevant"),
   description:
-    "Aide heuristique au repérage de lois et de parties de lois candidates. Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via get_structure / get_division / get_article. Classement déterministe sur la matière (taxonomie), les intitulés de divisions, les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', 'congédiement', 'bail commercial'. Enchaîner ensuite avec get_structure / get_division.",
+    "Aide heuristique au repérage de lois et de parties de lois candidates. Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via get_structure / get_division / get_article. Classement déterministe sur la matière (taxonomie), les intitulés de divisions, les noms de lois et le graphe d'interconnexion. Ex. : query='vice caché maison', 'congédiement', 'bail commercial'. Enchaîner ensuite avec get_structure / get_division. Par défaut, interroge le domaine 'core' (radar sur les silos sectoriels exclus) ; passer domains=['core', …], jurisdiction ou forum pour élargir ou cibler.",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -161,6 +185,35 @@ export const FIND_RELEVANT: DescripteurPublie = {
       query: {
         type: "string",
         description: "Thème ou description libre du problème, ex. « bail de logement ».",
+      },
+      domains: {
+        description:
+          "Domaines à interroger (défaut ['core'], ou ['all']) : 'core', 'cours-federales', 'financier', 'construction-immobilier', 'municipal-environnement', 'travail', 'penal', 'propriete-intellectuelle', 'all'.",
+        type: "array",
+        items: {
+          type: "string",
+          enum: [
+            "core",
+            "cours-federales",
+            "financier",
+            "construction-immobilier",
+            "municipal-environnement",
+            "travail",
+            "penal",
+            "propriete-intellectuelle",
+            "all",
+          ],
+        },
+      },
+      jurisdiction: {
+        description: "Restreindre à un ordre de gouvernement : 'qc' ou 'ca'.",
+        type: "string",
+        enum: ["qc", "ca"],
+      },
+      forum: {
+        description:
+          "Cibler un tribunal (ex. 'Cour supérieure', 'Cour du Québec', 'Cour d\\'appel') : conserve les lois générales/transversales et écarte les règles d'autres tribunaux.",
+        type: "string",
       },
       limit: {
         description: "Nombre de candidats (défaut 8, max 50).",
@@ -395,7 +448,7 @@ export const GET_DIVISION: DescripteurPublie = {
 export const SEARCH_TEXT: DescripteurPublie = {
   title: titre("search_text"),
   description:
-    "Recherche plein texte (FTS5) dans le texte des articles. Retourne les correspondances classées par pertinence avec un extrait surligné. Ex. : query='prescription action', law='ccq' (défaut : toutes les lois). Si la loi pertinente est inconnue, commencer par find_relevant. Omettre `law` sauf raison précise de restreindre ; une recherche restreinte sans résultat est automatiquement élargie au corpus.",
+    "Recherche plein texte (FTS5) dans le texte des articles. Retourne les correspondances classées par pertinence avec un extrait surligné. Ex. : query='prescription action', law='ccq' (défaut : domaine 'core'). Si la loi pertinente est inconnue, commencer par find_relevant. Omettre `law` sauf raison précise de restreindre ; une recherche restreinte sans résultat est automatiquement élargie à son domaine. Sans `law`, interroge 'core' par défaut avec radar sur les domaines exclus (filtres domains, jurisdiction, forum).",
   inputSchema: {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",
@@ -407,7 +460,36 @@ export const SEARCH_TEXT: DescripteurPublie = {
       },
       law: {
         description:
-          "Restreindre à une loi par son identifiant court de corpus (ex. 'ccq') ; défaut : tout le corpus.",
+          "Restreindre à une loi par son identifiant court de corpus (ex. 'ccq') ; défaut : domaines actifs.",
+        type: "string",
+      },
+      domains: {
+        description:
+          "Domaines à interroger sans `law` (défaut ['core'], ou ['all']) : 'core', 'cours-federales', 'financier', 'construction-immobilier', 'municipal-environnement', 'travail', 'penal', 'propriete-intellectuelle', 'all'.",
+        type: "array",
+        items: {
+          type: "string",
+          enum: [
+            "core",
+            "cours-federales",
+            "financier",
+            "construction-immobilier",
+            "municipal-environnement",
+            "travail",
+            "penal",
+            "propriete-intellectuelle",
+            "all",
+          ],
+        },
+      },
+      jurisdiction: {
+        description: "Restreindre à un ordre de gouvernement : 'qc' ou 'ca'.",
+        type: "string",
+        enum: ["qc", "ca"],
+      },
+      forum: {
+        description:
+          "Cibler un tribunal (ex. 'Cour supérieure', 'Cour du Québec', 'Cour d\\'appel') : conserve les lois générales/transversales et écarte les règles d'autres tribunaux.",
         type: "string",
       },
       lang: {

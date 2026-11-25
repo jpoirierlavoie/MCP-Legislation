@@ -219,10 +219,10 @@ const TOLERES = new Map(
     "src/backfill.ts :: handleBackfillInner :: SELECT id FROM laws WHERE id = ?":
       "hors surface servie : sonde de présence de la route ADMIN `/admin/backfill-vectors` derrière `BACKFILL_TOKEN`.",
 
-    "src/backfill.ts :: handleBackfillInner :: SELECT id, name_fr FROM laws WHERE id = ?":
+    "src/backfill.ts :: handleBackfillInner :: SELECT id, name_fr, domain, jurisdiction FROM laws WHERE id = ?":
       "hors surface servie : route ADMIN `/admin/backfill-vectors` ; l'indexation précède l'ouverture de `PDF_CORPUS`.",
 
-    "src/backfill.ts :: chargerPageBackfill :: SELECT number, division_path, text FROM articles WHERE law_id = ? AND ":
+    "src/backfill.ts :: chargerPageBackfill :: SELECT number, division_path, text, marginal_note FROM articles WHERE ":
       "hors surface servie : indexation paginée des articles de la route ADMIN `/admin/backfill-vectors`.",
 
     "src/backfill.ts :: chargerPageBackfill :: SELECT path, heading FROM divisions WHERE law_id = ? AND lang = fr ORD":

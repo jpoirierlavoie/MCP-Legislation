@@ -215,6 +215,10 @@ describe("/admin/backfill-vectors", () => {
     expect(await rDiv.json()).toMatchObject({ mode: "full", embedded: 1, done: true });
 
     const initialDivVecId = mocks.upserted.find((v) => v.id.startsWith("div:"))!.id;
+    const artVec = mocks.upserted.find((v) => v.id === "art:loi-test:1")!;
+    const divVec = mocks.upserted.find((v) => v.id === initialDivVecId)!;
+    expect(artVec.metadata).toMatchObject({ domain: "core", jurisdiction: "qc" });
+    expect(divVec.metadata).toMatchObject({ domain: "core", jurisdiction: "qc" });
 
     // Suppression de l'art. 2 et remplacement de ga:l_i par ga:l_i__2
     await db().prepare("DELETE FROM articles WHERE id = 1002").run();
@@ -244,6 +248,54 @@ describe("/admin/backfill-vectors", () => {
       )
       .first<{ n: number }>();
     expect(trackedDivs?.n).toBe(0);
+  });
+
+  it("inclut marginal_note fédérale dans le texte d'embedding et les métadonnées domain/jurisdiction", async () => {
+    const d = db();
+    await d
+      .prepare(
+        "INSERT INTO laws (id, name_fr, name_en, official_cite, jurisdiction, domain) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .bind(
+        "ca-test",
+        "Loi fédérale test",
+        "Federal Test Act",
+        "L.R.C. (1985), c. F-7",
+        "ca",
+        "cours-federales",
+      )
+      .run();
+    await d
+      .prepare(
+        "INSERT INTO articles (id, law_id, lang, number, sort_key, division_path, marginal_note, text, repealed) VALUES (?, ?, 'fr', ?, ?, '', ?, ?, 0)",
+      )
+      .bind(
+        2001,
+        "ca-test",
+        "18",
+        18_000_000_000_000,
+        "Compétence exclusive de la Cour fédérale",
+        "La Cour fédérale a compétence exclusive en première instance.",
+      )
+      .run();
+
+    const mocks = makeMocks();
+    const testEnv = {
+      ...env,
+      BACKFILL_TOKEN: "jeton-admin",
+      AI: mocks.AI,
+      VECTORS: mocks.VECTORS,
+    } as unknown as Env;
+
+    const r = await post(testEnv, { kind: "articles", law: "ca-test" });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ mode: "full", embedded: 1, done: true });
+    expect(mocks.embeddedTexts[0][0]).toContain("Compétence exclusive de la Cour fédérale");
+    expect(mocks.upserted[0].metadata).toMatchObject({
+      law: "ca-test",
+      domain: "cours-federales",
+      jurisdiction: "ca",
+    });
   });
 
   it("hache les identifiants d'articles dépassant 64 octets UTF-8 (full, incremental et prune)", async () => {

@@ -28,6 +28,7 @@ class Law:
     last_amended: str | None = None       # « Dernière modification le … » (lims:lastAmendedDate)
     unit: str = "article"                 # 'article' | 'regle' (Règles des Cours fédérales) | 'paragraphe'
     source: str = "epub"                  # 'epub' | 'lims' | 'pdf'
+    domain: str = "core"                  # 'core' | silo sectoriel (0008_domains.sql)
 
 
 @dataclass

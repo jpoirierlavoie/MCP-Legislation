@@ -190,7 +190,8 @@ class TestLoadIncrementalSql(TestCase):
                   official_cite_en TEXT, chapter TEXT, jurisdiction TEXT NOT NULL DEFAULT 'qc',
                   in_force INTEGER NOT NULL DEFAULT 1, last_amended TEXT,
                   unit TEXT NOT NULL DEFAULT 'article',
-                  source TEXT NOT NULL DEFAULT 'epub'
+                  source TEXT NOT NULL DEFAULT 'epub',
+                  domain TEXT NOT NULL DEFAULT 'core'
                 );
                 CREATE TABLE divisions (
                   id INTEGER PRIMARY KEY, law_id TEXT NOT NULL REFERENCES laws(id),
@@ -283,6 +284,7 @@ class TestDiffEtApply(TestCase):
             "last_amended": law.last_amended,
             "unit": law.unit,
             "source": law.source,
+            "domain": law.domain,
         }
         divs = [
             {

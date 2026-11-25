@@ -173,6 +173,7 @@
       "id": 21,
       "query": "cassation d'un règlement municipal pour illégalité",
       "law_scope": null,
+      "domains": ["core", "municipal-environnement"],
       "must_include": [
         { "law": "c-19", "article": "397" },
         { "law": "c-27.1", "article": "689" }

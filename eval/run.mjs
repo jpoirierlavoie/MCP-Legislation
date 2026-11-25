@@ -155,6 +155,7 @@ async function runCase(c, paths, callTool) {
   // --- search_text (portée du cas, top 10) ---
   const sArgs = { query: c.query, limit: 10 };
   if (c.law_scope) sArgs.law = c.law_scope;
+  if (c.domains) sArgs.domains = c.domains;
   const s = await callTool("search_text", sArgs);
   const results = s.isError ? [] : (s.structuredContent?.results ?? []);
   const top = results.map((r) => `${r.law_id}|${r.number}`);
@@ -171,8 +172,10 @@ async function runCase(c, paths, callTool) {
   const mrr = Number.isFinite(firstRank) ? 1 / firstRank : 0;
   const niceHits = (c.nice_to_have ?? []).map(keyOf).filter((k) => top.includes(k)).length;
 
-  // --- find_relevant (toujours corpus entier — c'est un routeur) ---
-  const f = await callTool("find_relevant", { query: c.query });
+  // --- find_relevant (toujours corpus entier ou domaines du cas — c'est un routeur) ---
+  const fArgs = { query: c.query };
+  if (c.domains) fArgs.domains = c.domains;
+  const f = await callTool("find_relevant", fArgs);
   const cands = f.isError ? [] : (f.structuredContent?.candidates ?? []);
   const frCovered = mustKeys.filter((k) => {
     const artPath = paths[k];

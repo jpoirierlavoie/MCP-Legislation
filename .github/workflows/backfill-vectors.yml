@@ -1,0 +1,177 @@
+name: backfill-vectors
+
+# Rattrapage Vectorize (plan v2 / Phase 0) + évals de production supervisés.
+#
+# Exécuté manuellement via `workflow_dispatch` dans l'environnement `production`
+# (secrets BACKFILL_TOKEN, CLOUDFLARE_API_TOKEN, MCP_TOKEN_VEILLE). Aucune expression
+# `${{ }}` n'apparaît dans un bloc `run:` : tout passe par `env:`.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode : incremental | full | ping | prune | eval_only"
+        required: true
+        default: "incremental"
+        type: choice
+        options:
+          - incremental
+          - full
+          - ping
+          - prune
+          - eval_only
+      laws:
+        description: "Sous-ensemble d'ids séparés par virgules (vide = corpus complet)"
+        required: false
+        default: ""
+        type: string
+      kinds:
+        description: "Types d'éléments à traiter (articles,divisions)"
+        required: false
+        default: "articles,divisions"
+        type: string
+      use_workers_dev:
+        description: "Passer par *.workers.dev temporairement (contourne le WAF pendant un backfill massif)"
+        required: false
+        default: false
+        type: boolean
+      run_evals:
+        description: "Exécuter npm run evals + eval/run.mjs --gate contre la production après l'opération"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backfill-vectors
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Backfill Vectorize et vérifications en production
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Résoudre la cible de backfill
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          LAWS: ${{ github.event.inputs.laws }}
+          KINDS: ${{ github.event.inputs.kinds }}
+          USE_WORKERS_DEV: ${{ github.event.inputs.use_workers_dev }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            incremental|full|ping|prune|eval_only) ;;
+            *)
+              echo "::error title=Mode invalide::Mode '$MODE' non supporté."
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "$LAWS" | grep -Eq '^[a-z0-9.,-]*$'; then
+            echo "::error title=Paramètre laws invalide::Format attendu : identifiants séparés par des virgules."
+            exit 1
+          fi
+          if ! printf '%s' "$KINDS" | grep -Eq '^(articles|divisions)(,(articles|divisions))?$'; then
+            echo "::error title=Paramètre kinds invalide::Attendu articles, divisions, ou articles,divisions."
+            exit 1
+          fi
+
+          if [ "$MODE" != "eval_only" ] && [ "$USE_WORKERS_DEV" = "true" ]; then
+            if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+              echo "::error title=CLOUDFLARE_API_TOKEN absent::Requis pour résoudre *.workers.dev."
+              exit 1
+            fi
+            compte="${CLOUDFLARE_ACCOUNT_ID:-}"
+            if [ -z "$compte" ]; then
+              code=$(curl -sS --max-time 20 \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -o /tmp/comptes.json -w '%{http_code}' \
+                https://api.cloudflare.com/client/v4/accounts || echo 000)
+              if [ "$code" != "200" ]; then
+                echo "::error title=Échec comptes Cloudflare (HTTP ${code})::Définir CLOUDFLARE_ACCOUNT_ID."
+                exit 1
+              fi
+              n=$(jq '[.result[]?] | length' /tmp/comptes.json)
+              if [ "$n" -ne 1 ]; then
+                echo "::error title=Nombre de comptes inattendu (${n})::Définir CLOUDFLARE_ACCOUNT_ID."
+                exit 1
+              fi
+              compte=$(jq -r '.result[0].id' /tmp/comptes.json)
+            fi
+            echo "::add-mask::$compte"
+            sub_code=$(curl -sS --max-time 20 \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -o /tmp/subdomain.json -w '%{http_code}' \
+              "https://api.cloudflare.com/client/v4/accounts/${compte}/workers/subdomain" || echo 000)
+            if [ "$sub_code" != "200" ]; then
+              echo "::error title=Sous-domaine workers.dev introuvable (HTTP ${sub_code})::Vérifier Workers:Read."
+              exit 1
+            fi
+            sub=$(jq -r '.result.subdomain // ""' /tmp/subdomain.json)
+            if [ -z "$sub" ]; then
+              echo "::error title=Sous-domaine workers.dev vide::Impossible d'utiliser workers.dev pour le backfill."
+              exit 1
+            fi
+            echo "::add-mask::$sub"
+            echo "BACKFILL_URL=https://legislation.${sub}.workers.dev" >> "$GITHUB_ENV"
+            echo "Cible backfill résolue sur workers.dev."
+          else
+            echo "BACKFILL_URL=https://legislation.poirierlavoie.ca" >> "$GITHUB_ENV"
+            echo "Cible backfill : domaine personnalisé."
+          fi
+
+      - name: Exécuter le backfill Vectorize
+        if: inputs.mode != 'eval_only'
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          LAWS: ${{ github.event.inputs.laws }}
+          KINDS: ${{ github.event.inputs.kinds }}
+          BACKFILL_TOKEN: ${{ secrets.BACKFILL_TOKEN }}
+          BACKFILL_URL: ${{ env.BACKFILL_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKFILL_TOKEN:-}" ]; then
+            echo "::error title=BACKFILL_TOKEN absent::Définir BACKFILL_TOKEN dans l'environnement production."
+            exit 1
+          fi
+          args=(--mode "$MODE" --kind "$KINDS")
+          if [ "$MODE" = "full" ] || [ "$MODE" = "incremental" ]; then
+            args+=(--prune)
+          fi
+          if [ -n "${LAWS:-}" ]; then
+            args+=(--laws "$LAWS")
+          fi
+          node scripts/backfill-vectors.mjs "${args[@]}"
+
+      - name: Contrôler la production (evals + porte 21 cas)
+        if: inputs.run_evals
+        env:
+          MCP_URL: https://legislation.poirierlavoie.ca/mcp
+          MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
+        run: |
+          set -euo pipefail
+          npm run evals
+          node eval/run.mjs --gate

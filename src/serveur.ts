@@ -124,6 +124,9 @@ export const INSTRUCTIONS =
   "Pour partir d'un problème concret, commencer par find_relevant ; pour explorer " +
   "le corpus, list_laws. Cibler ensuite avec get_structure → " +
   "get_division / get_article. " +
+  "Par défaut, list_laws, find_relevant et search_text interrogent le domaine 'core' tout en signalant " +
+  "en radar les correspondances dans les 7 domaines sectoriels en quarantaine (ouvrables via domains=['core', …] ou ['all']), " +
+  "tandis que les outils directs (get_article, resolve_reference…) couvrent toujours tout le corpus. " +
   "PORTÉE : le corpus est une SÉLECTION FERMÉE de textes, pas tout le droit applicable — il ne " +
   "contient ni jurisprudence, ni versions antérieures d'un article, ni l'ancien Code de " +
   "procédure civile (c. C-25). Une absence de résultat ne signifie donc JAMAIS qu'aucune règle " +

@@ -307,13 +307,13 @@ const TOLERES = new Map(
       "hors surface servie : sonde de présence en base pour `mode='ping'` de la route ADMIN " +
       "`/admin/backfill-vectors`, derrière `BACKFILL_TOKEN`.",
 
-    "src/backfill.ts :: handleBackfillInner :: SELECT id, name_fr FROM laws WHERE id = ?":
+    "src/backfill.ts :: handleBackfillInner :: SELECT id, name_fr, domain, jurisdiction FROM laws WHERE id = ?":
       "hors surface servie : route ADMIN `/admin/backfill-vectors`, derrière un porteur " +
       "distinct (`backfill.token`), jamais un outil MCP. L'interrupteur borne ce qui est " +
       "SERVI, pas ce qui est indexé ; le filtre de juridiction des vecteurs est l'index de " +
       "métadonnées `jurisdiction` de la phase 6, posé AVANT le premier upsert (invariant 8).",
 
-    "src/backfill.ts :: chargerPageBackfill :: SELECT number, division_path, text FROM articles WHERE law_id = ? AND ":
+    "src/backfill.ts :: chargerPageBackfill :: SELECT number, division_path, text, marginal_note FROM articles WHERE ":
       "hors surface servie : requête paginée d'indexation de la route ADMIN `/admin/backfill-vectors`, " +
       "gardée par `BACKFILL_TOKEN` (comparaison SHA-256 à temps constant).",
 

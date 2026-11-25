@@ -103,7 +103,7 @@ class TestSeedLawsNeDetruitPas(unittest.TestCase):
         """`fonction`, `forum`, `name_fr` et `name_norm` viennent bien de la config, pour
         TOUTES les lois — le correctif ne borne que les deux colonnes de date."""
         for lid, sql in self.updates.items():
-            for col in ("fonction =", "forum =", "name_fr =", "name_norm =", "source =", "unit =", "jurisdiction ="):
+            for col in ("fonction =", "forum =", "name_fr =", "name_norm =", "source =", "unit =", "jurisdiction =", "domain ="):
                 self.assertIn(col, sql, f"{lid} : `{col.strip(' =')}` n'est plus synchronisée")
 
     def test_un_texte_pdf_ne_voit_pas_sa_date_ecrasee(self):
