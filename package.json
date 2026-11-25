@@ -1,6 +1,6 @@
 {
   "name": "mcp-legislation",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "Texte officiel en lecture seule de lois, règlements, directives de pratique et orientations AMF du Québec et du Canada (français et anglais, certains PDF en français seulement), hiérarchie complète des divisions et recherche hybride lexicale et sémantique.",
   "license": "Apache-2.0",
