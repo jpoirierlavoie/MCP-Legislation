@@ -105,7 +105,7 @@ class TestClassementLims(unittest.TestCase):
     def test_ref_consignee(self):
         """Un classement sans SHA n'est pas reproductible."""
         self.assertRegex(self.doc["ref"], r"^[0-9a-f]{40}$")
-        self.assertEqual(self.doc["fichiers_releves"], 44)
+        self.assertEqual(self.doc["fichiers_releves"], 50)
 
     def test_tout_traitement_est_documente(self):
         """Chaque valeur employée doit avoir sa définition dans `_traitements`."""

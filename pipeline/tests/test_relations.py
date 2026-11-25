@@ -146,10 +146,10 @@ class TestClassementDesTextesSubordonnes(unittest.TestCase):
                        if (l.get("jurisdiction") == "ca") and R._is_regulation(l)]
         self.assertEqual(sorted(subordonnes), ["ca-crc-368", "ca-dors-2002-156", "ca-dors-98-106"])
 
-    def test_les_19_lois_federales_sont_des_lois_habilitantes_candidates(self):
+    def test_les_22_lois_federales_sont_des_lois_habilitantes_candidates(self):
         by_root = R._carte(config.load_all_laws(), root=True, seulement_lois=True)
         federales = [v for k, v in by_root.items() if k[0] == "ca"]
-        self.assertEqual(len(federales), 19)
+        self.assertEqual(len(federales), 22)
 
 
 class _FausseBase:

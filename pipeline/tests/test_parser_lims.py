@@ -360,5 +360,81 @@ class TestIsomorphisme(unittest.TestCase):
         self.assertEqual(ecarts, [("11 à 14", "11 to 14")])
 
 
+class TestVague3BalisesEtAnnexes(unittest.TestCase):
+    """Vague 3 (C-46, C-38.8, Y-1.5) : préambule Introduction, Keep, List/Item, FormGroup."""
+
+    @staticmethod
+    def _parse(xml: bytes, law_id: str = "ca-test", lang: str = "fr"):
+        b = Bilan()
+        divs, arts = parse_lims(xml, loi(law_id), lang, bilan=b)
+        return divs, arts, b
+
+    def test_preambule_introduction_sans_section_n_altere_pas_le_bilan(self):
+        xml = (
+            b'<Statute xml:lang="fr" in-force="yes"><Identification/>'
+            b"<Introduction><Preamble>"
+            b"<Provision><Text>Attendu que les adolescents...</Text></Provision>"
+            b"</Preamble></Introduction>"
+            b"<Body><Section><Label>1</Label><Text>Titre abr\xc3\xa9g\xc3\xa9.</Text></Section></Body>"
+            b"</Statute>"
+        )
+        divs, arts, b = self._parse(xml, "ca-y-1.5", "fr")
+        pre = par_numero(arts, "preambule")
+        self.assertEqual(pre.sort_key, 0)
+        self.assertEqual(pre.division_path, "fp:0")
+        self.assertIn("adolescents", pre.text)
+        self.assertEqual(b.preambule, 0)
+        self.assertEqual(b.corps, 1)
+        self.assertEqual(b.inconnu, 0)
+        self.assertTrue(any(d.path == "fp:0" and d.kind == "disposition" for d in divs))
+
+    def test_keep_en_ligne_conserve_le_mot_sans_collage(self):
+        xml = (
+            b'<Statute xml:lang="en" in-force="yes"><Identification/>'
+            b"<Body><Section><Label>696.75</Label>"
+            b"<Subsection><Label>(2)</Label>"
+            b'<Text>The <Keep svc="1">authorized</Keep> commissioner may act.</Text>'
+            b"</Subsection></Section></Body></Statute>"
+        )
+        _, arts, _ = self._parse(xml, "ca-c-46", "en")
+        art = par_numero(arts, "696.75")
+        self.assertIn("The authorized commissioner may act.", art.text)
+
+    def test_annexes_sans_section_list_table_repealed_et_formgroup(self):
+        xml = (
+            b'<Statute xml:lang="fr" in-force="yes"><Identification/>'
+            b"<Body><Section><Label>2</Label><Text>D\xc3\xa9finitions.</Text></Section></Body>"
+            b"<Schedule><ScheduleFormHeading><Label>ANNEXE I</Label></ScheduleFormHeading>"
+            b"<List><Item><Label>1</Label><Text>Pavot \xc3\xa0 opium :</Text>"
+            b"<List><Item><Label>(1)</Label><Text>opium</Text></Item></List>"
+            b"</Item></List></Schedule>"
+            b"<Schedule><ScheduleFormHeading><Label>ANNEXE V</Label></ScheduleFormHeading>"
+            b"<DocumentInternal><Group><GroupHeading><Label>PARTIE 1</Label>"
+            b"<TitleText>Substances d\xc3\xa9sign\xc3\xa9es</TitleText></GroupHeading>"
+            b"<Provision><table><tgroup cols=\"2\"><tbody>"
+            b"<row><entry>Article</entry><entry>Substance</entry></row>"
+            b"<row><entry>1</entry><entry>Exempt\xc3\xa9</entry></row>"
+            b"</tbody></tgroup></table></Provision></Group></DocumentInternal></Schedule>"
+            b"<Schedule><ScheduleFormHeading><Label>ANNEXE VII</Label></ScheduleFormHeading>"
+            b"<Repealed>[Abrog\xc3\xa9e, 2018, ch. 16, art. 205]</Repealed></Schedule>"
+            b"<Schedule><ScheduleFormHeading><Label>FORMULE 5</Label></ScheduleFormHeading>"
+            b"<FormGroup><Provision><Text>Mandat de perquisition</Text></Provision>"
+            b"<Provision><Text>Au nom de Sa Majest\xc3\xa9.</Text></Provision></FormGroup></Schedule>"
+            b"</Statute>"
+        )
+        _, arts, _ = self._parse(xml, "ca-c-38.8", "fr")
+        a1 = par_numero(arts, "annexe-i")
+        self.assertGreaterEqual(a1.sort_key, DISPOSITION_SORT_BASE)
+        self.assertIn("1 Pavot à opium :", a1.text)
+        self.assertIn("  (1) opium", a1.text)
+        a5 = par_numero(arts, "annexe-v")
+        self.assertIn("PARTIE 1 — Substances désignées", a5.text)
+        self.assertIn("1 : Exempté", a5.text)
+        a7 = par_numero(arts, "annexe-vii")
+        self.assertEqual(a7.repealed, 1)
+        f5 = par_numero(arts, "formule-5")
+        self.assertIn("Mandat de perquisition\nAu nom de Sa Majesté.", f5.text)
+
+
 if __name__ == "__main__":
     unittest.main()
