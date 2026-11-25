@@ -35,7 +35,12 @@ on:
         default: false
         type: boolean
       run_evals:
-        description: "Exécuter npm run evals + eval/run.mjs --gate contre la production après l'opération"
+        description: "Exécuter npm run evals + eval/run.mjs contre la production après l'opération"
+        required: false
+        default: true
+        type: boolean
+      gate_evals:
+        description: "Appliquer --gate contre la dernière baseline lors des évals"
         required: false
         default: true
         type: boolean
@@ -171,7 +176,22 @@ jobs:
         env:
           MCP_URL: https://legislation.poirierlavoie.ca/mcp
           MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
+          GATE_EVALS: ${{ github.event.inputs.gate_evals }}
         run: |
           set -euo pipefail
+          mkdir -p _tmp_eval
           npm run evals
-          node eval/run.mjs --gate
+          if [ "${GATE_EVALS:-true}" = "true" ]; then
+            node eval/run.mjs --out _tmp_eval/eval-latest.json --gate
+          else
+            node eval/run.mjs --out _tmp_eval/eval-latest.json
+          fi
+
+      - name: Publier la mesure d'évaluation en artefact
+        if: always() && inputs.run_evals
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: eval-latest
+          path: _tmp_eval/eval-latest.json
+          if-no-files-found: ignore
+          retention-days: 14

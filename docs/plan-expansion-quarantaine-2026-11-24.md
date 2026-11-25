@@ -28,7 +28,7 @@ Ce document consigne l'architecture de quarantaine par domaine arrêtée avec Ja
 - **Radar inter-domaines (R4 / R7) :** Les résultats principaux proviennent strictement des `domains` actifs ; une ligne de signalisation (`other_domains` dans `structuredContent`) avertit lorsqu'un domaine exclu contient des pistes ou correspondances lexicales.
 - **Outils directs sans quarantaine :** `get_article`, `get_articles`, `get_structure`, `get_division`, `resolve_reference`, `related_laws` et `search_text(law=...)` restent ouverts à tout le corpus. Lorsqu'une recherche bornée à une loi s'élargit (`widened`), elle reste dans le domaine de cette loi (ou `domains` explicite).
 - **Notes marginales fédérales (`marginal_note`) :** Indexées dans `articles_fts` (poids `MARGINAL_NOTE_WEIGHT = 0.5` contre `1.0` pour `text`), tout en gardant `snippet(articles_fts, 0, …)` sur `text` seul (art. 14 *Loi d'interprétation*). Incluses dans les vecteurs d'articles (`src/backfill.ts`) avec les métadonnées `domain` et `jurisdiction`.
-- **Interrupteurs R8 :** `DOMAIN_QUARANTINE="1"` (défaut actif ; `"0"` rétablit le pool plat) et `VECTOR_DOMAIN_FILTER="0"` (activé à `"1"` après création des index de métadonnées Vectorize et rattrapage des vecteurs).
+- **Interrupteurs R8 :** `DOMAIN_QUARANTINE="1"` (défaut actif ; `"0"` rétablit le pool plat) et `VECTOR_DOMAIN_FILTER="1"` (activé après création des index de métadonnées Vectorize `domain`/`jurisdiction` et rattrapage complet Phase 0).
 
 ### 1.3 Procédure de mise en production Phase 0 (après approbation et fusion sur `main`)
 
