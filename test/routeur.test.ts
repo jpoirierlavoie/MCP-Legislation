@@ -177,7 +177,7 @@ describe("server/discover", () => {
     expect(c.result.serverInfo).toBeUndefined();
     expect(c.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
       name: "Législation du Québec et du Canada",
-      version: "2.2.1",
+      version: "2.2.2",
     });
   });
 
@@ -532,7 +532,7 @@ describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
       url: "https://github.com/jpoirierlavoie/MCP-Legislation",
       source: "github",
     });
-    expect(card.remotes).toHaveLength(1);
+    expect(card.remotes).toHaveLength(2);
     expect(card.remotes[0]).toMatchObject({
       type: "streamable-http",
       url: "https://legislation.poirierlavoie.ca/mcp",
@@ -543,6 +543,19 @@ describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
       isRequired: true,
       isSecret: true,
     });
+    expect(card.remotes[1]).toEqual({
+      type: "streamable-http",
+      url: "https://legislation.poirierlavoie.ca/mcp/oauth",
+      supportedProtocolVersions: [...VERSIONS],
+      headers: [],
+    });
+
+    const wellKnown = await SELF.fetch("https://legislation.test/.well-known/mcp/server-card.json");
+    expect(wellKnown.status).toBe(200);
+    expect(wellKnown.headers.get("Content-Type")).toBe(
+      "application/mcp-server-card+json; charset=utf-8",
+    );
+    expect(await wellKnown.json()).toEqual(card);
   });
 
   it("HEAD et OPTIONS répondent sans corps, POST et DELETE rendent 405", async () => {
@@ -576,6 +589,9 @@ describe("SEP-2127 — fiche de découverte /mcp/server-card", () => {
     e.MCP_ENABLED = "false";
     try {
       expect((await SELF.fetch("https://legislation.test/mcp/server-card")).status).toBe(404);
+      expect(
+        (await SELF.fetch("https://legislation.test/.well-known/mcp/server-card.json")).status,
+      ).toBe(404);
       for (const dec of ["/robots.txt", "/sitemap.xml", "/llms.txt"]) {
         const rDec = await SELF.fetch(`https://legislation.test${dec}`);
         expect(rDec.status, dec).toBe(200);

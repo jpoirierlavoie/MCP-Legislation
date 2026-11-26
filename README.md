@@ -31,7 +31,7 @@ Le code source et les scripts d'ingestion sont publiés gratuitement sous licenc
   - **Google Antigravity** (`plugin.json`, `mcp_config.json`) : `agy plugin install https://github.com/jpoirierlavoie/MCP-Legislation.git`, puis saisir la variable `MCP_LEGISLATION_SECRET` avec un jeton issu de `/moi`.
   - **Gemini CLI** (`gemini-extension.json`) : `gemini extensions install https://github.com/jpoirierlavoie/MCP-Legislation` et saisir `MCP_LEGISLATION_SECRET`. (`"contextFileName": []` évite d'injecter `GEMINI.md` dans vos sessions.)
 - **Note technique sur `?key=` et le chemin URL :** lorsque la connexion se fait par jeton dans un outil en ligne de commande ou un backend, privilégier l'en-tête `Authorization: Bearer <jeton>` afin que le jeton n'apparaisse pas dans une URL. La forme `?key=<jeton>` est prise en charge pour les formulaires web de connecteurs à jeton ; la forme en segment de chemin `https://legislation.poirierlavoie.ca/mcp/<jeton>` est également acceptée mais déconseillée dans les formulaires web.
-- **Découverte HTTP (SEP-2127) :** `GET https://legislation.poirierlavoie.ca/mcp/server-card` (`application/mcp-server-card+json`).
+- **Découverte HTTP (SEP-2127) :** `GET https://legislation.poirierlavoie.ca/mcp/server-card` et `GET https://legislation.poirierlavoie.ca/.well-known/mcp/server-card.json` (`application/mcp-server-card+json`).
 - **Transport :** HTTP streamable sans état (`POST /mcp` ; `GET` et `DELETE` refusés en `405`).
 - **Codes d'erreur courants :** `429` (cadence par minute dépassée, réessayer après `Retry-After`), `404` sur `/mcp` ou `401` sur `/mcp/oauth` (jeton absent, expiré ou révoqué), `200 [QUOTA_EPUISE]` (plafond journalier UTC atteint).
 
