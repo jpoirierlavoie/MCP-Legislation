@@ -1,4 +1,5 @@
 import {
+  CHEMIN_WELL_KNOWN_CARTE_SERVEUR,
   creerDepotJetonsD1,
   creerQuarantaineIpEchecs,
   drapeau,
@@ -97,11 +98,19 @@ export default {
     }
 
     const estMetaOAuth = url.pathname === "/.well-known/oauth-protected-resource/mcp/oauth";
+    const estCarteServeur =
+      url.pathname === "/mcp/server-card" || url.pathname === CHEMIN_WELL_KNOWN_CARTE_SERVEUR;
     const estMcpOAuth = url.pathname === "/mcp/oauth" || url.pathname.startsWith("/mcp/oauth/");
     const estMcpDirect =
       !estMcpOAuth && (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/"));
 
-    if (url.pathname === "/health" || estMetaOAuth || estMcpOAuth || estMcpDirect) {
+    if (
+      url.pathname === "/health" ||
+      estMetaOAuth ||
+      estCarteServeur ||
+      estMcpOAuth ||
+      estMcpDirect
+    ) {
       // 1. COUPE-CIRCUIT (`!== "true"` ⇒ 404). Fermé par défaut.
       if (!drapeau((env as { MCP_ENABLED?: string }).MCP_ENABLED, false)) {
         return refuser("404", origin);
@@ -120,8 +129,8 @@ export default {
         );
       }
 
-      // Fiche de découverte SEP-2127 (`/mcp/server-card`) interceptée AVANT `/mcp/<jeton>`.
-      if (url.pathname === "/mcp/server-card") {
+      // Fiche de découverte SEP-2127 interceptée AVANT `/mcp/<jeton>`.
+      if (estCarteServeur) {
         return repondreCarteServeur(request.method, carteServeur());
       }
 

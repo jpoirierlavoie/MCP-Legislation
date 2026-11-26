@@ -1,6 +1,6 @@
 {
   "name": "mcp-legislation",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "private": true,
   "description": "Texte officiel en lecture seule de lois, règlements, directives de pratique et orientations AMF du Québec et du Canada (français et anglais, certains PDF en français seulement), hiérarchie complète des divisions et recherche hybride lexicale et sémantique.",
   "license": "Apache-2.0",
@@ -24,11 +24,10 @@
     "test:watch": "vitest",
     "pretest": "node scripts/wrangler-test-config.mjs --ecrire"
   },
-  "dependencies": {},
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@cloudflare/vitest-pool-workers": "^0.23.0",
-    "@poirierlavoie/mcp-socle": "github:jpoirierlavoie/MCP-Socle#v0.8.5",
+    "@poirierlavoie/mcp-socle": "github:jpoirierlavoie/MCP-Socle#v0.8.6",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12",
     "wrangler": "^4.162.0"

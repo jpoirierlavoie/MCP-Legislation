@@ -45,7 +45,7 @@ export const PACKAGE_NAME = "mcp-legislation";
 
 export const SERVER_INFO = {
   name: "Législation du Québec et du Canada",
-  version: "2.2.1",
+  version: "2.2.2",
 } as const;
 
 /**
@@ -78,6 +78,7 @@ export function carteServeur() {
     websiteUrl: "https://legislation.poirierlavoie.ca/",
     repositoryUrl: "https://github.com/jpoirierlavoie/MCP-Legislation",
     remoteUrl: "https://legislation.poirierlavoie.ca/mcp",
+    oauthRemoteUrl: "https://legislation.poirierlavoie.ca/mcp/oauth",
     supportedProtocolVersions: VERSIONS,
     authDescription:
       "Jeton individuel de titulaire (« Bearer <jeton> ») ou connexion OAuth 2.1 sur /mcp/oauth via acces.poirierlavoie.ca.",
