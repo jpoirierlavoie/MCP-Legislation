@@ -533,7 +533,9 @@ test("manifestes Antigravity / Gemini, version et description concordent partout
   // Critiquement vide : évite d'injecter le GEMINI.md de développement dans les sessions utilisateur.
   assert.deepEqual(geminiExt.contextFileName, []);
   const gcli = geminiExt.mcpServers?.lois;
-  assert.equal(gcli?.httpUrl, "https://legislation.poirierlavoie.ca/mcp");
+  assert.equal(gcli?.type, "http");
+  assert.equal(gcli?.url, "https://legislation.poirierlavoie.ca/mcp");
+  assert.equal(gcli?.httpUrl, undefined);
   assert.equal(gcli?.headers?.Authorization, expectedAuth);
   assert.ok(
     geminiExt.settings?.some((s) => s.envVar === "MCP_LEGISLATION_SECRET" && s.sensitive === true),
