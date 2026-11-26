@@ -45,7 +45,7 @@ export const PACKAGE_NAME = "mcp-legislation";
 
 export const SERVER_INFO = {
   name: "Législation du Québec et du Canada",
-  version: "2.2.0",
+  version: "2.2.1",
 } as const;
 
 /**

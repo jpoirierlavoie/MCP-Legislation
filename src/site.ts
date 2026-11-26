@@ -307,7 +307,7 @@ const LLMS_TXT = [
   "- [MCP Accès (Admission & OAuth 2.1 Portal)](https://acces.poirierlavoie.ca/): Eligibility (active Barreau du Québec members), `/demande` application, and `/moi` console.",
   `- [MCP Législation (\`lois\`)](${ORIGINE_SITE}/): Official statutes, regulations, court practice directives, and AMF texts. Server Card: ${ORIGINE_SITE}/mcp/server-card`,
   "- [MCP Jurisprudence (`juris`)](https://jurisprudence.poirierlavoie.ca/): Case-law citation verification & CanLII metadata (BYOK CanLII). Server Card: https://jurisprudence.poirierlavoie.ca/mcp/server-card",
-  "- [MCP Outils (`outils` — Public, no account required)](https://outils.poirierlavoie.ca/): C.C.P. deadlines, art. 1619 C.C.Q. interest, registries, courthouses, RQA addresses, and bijural terminology. Endpoint: `https://outils.poirierlavoie.ca/mcp`",
+  "- [MCP Outils (`outils` — Public, no account required)](https://outils.poirierlavoie.ca/): 15 tools across 6 families — C.C.P. deadlines, art. 1619 C.C.Q. interest, registries (REQ, Corporations Canada, GLEIF), courthouses, RQA addresses, bijural terminology, Bank of Canada rates, StatCan CPI, and TAL/CMHC rents. Endpoint: `https://outils.poirierlavoie.ca/mcp`",
   `- [Umbrella Plugin Repository](${DEPOT_PLUGIN}) · [Connector Repository](${DEPOT})`,
   "",
 ].join("\n");
@@ -397,11 +397,11 @@ function entete(): string {
   </div>
   ${biP(
     [
-      "Connecteur gratuit donnant à votre assistant IA (Claude, ChatGPT, Gemini, Antigravity) l'accès direct au texte officiel mot pour mot des lois et règlements du Québec, des lois fédérales utiles en litige civil et commercial, des directives de pratique des tribunaux (Cour supérieure, Cour du Québec) et des textes de l'AMF — au lieu de le laisser réciter des articles de mémoire.",
+      "Connecteur gratuit donnant à votre assistant IA (Claude, ChatGPT, Gemini, Antigravity) l'accès direct au texte officiel mot pour mot des lois et règlements du Québec, des lois fédérales utiles en litige civil et commercial (ainsi que du domaine fédéral isolé « penal » : Code criminel, LRCDAS, LSJPA), des directives de pratique des tribunaux (Cour supérieure, Cour du Québec) et des textes de l'AMF — au lieu de le laisser réciter des articles de mémoire.",
       "Les dispositions sont chargées sans aucune modification depuis les publications officielles de LégisQuébec, de Justice Canada et des PDF officiels des tribunaux et de l'AMF (certains publiés en français seulement). Vos recherches ne sont jamais journalisées.",
     ],
     [
-      "Free connector giving your AI assistant (Claude, ChatGPT, Gemini, Antigravity) direct, word-for-word access to official consolidated Québec statutes and regulations, key federal civil-litigation statutes, court practice directives (Superior Court, Court of Québec), and AMF texts — instead of letting it cite articles from memory.",
+      "Free connector giving your AI assistant (Claude, ChatGPT, Gemini, Antigravity) direct, word-for-word access to official consolidated Québec statutes and regulations, key federal civil and commercial litigation statutes (plus the isolated federal 'penal' domain: Criminal Code, CDSA, YCJA), court practice directives (Superior Court, Court of Québec), and AMF texts — instead of letting it cite articles from memory.",
       "Provisions are loaded unaltered from official LégisQuébec publications, Justice Canada consolidations, and official court and AMF PDFs (some published in French only). Your searches are never logged.",
     ],
   )}
