@@ -17,7 +17,7 @@ async function insererTitulaireEtJeton(opts: {
   courriel: string;
   etat?: "en_attente" | "actif" | "surveille" | "limite" | "suspendu" | "revoque" | "refuse";
   hybridePermis?: 0 | 1;
-  portee?: "les_deux" | "legislation" | "jurisprudence";
+  portee?: "tous" | "les_deux" | "legislation" | "jurisprudence" | "outils";
   revoqueLe?: string | null;
   expireLe?: string | null;
 }): Promise<string> {
@@ -127,7 +127,12 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     );
   });
 
-  it("accepte les jetons individuels D1 (les_deux, legislation) sur /mcp sous les 3 porteurs et rejette hors portée / inactifs avec le même 404 (G7)", async () => {
+  it("accepte les jetons individuels D1 (tous, les_deux, legislation) sur /mcp sous les 3 porteurs et rejette hors portée / inactifs avec le même 404 (G7)", async () => {
+    const jetonTous = await insererTitulaireEtJeton({
+      id: "tit_tous",
+      courriel: "tous@exemple.qc.ca",
+      portee: "tous",
+    });
     const jetonLesDeux = await insererTitulaireEtJeton({
       id: "tit_ld",
       courriel: "ld@exemple.qc.ca",
@@ -142,6 +147,11 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
       id: "tit_juris",
       courriel: "juris@exemple.qc.ca",
       portee: "jurisprudence",
+    });
+    const jetonOutils = await insererTitulaireEtJeton({
+      id: "tit_outils",
+      courriel: "outils@exemple.qc.ca",
+      portee: "outils",
     });
     const jetonSuspendu = await insererTitulaireEtJeton({
       id: "tit_susp",
@@ -161,6 +171,10 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
 
     const corps = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" });
     for (const [url, headers] of [
+      [
+        "https://legislation.test/mcp",
+        { Authorization: `Bearer ${jetonTous}`, "MCP-Protocol-Version": HERITEE },
+      ],
       [
         "https://legislation.test/mcp",
         { Authorization: `Bearer ${jetonLesDeux}`, "MCP-Protocol-Version": HERITEE },
@@ -185,7 +199,14 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     expect(await rAnonyme.text()).toBe("");
     expect(rAnonyme.headers.get("WWW-Authenticate")).toBeNull();
 
-    for (const mauvais of [jetonJuris, jetonSuspendu, jetonExpire, jetonRevoque, frapperJeton()]) {
+    for (const mauvais of [
+      jetonJuris,
+      jetonOutils,
+      jetonSuspendu,
+      jetonExpire,
+      jetonRevoque,
+      frapperJeton(),
+    ]) {
       const r = await SELF.fetch("https://legislation.test/mcp", {
         method: "POST",
         headers: {
@@ -218,7 +239,7 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     };
     expect(meta.resource).toBe("https://legislation.poirierlavoie.ca/mcp/oauth");
     expect(meta.authorization_servers).toEqual(["https://acces.poirierlavoie.ca"]);
-    expect(meta.scopes_supported).toEqual(["les_deux", "legislation"]);
+    expect(meta.scopes_supported).toEqual(["tous", "legislation"]);
     expect(meta.bearer_methods_supported).toEqual(["header"]);
 
     const e = env as unknown as Record<string, unknown>;
@@ -241,7 +262,7 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     expect(wwwAnon).toContain(
       'resource_metadata="https://legislation.poirierlavoie.ca/.well-known/oauth-protected-resource/mcp/oauth"',
     );
-    expect(wwwAnon).toContain('scope="legislation les_deux"');
+    expect(wwwAnon).toContain('scope="legislation tous"');
 
     const postInvalide = await SELF.fetch("https://legislation.test/mcp/oauth", {
       method: "POST",
@@ -285,6 +306,43 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
       headers: { Authorization: `Bearer ${jetonValide}` },
     });
     expect(getAuth.status).toBe(405);
+
+    const jetonOAuthTous = await insererTitulaireEtJeton({
+      id: "tit_oauth_tous",
+      courriel: "oauthtous@exemple.qc.ca",
+      portee: "tous",
+    });
+    const jetonOAuthOutils = await insererTitulaireEtJeton({
+      id: "tit_oauth_outils",
+      courriel: "oauthoutils@exemple.qc.ca",
+      portee: "outils",
+    });
+    expect(
+      (
+        await SELF.fetch("https://legislation.test/mcp/oauth", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${jetonOAuthOutils}`,
+            "MCP-Protocol-Version": HERITEE,
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "ping" }),
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await SELF.fetch("https://legislation.test/mcp/oauth", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${jetonOAuthTous}`,
+            "MCP-Protocol-Version": HERITEE,
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 11, method: "ping" }),
+        })
+      ).status,
+    ).toBe(200);
 
     const postAuth = await SELF.fetch("https://legislation.test/mcp/oauth", {
       method: "POST",
@@ -575,7 +633,7 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     await dbIdentite()
       .prepare(
         `INSERT INTO compteur_jour (titulaire_id, jour, classe, appels, erreurs, introuvables, sortants)
-         VALUES (?1, ?2, 'local', 150, 0, 0, 0)`,
+         VALUES (?1, ?2, 'local', 300, 0, 0, 0)`,
       )
       .bind("tit_limite", jourUtc())
       .run();
@@ -606,7 +664,7 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     };
     expect(corpsQuota.result.isError).toBe(true);
     expect(corpsQuota.result.content[0]?.text).toContain("[QUOTA_EPUISE]");
-    expect(corpsQuota.result.content[0]?.text).toContain("150");
+    expect(corpsQuota.result.content[0]?.text).toContain("300");
 
     await dbIdentite()
       .prepare(

@@ -279,10 +279,10 @@ const LLMS_TXT = [
   "",
   "## Québec Civil Law MCP Suite (`droit-civil-quebecois`)",
   "",
-  "- [MCP Accès (Admission & OAuth 2.1 Portal)](https://acces.poirierlavoie.ca/): Eligibility (active Barreau du Québec members), `/demande` application, and `/moi` console.",
-  `- [MCP Législation (\`lois\`)](${ORIGINE_SITE}/): Official statutes, regulations, court practice directives, and AMF texts. Server Card: ${ORIGINE_SITE}/mcp/server-card`,
+  "- [MCP Accès (Admission & OAuth 2.1 Portal)](https://acces.poirierlavoie.ca/): Eligibility (active Barreau du Québec members; optional CanLII key required only for `juris`), `/demande` application, and `/moi` console.",
+  `- [MCP Législation (\`lois\`)](${ORIGINE_SITE}/): Official statutes, regulations, court practice directives, and AMF texts (requires Barreau access via acces.poirierlavoie.ca; no CanLII key needed). Server Card: ${ORIGINE_SITE}/mcp/server-card`,
   "- [MCP Jurisprudence (`juris`)](https://jurisprudence.poirierlavoie.ca/): Case-law citation verification & CanLII metadata (BYOK CanLII). Server Card: https://jurisprudence.poirierlavoie.ca/mcp/server-card",
-  "- [MCP Outils (`outils` — Public, no account required)](https://outils.poirierlavoie.ca/): 15 tools across 6 families — C.C.P. deadlines, art. 1619 C.C.Q. interest, registries (REQ, Corporations Canada, GLEIF), courthouses, RQA addresses, bijural terminology, Bank of Canada rates, StatCan CPI, and TAL/CMHC rents. Endpoint: `https://outils.poirierlavoie.ca/mcp`",
+  "- [MCP Outils (`outils`)](https://outils.poirierlavoie.ca/): 15 tools across 6 families — C.C.P. deadlines, art. 1619 C.C.Q. interest, registries (REQ, Corporations Canada, GLEIF), courthouses, RQA addresses, bijural terminology, Bank of Canada rates, StatCan CPI, and TAL/CMHC rents (requires Barreau access via acces.poirierlavoie.ca; no CanLII key needed). Endpoint: `https://outils.poirierlavoie.ca/mcp/oauth` (or `/mcp`)",
   `- [Umbrella Plugin Repository](${DEPOT_PLUGIN}) · [Connector Repository](${DEPOT})`,
   "",
 ].join("\n");
@@ -610,13 +610,13 @@ function acces(): string {
   ${biP(
     [
       "Accès gratuit réservé aux membres actifs en règle du Barreau du Québec.",
-      `1. Demandez votre accès une seule fois sur https://acces.poirierlavoie.ca/demande (avec votre numéro du Barreau et votre clé API CanLII).`,
+      `1. Demandez votre accès une seule fois sur https://acces.poirierlavoie.ca/demande avec votre numéro du Barreau (aucune clé API CanLII n'est requise pour Législation ni Outils ; une clé CanLII personnelle, facultative sur /demande et ajoutable dans /moi, n'est exigée que pour Jurisprudence).`,
       "2. Installez le greffon droit-civil-quebecois dans Claude, ChatGPT, Gemini ou Antigravity — ou ajoutez directement l'adresse https://legislation.poirierlavoie.ca/mcp/oauth dans les réglages de connecteurs — puis autorisez l'accès dans votre navigateur en un clic (aucun secret à copier).",
       `Vos recherches ne sont jamais enregistrées. Vous pouvez gérer votre compte ou désactiver la recherche par sens assistée par IA (pour chercher uniquement par mots exacts) à tout moment sur https://acces.poirierlavoie.ca/moi (contact : ${CONTACT}).`,
     ],
     [
       "Free access reserved for active members in good standing of the Barreau du Québec.",
-      "1. Apply once at https://acces.poirierlavoie.ca/demande (with your Barreau number and personal CanLII API key).",
+      "1. Apply once at https://acces.poirierlavoie.ca/demande with your Barreau number (no CanLII API key is required for Legislation or Tools; a personal CanLII key, optional on /demande and manageable in /moi, is required only for Case Law).",
       "2. Install the droit-civil-quebecois plugin in Claude, ChatGPT, Gemini, or Antigravity — or add https://legislation.poirierlavoie.ca/mcp/oauth directly in connector settings — then click Connect and sign in through your browser (no secret keys to copy).",
       `Your searches are never logged. Manage your account or toggle AI meaning-based search (to search exact words only) anytime at https://acces.poirierlavoie.ca/moi (contact: ${CONTACT}).`,
     ],
@@ -636,7 +636,7 @@ function acces(): string {
       ],
     )}
   </details>
-  <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">${bi("Demande d'accès (/demande)", "Apply for access (/demande)")}</a> · <a href="https://acces.poirierlavoie.ca/moi" rel="noopener">/moi</a> · <a href="https://jurisprudence.poirierlavoie.ca/" rel="noopener">${bi("Jurisprudence", "Case Law")}</a> · <a href="https://outils.poirierlavoie.ca/" rel="noopener">${bi("Outils (public)", "Tools (public)")}</a> · <a href="${DEPOT_PLUGIN}" rel="noopener">droit-civil-quebecois</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
+  <p><a href="https://acces.poirierlavoie.ca/demande" rel="noopener">${bi("Demande d'accès (/demande)", "Apply for access (/demande)")}</a> · <a href="https://acces.poirierlavoie.ca/moi" rel="noopener">/moi</a> · <a href="https://jurisprudence.poirierlavoie.ca/" rel="noopener">${bi("Jurisprudence", "Case Law")}</a> · <a href="https://outils.poirierlavoie.ca/" rel="noopener">${bi("Outils", "Tools")}</a> · <a href="${DEPOT_PLUGIN}" rel="noopener">droit-civil-quebecois</a> · <a href="${DEPOT}" rel="noopener">${esc(DEPOT.replace("https://", ""))}</a></p>
 </section>`;
 }
 

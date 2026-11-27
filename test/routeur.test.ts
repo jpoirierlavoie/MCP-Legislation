@@ -158,7 +158,7 @@ describe("server/discover", () => {
     expect(c.result.serverInfo).toBeUndefined();
     expect(c.result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({
       name: "Législation du Québec et du Canada",
-      version: "2.2.3",
+      version: "2.2.4",
     });
   });
 
