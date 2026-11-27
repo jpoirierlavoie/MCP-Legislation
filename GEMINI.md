@@ -17,7 +17,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 | 3 | **Schéma** | `data/schema.sql`, `data/schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
 | 4 | **README.md** et manifestes | `README.md`, `SECURITY.md`, `LICENSE` (`Apache-2.0`), `NOTICE`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `CLAUDE.md`, `GEMINI.md`, `/mcp/server-card` | tout ce qui change ce que le dépôt annonce faire, sa licence, sa confidentialité ou sa connectivité |
 | 5 | **Page publique** (HTML `GET /`) | `data/catalogue.json` + `src/site.ts` (`test/page-client.test.mjs`, `test/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil |
-| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (`v3.4.0`, manifestes, `skills/`, `verifier.py`, `verifier_tout.py`), `MCP-Socle` (`v0.8.8`), `MCP-Acces`, `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, quotas, page publique `GET /`, confidentialité ou licence |
+| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (`v3.5.0`, manifestes, `skills/`, `verifier.py`, `verifier_tout.py`), `MCP-Socle` (`v0.8.8`), `MCP-Acces`, `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, quotas, page publique `GET /`, confidentialité ou licence |
 
 **Procédure obligatoire :**
 1. Énoncer explicitement l'impact vérifié sur chacune des 6 surfaces (« non touchée » vérifié et motivé, jamais passé sous silence).
@@ -31,7 +31,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 ```
          ┌────────────────────────────────────────────────────────────────┐
-         │          droit-civil-quebecois (Plugin Cadre v3.4.0)           │
+         │          droit-civil-quebecois (Plugin Cadre v3.5.0)           │
          │  10 compétences · 60 feuilles · 6 personas · 4 scripts stdlib  │
          └──────────┬───────────────────────┬──────────────────┬──────────┘
                     │                       │                  │

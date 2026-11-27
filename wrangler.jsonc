@@ -42,7 +42,7 @@
     "VECTOR_DOMAIN_FILTER": "1",
     "MCP_ENABLED": "true",
     "COMMIT": "inconnu",
-    "ALLOWED_ORIGINS": "https://chatgpt.com,https://chat.openai.com,https://platform.openai.com",
+    "ALLOWED_ORIGINS": "",
     "ORIGINE_PORTAIL": "https://acces.poirierlavoie.ca"
   },
 
