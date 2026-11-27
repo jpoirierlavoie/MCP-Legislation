@@ -38,12 +38,13 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
         (serveur `lois`, 10 outils)  (serveur `juris`, 12)  (serveur `outils`, 15)
                     │                       │                  │
                     ▼                       ▼                  ▼
-         ┌─────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
-         │   MCP-Legislation   │ │  MCP-Jurisprudence  │ │        MCP-Outils        │
-         │  D1 `legislation` + │ │  D1 `canlii` + BYOK │ │   4 D1 RO + `DB_IDENTITE` │
-         │  `DB_IDENTITE` + AI │ │   `DB_IDENTITE`     │ │  (sans clé API CanLII)   │
-         └──────────┬──────────┘ └──────────┬──────────┘ └────────────┬─────────────┘
-                    └───────────────────────┴─────────────────────────┘
+         ┌──────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
+         │   MCP-Legislation    │ │  MCP-Jurisprudence  │ │        MCP-Outils        │
+         │ D1 `legislation` +   │ │  D1 `canlii` + BYOK │ │   4 D1 RO + `DB_IDENTITE` │
+         │ `DB_IDENTITE` + AI   │ │   `DB_IDENTITE`     │ │  (sans clé API CanLII)   │
+         │ (sans clé API CanLII)│ │                     │ │                          │
+         └──────────┬───────────┘ └──────────┬──────────┘ └────────────┬─────────────┘
+                    └────────────────────────┴─────────────────────────┘
                                 ▼ (`@poirierlavoie/mcp-socle` v0.8.8, zéro runtime dep)
                  ┌──────────────────────────────────────────┐
                  │  MCP-Socle + MCP-Acces (`mcp-identite`)  │
@@ -61,10 +62,12 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 ## 2. Contrôle d'accès Phase 3, confidentialité et quotas
 
+L'accès hébergé via `MCP-Acces` (`https://acces.poirierlavoie.ca`) est réservé gratuitement aux membres actifs en règle du Barreau du Québec et ne requiert **aucune clé API CanLII** (la clé CanLII est facultative sur `/demande`, gérable dans `/moi`, et exigée uniquement pour `MCP-Jurisprudence`).
+
 1. **Double montage (`/mcp` et `/mcp/oauth`) et coupe-circuit (`MCP_ENABLED`) :**
    - `MCP_ENABLED !== "true"` coupe `/mcp*`, `/.well-known/oauth-protected-resource/mcp/oauth` et `/health` en `404`, tout en laissant `GET /` ouvert (`200`, `G22`).
-   - `/mcp` (`PORTE` dans `src/auth.ts`) accepte en parallèle les jetons individuels `DB_IDENTITE` (`portee` `'tous'`, `'legislation'` ou `'les_deux'` héritée, titulaire `actif` ou `limite`) et les secrets partagés transitoires de Phase 3a (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`), sous `Authorization: Bearer <jeton>`, `?key=<jeton>` ou `/mcp/<jeton>` (slash final toléré). Tout refus sur `/mcp` renvoie **uniformément `404` sans corps ni `WWW-Authenticate`** (`S8`, `G7`, `G23`). `/mcp/server-card` (`/.well-known/mcp/server-card.json`) et `/mcp/oauth` sont interceptés avant `/mcp/<jeton>`.
-   - `/mcp/oauth` (`PORTE_OAUTH`) accepte **uniquement** `Authorization: Bearer <jeton>` (aucun `?key=`, aucun segment `/mcp/oauth/<x>`, aucun secret partagé de Worker). Tout refus renvoie `401` RFC 9728 pointant vers `GET /.well-known/oauth-protected-resource/mcp/oauth` (`authorization_servers: ["https://acces.poirierlavoie.ca"]`), tandis que la racine `GET /.well-known/oauth-protected-resource` reste en `404`.
+   - `/mcp` (`PORTE` dans `src/auth.ts`) accepte en parallèle les jetons individuels `DB_IDENTITE` (`portee` `'tous'`, `'legislation'` ou `'les_deux'` héritée, titulaire `actif` ou `limite`) et les secrets partagés statiques (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`), qui assurent la transition Phase 3a ainsi que l'authentification autonome d'une fourche lorsque `DB_IDENTITE` est omis de `wrangler.jsonc` (`env.DB_IDENTITE` facultatif dans `src/index.ts:149`), sous `Authorization: Bearer <jeton>`, `?key=<jeton>` ou `/mcp/<jeton>` (slash final toléré). Tout refus sur `/mcp` renvoie **uniformément `404` sans corps ni `WWW-Authenticate`** (`S8`, `G7`, `G23`). `/mcp/server-card` (`/.well-known/mcp/server-card.json`) et `/mcp/oauth` sont interceptés avant `/mcp/<jeton>`.
+   - `/mcp/oauth` (`PORTE_OAUTH`) accepte **uniquement** `Authorization: Bearer <jeton>` issu de `DB_IDENTITE` (`portee` `'tous'`, `'legislation'` ou héritée `'les_deux'` — aucun `?key=`, aucun segment `/mcp/oauth/<x>`, aucun secret partagé de Worker). Tout refus renvoie `401` RFC 9728 pointant vers `GET /.well-known/oauth-protected-resource/mcp/oauth` (`authorization_servers: ["https://acces.poirierlavoie.ca"]`), tandis que la racine `GET /.well-known/oauth-protected-resource` reste en `404`.
    - Le contrôle de méthode `POST` (`405`) s'exécute **après** l'authentification sur `/mcp` comme sur `/mcp/oauth` (`G23`).
 2. **Débit à deux niveaux et quotas journaliers (`G32`, `G34`) :**
    - Pré-auth par IP (`RL_PRE_AUTH_IP` `1011` 600/min, `RL_ECHEC_IP` `1012` 20/min, `RL_ECHECS_GLOBAL` `1013` 300/min) + `QuarantaineIpEchecs` contournée par tout jeton valide déjà reconnu afin de protéger les IP partagées de cabinets ou de clients infonuagiques.

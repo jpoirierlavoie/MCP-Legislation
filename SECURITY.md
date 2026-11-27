@@ -25,7 +25,7 @@ Hors portée :
 
 ## Données traitées, vie privée et secret professionnel
 
-Ce serveur ne sert que des **textes législatifs et réglementaires publics** en lecture seule et n'héberge aucun dossier client :
+Ce serveur est réservé gratuitement aux membres actifs en règle du Barreau du Québec via [`acces.poirierlavoie.ca`](https://acces.poirierlavoie.ca) (**aucune clé API CanLII requise** — la clé CanLII demeure facultative sur `/demande`, gérable dans `/moi`, et n'est exigée que pour `MCP-Jurisprudence`), ne sert que des **textes législatifs et réglementaires officiels** en lecture seule et n'héberge aucun dossier client :
 
 1. **Zéro journalisation de contenu de requête (`S13`, `S14`, `G9`, `G37`)** :
    - Aucune écriture dans `search_log` n'a lieu à l'exécution ; aucun texte de requête (`query`), référence législative ou argument d'outil n'est persisté ni émis dans `console.*`.
@@ -35,8 +35,8 @@ Ce serveur ne sert que des **textes législatifs et réglementaires publics** en
 2. **Désactivation libre-service du volet vectoriel (`hybride_permis`, `S19`)** :
    - Chaque titulaire peut désactiver le repérage sémantique (`hybride_permis = 0`) dans `https://acces.poirierlavoie.ca/moi` : `search_text` s'exécute alors exclusivement en mode lexical FTS5 local sur D1, sans jamais invoquer `Workers AI` ni `Vectorize`.
 3. **Deux montages d'authentification étanches (`/mcp` et `/mcp/oauth`)** :
-   - `/mcp` accepte les jetons individuels de titulaires (`DB_IDENTITE`, portée `tous`, `legislation` ou héritée `les_deux`) ainsi que les secrets transitoires de phase 3a (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`), et oppose un `404` vide uniforme sans `WWW-Authenticate` à tout refus. Privilégier `Authorization: Bearer <jeton>` dès que le client le permet (`?key=` reste toléré sur `/mcp` pour compatibilité transitoire).
-   - `/mcp/oauth` accepte exclusivement l'en-tête `Authorization: Bearer <jeton>` (aucun `?key=`, aucun segment de chemin) et répond `401` RFC 9728 pointant vers `https://acces.poirierlavoie.ca`.
+   - `/mcp` accepte les jetons individuels de titulaires (`DB_IDENTITE`, portée `tous`, `legislation` ou héritée `les_deux`) ainsi que les secrets statiques (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`) assurant la transition de phase 3a et le repli autonome en fourche auto-hébergée lorsque `DB_IDENTITE` est omis de `wrangler.jsonc`, et oppose un `404` vide uniforme sans `WWW-Authenticate` à tout refus. Privilégier `Authorization: Bearer <jeton>` dès que le client le permet (`?key=` reste toléré sur `/mcp` pour compatibilité transitoire).
+   - `/mcp/oauth` accepte exclusivement l'en-tête `Authorization: Bearer <jeton>` issu de `DB_IDENTITE` (portée `tous`, `legislation` ou héritée `les_deux` — jamais de secret statique ; aucun `?key=`, aucun segment de chemin) et répond `401` RFC 9728 pointant vers `https://acces.poirierlavoie.ca`.
 
 ---
 

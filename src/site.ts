@@ -271,6 +271,13 @@ const LLMS_TXT = [
   "",
   `> ${PUBLIC_DESCRIPTION}`,
   "",
+  "## Endpoints (OAuth 2.1 & personal token via MCP-Acces)",
+  "",
+  `- Streamable HTTP (OAuth 2.1 PKCE, scopes \`tous\`, \`legislation\`, legacy \`les_deux\`): \`${ORIGINE_SITE}/mcp/oauth\``,
+  `- Streamable HTTP (personal token in Authorization header; returns empty 404 when unauthenticated): \`${ORIGINE_SITE}/mcp\``,
+  `- OAuth 2.1 Protected Resource Metadata (RFC 9728): ${ORIGINE_SITE}/.well-known/oauth-protected-resource/mcp/oauth`,
+  `- MCP Server Card (SEP-2127): ${ORIGINE_SITE}/mcp/server-card`,
+  "",
   "## Tools (10 read-only MCP tools, derived from catalogue.json)",
   "",
   ...Object.entries(catalogue.tools).map(
@@ -281,7 +288,7 @@ const LLMS_TXT = [
   "",
   "- [MCP Accès (Admission & OAuth 2.1 Portal)](https://acces.poirierlavoie.ca/): Eligibility (active Barreau du Québec members; optional CanLII key required only for `juris`), `/demande` application, and `/moi` console.",
   `- [MCP Législation (\`lois\`)](${ORIGINE_SITE}/): Official statutes, regulations, court practice directives, and AMF texts (requires Barreau access via acces.poirierlavoie.ca; no CanLII key needed). Server Card: ${ORIGINE_SITE}/mcp/server-card`,
-  "- [MCP Jurisprudence (`juris`)](https://jurisprudence.poirierlavoie.ca/): Case-law citation verification & CanLII metadata (BYOK CanLII). Server Card: https://jurisprudence.poirierlavoie.ca/mcp/server-card",
+  "- [MCP Jurisprudence (`juris`)](https://jurisprudence.poirierlavoie.ca/): Case-law citation verification & CanLII metadata (requires Barreau access via acces.poirierlavoie.ca + personal BYOK CanLII key). Server Card: https://jurisprudence.poirierlavoie.ca/mcp/server-card",
   "- [MCP Outils (`outils`)](https://outils.poirierlavoie.ca/): 15 tools across 6 families — C.C.P. deadlines, art. 1619 C.C.Q. interest, registries (REQ, Corporations Canada, GLEIF), courthouses, RQA addresses, bijural terminology, Bank of Canada rates, StatCan CPI, and TAL/CMHC rents (requires Barreau access via acces.poirierlavoie.ca; no CanLII key needed). Endpoint: `https://outils.poirierlavoie.ca/mcp/oauth` (or `/mcp`)",
   `- [Umbrella Plugin Repository](${DEPOT_PLUGIN}) · [Connector Repository](${DEPOT})`,
   "",
@@ -622,16 +629,16 @@ function acces(): string {
     ],
   )}
   <details>
-    <summary>${bi("Détails techniques (scripts, ligne de commande et découverte MCP)", "Technical details (scripts, CLI & MCP discovery)")}</summary>
+    <summary>${bi("Détails techniques (OAuth 2.1, portées, découverte MCP et instance autonome)", "Technical details (OAuth 2.1, scopes, MCP discovery & standalone hosting)")}</summary>
     ${biP(
       [
-        "Connexion OAuth 2.1 par navigateur : https://legislation.poirierlavoie.ca/mcp/oauth. Un accès direct par jeton individuel (https://legislation.poirierlavoie.ca/mcp, qui retourne 404 sans corps à tout appel non authentifié) demeure disponible pour les scripts, la ligne de commande et l'API Gemini Deep Research.",
-        "Une fiche publique de découverte MCP sans secret est publiée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut aussi les manifestes autonomes pour Google Antigravity et Gemini CLI.",
+        "Connexion OAuth 2.1 par navigateur : https://legislation.poirierlavoie.ca/mcp/oauth (métadonnées RFC 9728 : https://legislation.poirierlavoie.ca/.well-known/oauth-protected-resource/mcp/oauth ; portées acceptées : « tous », « legislation » et « les_deux » héritée). Un accès direct par jeton individuel (https://legislation.poirierlavoie.ca/mcp via l'en-tête Authorization, qui retourne 404 sans corps à tout appel non authentifié) demeure disponible pour les scripts, la ligne de commande et l'API Gemini Deep Research.",
+        "Une fiche publique de découverte MCP sans secret est publiée sur https://legislation.poirierlavoie.ca/mcp/server-card ; le dépôt inclut aussi les manifestes autonomes pour Google Antigravity et Gemini CLI, ainsi que ses schémas et migrations D1 avec repli autonome sur secret statique (MCP_TOKEN / MCP_TOKEN_VEILLE) lorsque DB_IDENTITE et MCP-Acces sont omis.",
         "Le code source est libre et gratuit sous licence Apache-2.0 (voir LICENSE) ; le fichier NOTICE reconnaît les sources officielles sans revendication de droit d'auteur sur les textes servis (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ et AMF).",
       ],
       [
-        "Browser OAuth 2.1 endpoint: https://legislation.poirierlavoie.ca/mcp/oauth. Direct per-holder token access (https://legislation.poirierlavoie.ca/mcp, returning an empty 404 to unauthenticated calls) remains available for scripts, CLI tools, and Gemini API Deep Research.",
-        "A public, secret-free MCP Server Card is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository also includes standalone manifests for Google Antigravity and Gemini CLI.",
+        "Browser OAuth 2.1 endpoint: https://legislation.poirierlavoie.ca/mcp/oauth (RFC 9728 metadata: https://legislation.poirierlavoie.ca/.well-known/oauth-protected-resource/mcp/oauth; accepted scopes: 'tous', 'legislation', and legacy 'les_deux'). Direct per-holder token access (https://legislation.poirierlavoie.ca/mcp via the Authorization header, returning an empty 404 to unauthenticated calls) remains available for scripts, CLI tools, and Gemini API Deep Research.",
+        "A public, secret-free MCP Server Card is published at https://legislation.poirierlavoie.ca/mcp/server-card; the repository also includes standalone manifests for Google Antigravity and Gemini CLI, plus bundled D1 schemas and migrations with standalone static-secret fallback (MCP_TOKEN / MCP_TOKEN_VEILLE) when DB_IDENTITE and MCP-Acces are omitted.",
         "The source code is free and open-source under Apache-2.0 (see LICENSE); the NOTICE file credits official publishers without claiming copyright over served texts (LégisQuébec, Justice Canada OGL-Canada, QCCS/QCCQ, and AMF).",
       ],
     )}
