@@ -1,13 +1,5 @@
-// Garde : `src/schemas.ts` ne doit jamais diverger de ce que `tools/list` publie.
-//
-// `src/schemas.ts` est ENGENDRÉ depuis `fixtures/tools-list.reference.json`, laquelle fige
-// la charge utile publiée par `tools/list`.
-//
-// La comparaison porte sur les VALEURS, jamais sur le texte : le fichier engendré passe
-// ensuite par Biome, et une comparaison de chaînes rougirait sur la mise en forme.
-
 import { describe, expect, it } from "vitest";
-import reference from "../fixtures/tools-list.reference.json";
+import reference from "../data/tools-list.reference.json";
 import { PUBLIES } from "../src/schemas";
 
 const noms = Object.keys(PUBLIES);
@@ -29,9 +21,6 @@ describe("schémas engendrés contre référence publiée", () => {
   });
 
   it("conserve `$schema` et `execution`, que le SDK publie", () => {
-    // Deux champs qu'une transcription à la main aurait laissés tomber sans le vouloir.
-    // `$schema` : son ABSENCE vaut « 2020-12 » pour un client `2026-07-28`, donc le
-    // retirer changerait le dialecte sous lequel le contrat est lu.
     for (const nom of noms) {
       expect(PUBLIES[nom]?.inputSchema.$schema, `${nom} : $schema`).toBe(
         "http://json-schema.org/draft-07/schema#",
@@ -46,7 +35,6 @@ describe("schémas engendrés contre référence publiée", () => {
   });
 
   it("verrouille `additionalProperties: false` sur les dix schémas", () => {
-    // Décision M1 : le schéma JSON Schema verrouille explicitement additionalProperties à false.
     for (const nom of noms) {
       expect(PUBLIES[nom]?.inputSchema.additionalProperties, `${nom}`).toBe(false);
     }
@@ -58,15 +46,10 @@ describe("schémas engendrés contre référence publiée", () => {
         .filter(([, v]) => v.default !== undefined)
         .map(([champ]) => `${nom}.${champ}`),
     );
-    // Le nombre n'est pas choisi : c'est celui que le SDK publie. Il est aussi celui que
-    // `tests/defauts-relocalises.test.mjs` exige de retrouver, appliqué, dans les
-    // gestionnaires. Les deux gardes doivent bouger ensemble.
     expect(defauts).toHaveLength(13);
   });
 
   it("tout `type` employé est un type que le validateur du socle sait contrôler", () => {
-    // `typeOk` rend `true` pour un type inconnu : une coquille DÉSARME la validation du
-    // champ, en silence. La garde est donc ici, pas dans le validateur.
     const connus = ["object", "string", "integer", "number", "boolean", "array"];
     for (const nom of noms) {
       const s = PUBLIES[nom]?.inputSchema;

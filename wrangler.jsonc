@@ -10,14 +10,9 @@
   },
   "cache": { "enabled": true },
 
-  // Domaine personnalisé (zone poirierlavoie.ca) : Cloudflare gère DNS + certificat.
   "routes": [{ "pattern": "legislation.poirierlavoie.ca", "custom_domain": true }],
-  // workers.dev fermé hors rattrapage (surface minimale). Pour un futur backfill
-  // (rafraîchissement semestriel), le réactiver temporairement : le WAF de la zone
-  // bloque les rafales de POST du pilote sur le domaine personnalisé.
   "workers_dev": false,
 
-  // Ancien Durable Object `QclawMCP` retiré : l'endpoint `/mcp` est sans état (socle).
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["QclawMCP"] },
     { "tag": "v2", "deleted_classes": ["QclawMCP"] }
@@ -27,46 +22,16 @@
     {
       "binding": "DB",
       "database_name": "legislation",
-      // Base D1 réelle (compte « Jason Poirier Lavoie », région ENAM), créée via
-      // `wrangler d1 create legislation`. Le dev local utilise quand même un SQLite local.
       "database_id": "82779d59-480f-4847-9716-6f4d7c62af5b",
       "migrations_dir": "migrations"
     },
     {
       "binding": "DB_IDENTITE",
       "database_name": "mcp-identite",
-      // Base D1 partagée du socle d'identité (jetons individuels, quotas et événements sans contenu).
-      // L'UUID réel est substitué au déploiement Phase 5 après `wrangler d1 create mcp-identite`.
       "database_id": "ee4894cc-a779-466b-bc9b-ac157b354afc"
     }
   ],
 
-  // Chemins de récupération réversibles (plan v2, R8) : rollback = flip de variable.
-  // RELAX_SEARCH : échelle de relaxation de search_text (1.2). "0" pour désactiver.
-  // HYBRID_SEARCH : recherche hybride FTS + vecteurs (2.3). "0" tant que le rattrapage
-  // des vecteurs n'est pas validé ; bascule à "1" ensuite (séquence de déploiement §2).
-  // FEDERAL_CORPUS : l'interrupteur du corpus fédéral (R8). À "0", les textes
-  // `jurisdiction = 'ca'` sont INVISIBLES à tous les outils, même chargés en base. On peut
-  // donc ingérer les 18 textes, les vérifier et mesurer le repérage EN PRODUCTION sans rien
-  // servir, puis ouvrir d'un flip — et refermer de même si la qualité se dégrade. Fermé par
-  // défaut à dessein : un déploiement qui oublierait la variable ne sert rien de neuf, au
-  // lieu de tout servir d'un coup.
-  // PDF_CORPUS : l'interrupteur du corpus PDF (R8). À "1" en production ; à "0" (ou absent),
-  // les textes `source = 'pdf'` redeviennent INVISIBLES à tous les outils, aux vecteurs et
-  // aux décomptes de `GET /` — rollback = flip de variable.
-  // CRIMINAL_CORPUS : l'interrupteur du silo criminel fédéral (`jurisdiction = 'ca'` et
-  // `domain = 'penal'`, Vague 3, R8). À "1" en production ; à "0" (ou absent), les trois
-  // textes redeviennent INVISIBLES à tous les outils, aux vecteurs et à `GET /` — rollback = flip.
-  // MCP_ENABLED — COUPE-CIRCUIT DU BLOC /mcp, fermé par défaut.
-  //
-  // La polarité est « !== "true" ⇒ éteint » : variable absente, vide ou mal orthographiée
-  // coupe le service. Ne JAMAIS l'écrire « === "false" », ce serait un garde ouvert par
-  // défaut sur un point d'entrée destiné au multilocataire.
-  //
-  // ⚠ SA PRÉSENCE ICI EST OBLIGATOIRE, et son oubli aurait éteint la production au premier
-  //   déploiement — constaté avant, pas après. Le coupe-circuit ne touche ni « / », ni les
-  //   documents publics : c'est quand le connecteur est coupé qu'un confrère doit pouvoir
-  //   lire pourquoi.
   "vars": {
     "RELAX_SEARCH": "1",
     "HYBRID_SEARCH": "1",
@@ -76,24 +41,11 @@
     "DOMAIN_QUARANTINE": "1",
     "VECTOR_DOMAIN_FILTER": "1",
     "MCP_ENABLED": "true",
-    // Commit dont la version en ligne est issue, annoncé sur /health.
-    // Posé à la volée par `scripts/deployer.mjs` via `--var COMMIT:<sha>`.
     "COMMIT": "inconnu",
-    // Origines de navigateur admises EN PLUS de claude.ai, claude.com, gemini.google.com
-    // et aistudio.google.com (séparées par des virgules). Vide en temps normal. Sert à
-    // deux choses : ajouter un client web tiers, ou autoriser une origine de
-    // développement. Toute origine de navigateur absente de la liste est refusée par un
-    // 403 — c'est la défense contre le ré-attachement DNS exigée par la spécification MCP.
     "ALLOWED_ORIGINS": "https://chatgpt.com,https://chat.openai.com,https://platform.openai.com",
-    // Origine canonique du serveur d'autorisation OAuth 2.1 publiée dans RFC 9728 (/mcp/oauth).
     "ORIGINE_PORTAIL": "https://acces.poirierlavoie.ca"
   },
 
-  // Limitation de débit à deux niveaux DANS le Worker (SPEC-SOCLE-COMMUN.md §6.1, G34) :
-  // - pré-authentification par IP (`1011`), échecs d'auth par IP (`1012`) et globalement (`1013`) ;
-  // - post-authentification par `titulaire_id` (`1014` à 300/min en régime `actif`, `1015` à 20/min
-  //   en régime `limite`), pour que 50 avocats derrière le même NAT ou la même IP infonuagique ne
-  //   s'épuisent jamais mutuellement et que les harnais d'évals (61 req / 3 s) passent sans faux 429.
   "ratelimits": [
     { "name": "RL_PRE_AUTH_IP", "namespace_id": "1011", "simple": { "limit": 600, "period": 60 } },
     { "name": "RL_ECHEC_IP", "namespace_id": "1012", "simple": { "limit": 20, "period": 60 } },
@@ -102,16 +54,8 @@
     { "name": "RL_TITULAIRE_LIMITE", "namespace_id": "1015", "simple": { "limit": 20, "period": 60 } }
   ],
 
-  // Couche sémantique (plan v2, phase 2) : embeddings bge-m3 + index Vectorize.
   "ai": { "binding": "AI" },
   "vectorize": [{ "binding": "VECTORS", "index_name": "legislation-articles" }],
 
-  // DÉCLENCHEUR INERTE : aucun handler `scheduled` n'existe dans src/ — ce cron ne
-  // lance RIEN. Le rafraîchissement semestriel est VOLONTAIREMENT manuel et supervisé
-  // (cf. CLAUDE.md) : l'ancien workflow automatique a été retiré parce qu'il rechargeait
-  // les articles sans les vecteurs, laissant du droit périmé rendu en silence.
-  // NE PAS retirer ce bloc pour « faire le ménage » : sans clé `crons`, wrangler n'émet
-  // aucun PUT /schedules, donc le horaire resterait ARMÉ chez Cloudflare et déclaré
-  // nulle part. Pour désarmer : déployer `"crons": []` d'abord, vérifier, puis retirer.
   "triggers": { "crons": ["0 9 5 1,7 *"] }
 }

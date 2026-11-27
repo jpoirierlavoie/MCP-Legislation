@@ -1,19 +1,8 @@
-// ⚠ FICHIER ENGENDRÉ — ne pas modifier à la main.
-//
-// Engendré par `scripts/engendrer-schemas.mjs` depuis
-// `fixtures/tools-list.reference.json` et `catalogue.json` (source unique des titres).
-// Ce sont les schémas servis par `tools/list`, repris tels quels — `$schema`,
-// ordre des clefs et `execution` compris.
-//
-// Pour les régénérer : `node scripts/engendrer-schemas.mjs`.
-// `test/schemas-engendres.test.ts` échoue si ce fichier et la référence divergent.
-
 import type { JsonSchema } from "@poirierlavoie/mcp-socle/protocole/valide";
-import catalogue from "../catalogue.json";
+import catalogue from "../data/catalogue.json";
 
 const titre = (nom: keyof typeof catalogue.tools): string => catalogue.tools[nom].title_fr;
 
-/** Ce que `tools/list` publie pour un outil, hors gestionnaire. */
 export interface DescripteurPublie {
   title: string;
   description: string;
@@ -557,7 +546,6 @@ export const RESOLVE_REFERENCE: DescripteurPublie = {
   },
 };
 
-/** Les dix descripteurs, dans l'ordre où `tools/list` les rend aujourd'hui. */
 export const PUBLIES: Record<string, DescripteurPublie> = {
   list_laws: LIST_LAWS,
   list_subjects: LIST_SUBJECTS,

@@ -1,11 +1,3 @@
-"""Orchestrateur du pipeline (PLAN §4). Ex. :
-
-    python -m pipeline.ingest --law ccq --lang fr                 # parse + valide + génère le SQL
-    python -m pipeline.ingest --law ccq --lang fr --apply-local   # + applique en D1 local
-    python -m pipeline.ingest --law ccq --lang fr --show 1457     # affiche un article pour contrôle
-
-Par défaut, l'EPUB est lu depuis pipeline/samples/ ; --download le récupère depuis LégisQuébec.
-"""
 from __future__ import annotations
 
 import argparse
@@ -31,16 +23,10 @@ _FR_MONTHS = {
 OUT_DIR = config.REPO_ROOT / "pipeline" / "out"
 DB_NAME = "legislation"
 
-
 def _sample_path(law_id: str, lang: str) -> Path:
     return config.SAMPLES_DIR / f"{law_id.upper()}-{lang}.epub"
 
-
-# Décalage d'id par (loi, langue) : garantit des clés primaires globalement uniques
-# (divisions.id / articles.id sont partagées entre lois/langues, chargées une à la fois).
-# 10^7 par combinaison >> max d'articles (~3525) ou de divisions (~800).
 _LANGS = ("fr", "en")
-
 
 def _configured_langs(cfg_law: dict) -> tuple[str, ...]:
     if cfg_law.get("source") == "pdf":
@@ -48,12 +34,10 @@ def _configured_langs(cfg_law: dict) -> tuple[str, ...]:
         return tuple(l for l in _LANGS if l in langs)
     return _LANGS
 
-
 def _id_base(law_id: str, lang: str) -> int:
     law_ids = [law["id"] for law in config.load_all_laws()]
     combo = law_ids.index(law_id) * len(_LANGS) + _LANGS.index(lang)
     return combo * 10_000_000
-
 
 def _download(url: str, dest: Path) -> Path:
     if not url.startswith("https://"):
@@ -64,17 +48,12 @@ def _download(url: str, dest: Path) -> Path:
         f.write(resp.read())
     return dest
 
-
 def _law_from_config(cfg_law: dict) -> Law:
     consol = cfg_law.get("consolidation", {})
     return Law(
-        # name_en est livré à null (§5) : repli temporaire sur name_fr
-        # (name_en NOT NULL) ; le vrai name_en est posé au chargement EN depuis l'OPF.
         id=cfg_law["id"], name_fr=cfg_law["name_fr"],
         name_en=cfg_law.get("name_en") or cfg_law["name_fr"],
-        # La CLÉ de config est `official_cite` depuis 0004 ; le CHAMP du dataclass garde
-        # `rlrq_cite` le temps de la migration (cf. `pipeline/load.py::_CHAMP`).
-        rlrq_cite=cfg_law["official_cite"],
+        official_cite=cfg_law["official_cite"],
         consol_date_fr=consol.get("fr"), consol_date_en=consol.get("en"),
         official_cite_en=cfg_law.get("official_cite_en"),
         chapter=cfg_law.get("chapter"),
@@ -84,13 +63,7 @@ def _law_from_config(cfg_law: dict) -> Law:
         domain=cfg_law.get("domain", "core"),
     )
 
-
 def extrait_consolidation_quebec(html: str) -> str | None:
-    """Extrait la date « À jour au JJ mois AAAA » (ISO) depuis le HTML LégisQuébec.
-
-    Portée bornée aux blocs `class="text-end"` (comme `extractConsolidation` côté JS) ;
-    retourne `None` si la bannière est absente ou illisible.
-    """
     soup = BeautifulSoup(html, "html.parser")
     for d in soup.find_all("div", class_="text-end"):
         m = re.search(
@@ -102,10 +75,7 @@ def extrait_consolidation_quebec(html: str) -> str | None:
             return f"{m.group(3)}-{_FR_MONTHS[m.group(2).lower()]:02d}-{int(m.group(1)):02d}"
     return None
 
-
 def fetch_consolidation(url: str, essais: int = 4) -> str | None:
-    """Télécharge la page LégisQuébec avec reprise réseau bornée et extrait la date « À jour au ».
-    LégisQuébec l'affiche en français même sur les pages EN. Retourne None si injoignable ou illisible."""
     if not url.startswith("https://"):
         raise ValueError(f"Schéma URL non autorisé : {url}")
     for essai in range(essais):
@@ -120,60 +90,19 @@ def fetch_consolidation(url: str, essais: int = 4) -> str | None:
         return extrait_consolidation_quebec(html)
     return None
 
-
 class DateDeConsolidationIntrouvable(Exception):
-    """La page officielle n'a pas rendu sa date « à jour ». L'ingestion s'arrête."""
+    pass
 
-
-# Ancrage sur la PHRASE, jamais sur la première date du bloc : `<p id="assentedDate">` en
-# porte DEUX — « à jour AAAA-MM-JJ » puis « dernière modification AAAA-MM-JJ ». Mesuré le
-# 2026-09-14 : les 36 pages portent le bloc, la phrase, et au moins deux dates, donc
-# l'ancrage distingue réellement les deux au lieu de tomber juste par ordre d'apparition.
-# Le « à » arrive tantôt en entité (`&agrave;`, pages de lois) tantôt en littéral (pages de
-# règlements) : on s'ancre sur « jour », qui n'apparaît nulle part ailleurs dans ce bloc.
-# C'est aussi ce qui permet au miroir JavaScript de la veille — qui dépouille les balises
-# par expression régulière et NE DÉCODE PAS les entités — de rendre exactement la même
-# valeur que BeautifulSoup ici.
 _DATE_FEDERALE = re.compile(r"(?:jour|current\s+to)\s*(\d{4}-\d{2}-\d{2})", re.I)
 
-
 def extrait_consolidation_federale(html: str) -> str | None:
-    """Date « à jour AAAA-MM-JJ » / « current to AAAA-MM-JJ » d'une page de Justice Canada.
-
-    **Miroir** de `extractConsolidationFederale` (`scripts/check-consolidation.mjs`) : même
-    portée (le seul `<p id="assentedDate">`), même ancrage, même sortie. La date y est DÉJÀ
-    en ISO — aucune table de mois n'est requise, contrairement au couple québécois.
-
-    Séparée du téléchargement précisément pour être éprouvable HORS RÉSEAU, comme l'est son
-    miroir JavaScript. Le couple québécois n'a cette séparation que du côté JS, et
-    `fetch_consolidation` n'a donc aucun test Python — on ne reproduit pas ce trou ici,
-    d'autant que cette moitié-ci peut désormais REFUSER une ingestion.
-
-    Portée bornée au bloc, comme le couple québécois l'est aux blocs `text-end` : la page
-    porte d'autres dates (dernière modification, historique), et les lire serait un faux
-    silencieux. `None` = bloc absent ou phrase introuvable, c'est-à-dire « le miroir a
-    peut-être cassé » — jamais « la page est à jour ».
-    """
     bloc = BeautifulSoup(html, "html.parser").find("p", id="assentedDate")
     if bloc is None:
         return None
     m = _DATE_FEDERALE.search(re.sub(r"\s+", " ", bloc.get_text()))
     return m.group(1) if m else None
 
-
 def fetch_consolidation_federale(url: str, essais: int = 4) -> str | None:
-    """Frère fédéral de `fetch_consolidation` : télécharge, puis délègue l'extraction.
-
-    REPRISE BORNÉE, et elle n'affaiblit rien. Une lecture ratée est FATALE ici (cf.
-    `_acquiert_lims`), donc un aléa réseau abattait une réingestion de 36 combos au
-    quinzième — constaté le 2026-09-14 sur `ca-c-44/en`, dont la page répondait 200 et
-    rendait sa date à la seconde suivante. Réessayer la MÊME page n'est pas un repli sur
-    une autre source : la garantie — « la date vient de la page, ou rien » — est intacte.
-
-    Asymétrie VOULUE avec la veille (`scripts/check-consolidation.mjs`), qui ne réessaie
-    pas : là-bas, une page injoignable est le SIGNAL que le job doit rapporter, et la
-    réessayer le masquerait. Ici, c'est un obstacle à une opération humaine supervisée.
-    """
     if not url.startswith("https://"):
         raise ValueError(f"Schéma URL non autorisé : {url}")
     for essai in range(essais):
@@ -186,21 +115,12 @@ def fetch_consolidation_federale(url: str, essais: int = 4) -> str | None:
                 continue
             return None
         date = extrait_consolidation_federale(html)
-        # Une page atteinte mais ILLISIBLE n'est pas un aléa : c'est le miroir qui a
-        # peut-être cassé. On ne la réessaie pas — on rend None, et l'appelant refuse.
         return date
     return None
-
 
 def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
                        show: list[str], strict: bool,
                        apply_local: bool, apply_remote: bool) -> int:
-    """Queue COMMUNE aux deux sources : --show, écriture du SQL, porte --strict, bascule D1.
-
-    Extraite plutôt que dupliquée : c'est ici que vit la porte qui REFUSE la bascule quand
-    un invariant échoue (`pipeline/ingest.py`, historiquement les lignes 158-160). Deux
-    copies de cette porte divergeraient, et l'une des deux finirait par ne plus refuser.
-    """
     for num in show:
         a = next((x for x in articles if x.number == num), None)
         if a is None:
@@ -214,8 +134,6 @@ def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     sql_path = OUT_DIR / f"{law_id}-{lang}.sql"
-    # newline="\n" : NE PAS traduire les \n en \r\n sous Windows, sinon les \n\n entre
-    # alinéas seraient stockés en \r\n\r\n dans le texte des articles.
     sql_path.write_text(load.to_sql(law, divisions, articles, lang), encoding="utf-8", newline="\n")
     print(f"\nSQL écrit : {sql_path}  ({sql_path.stat().st_size // 1024} Ko, "
           f"{len(divisions)} divisions, {len(articles)} articles)")
@@ -237,7 +155,6 @@ def _ecrit_et_applique(law_id: str, lang: str, law, divisions, articles, rep,
             return res.returncode
     return 0 if rep.ok else 2
 
-
 def _acquiert_lims(
     cfg_law: dict,
     law,
@@ -245,19 +162,6 @@ def _acquiert_lims(
     allow_not_in_force: bool,
     consol_date_override: str | None = None,
 ):
-    """Acquisition + parsing d'un texte FÉDÉRAL. Rend (divisions, articles, bilan).
-
-    Pendant du bloc EPUB, et volontairement SÉPARÉ de lui : quatre choses y sont propres à
-    LégisQuébec et n'ont aucun sens ici — le téléchargement HTTP, le titre anglais lu dans
-    l'OPF d'un zip, le scrapage de la date « À jour au », et le scan des identifiants `se:`
-    de l'invariant « phase B ». Les laisser sur le chemin commun les ferait tomber sur un
-    fichier XML lu par `git show`.
-
-    L'invariant de comptage est remplacé par le BILAN DE MATIÈRE, que `parse_lims` impose
-    lui-même : il compte par PROVENANCE et refuse de rendre un résultat si une seule
-    `Section` du fichier n'a été ni ingérée ni refusée. C'est strictement plus fort que le
-    scan « phase B », qui ne compare que deux totaux.
-    """
     import xml.etree.ElementTree as ET
 
     from pipeline import parser_lims
@@ -268,7 +172,6 @@ def _acquiert_lims(
     source_sha256 = hashlib.sha256(data).hexdigest()
     racine = ET.fromstring(data)
 
-    # Métadonnées DÉRIVÉES du fichier, jamais recopiées de la config (R10).
     cite, chapitre = parser_lims.derive_citation(racine, lang)
     attendue = cfg_law.get("official_cite" if lang == "fr" else "official_cite_en")
     if attendue and cite != attendue:
@@ -276,7 +179,7 @@ def _acquiert_lims(
             f"citation recalculée « {cite} » ≠ citation de la config « {attendue} » "
             f"(SPEC §4 invariant 6) — arrêt"
         )
-    setattr(law, "rlrq_cite" if lang == "fr" else "official_cite_en", cite)
+    setattr(law, "official_cite" if lang == "fr" else "official_cite_en", cite)
     law.chapter = chapitre
     law.jurisdiction = "ca"
     law.source = "lims"
@@ -288,30 +191,6 @@ def _acquiert_lims(
         law.name_fr = titre
     else:
         law.name_en = titre
-    # ⚠️ LA DATE SERVIE VIENT DE LA PAGE OFFICIELLE, PAS DU XML.
-    #
-    # Elle venait de `lims:current-date`. Mesuré le 2026-09-14, ce choix nous faisait
-    # SOUS-DÉCLARER la fraîcheur du droit : la Loi sur le droit d'auteur était annoncée
-    # « à jour au 2025-07-24 » alors que Justice Canada la donne à jour au 2026-07-21 —
-    # près d'un an d'écart, sur un outil juridique.
-    #
-    # Trois raisons de préférer la page, dans cet ordre :
-    #  1. C'est ce que le PUBLIEUR OFFICIEL affirme du texte. `consol_date_*` répond à
-    #     « à jour au ? » ; `lims:current-date` répond à autre chose, et la page porte
-    #     séparément la dernière modification, qui vit déjà dans `last_amended`.
-    #  2. La veille COMPARE cette colonne à ce que la page affiche. Stocker une valeur
-    #     issue d'une autre observation rendrait les 36 contrôles fédéraux faux À
-    #     PERPÉTUITÉ — en `retard` avec `lims:current-date` (plus ancienne), et en
-    #     `anomalie` avec `lookup.xml` (20260722 contre 2026-07-21 affiché). Aucune
-    #     réingestion ne les éteindrait.
-    #  3. La date est uniforme : une seule valeur sur les 9 588 entrées de `lookup.xml`,
-    #     et sur les 36 pages. C'est une propriété de l'INSTANTANÉ, pas de la loi.
-    #
-    # Et l'échec est FATAL, à dessein. Se replier sur `lims:current-date` mettrait DEUX
-    # sémantiques dans une même colonne, sans étiquette et sans moyen de savoir laquelle a
-    # servi : exactement le faux silencieux que ce dépôt refuse. Une ingestion refusée
-    # coûte une reprise ; elle est manuelle et surveillée (CLAUDE.md, « Rafraîchissement
-    # semestriel »), donc quelqu'un lit ce message à l'instant où il tombe.
     consol = (
         consol_date_override
         if consol_date_override is not None
@@ -343,9 +222,7 @@ def _acquiert_lims(
     print(f"  bilan de matière : {bilan.as_dict()}")
     return divisions, articles, bilan
 
-
 def _acquiert_pdf(cfg_law: dict, law: Law, lang: str, *, out_dir: Path | None = None):
-    """Acquisition + parsing déterministe d'un PDF officiel (import paresseux de parser_pdf)."""
     from pipeline import parser_pdf
 
     pdf_files = cfg_law.get("pdf") or {}
@@ -377,7 +254,6 @@ def _acquiert_pdf(cfg_law: dict, law: Law, lang: str, *, out_dir: Path | None = 
     print(f"  aperçu écrit    : {preview_path}")
     return divisions, articles, bilan
 
-
 def validate_pdf_combo(
     law_id: str,
     lang: str,
@@ -389,7 +265,6 @@ def validate_pdf_combo(
     fonction: str | None = None,
     allow_witness_drift: bool = False,
 ):
-    """Validation partagée entre `ingest.py` et `refresh.py` pour les PDF."""
     return validate.validate(
         law_id,
         lang,
@@ -404,15 +279,12 @@ def validate_pdf_combo(
         allow_witness_drift=allow_witness_drift,
     )
 
-
 def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote: bool,
         show: list[str], strict: bool, refresh_dates: bool = False,
         allow_not_in_force: bool = False) -> int:
     cfg_law = config.get_law_any(law_id)
     law = _law_from_config(cfg_law)
 
-    # AIGUILLAGE PAR SOURCE, avant toute opération propre à un format. `source` absent =
-    # LégisQuébec, pour que les 79 entrées existantes n'aient pas à être touchées.
     if cfg_law.get("source") == "lims":
         divisions, articles, _bilan = _acquiert_lims(cfg_law, law, lang, allow_not_in_force)
         load.prepare(law, divisions, articles, id_base=_id_base(law_id, lang))
@@ -446,14 +318,13 @@ def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote:
         print(f"Téléchargement {url} -> {epub}")
         try:
             _download(url, epub)
-        except Exception as e:  # tolérance EN manquant (§5) : on saute cette langue, sans échec
+        except Exception as e:
             if lang == "en":
                 print(f"EN indisponible pour {law_id} ({e}) — langue ignorée.")
                 return 0
             raise
 
     if lang == "en":
-        # vrai name_en depuis l'OPF anglais (la config le livre à null — §5)
         import zipfile
         with zipfile.ZipFile(epub) as zf:
             title = opf_metadata(zf)["title"]
@@ -474,7 +345,6 @@ def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote:
     load.prepare(law, divisions, articles, id_base=_id_base(law_id, lang))
 
     rep = validate.validate(law_id, lang, divisions, articles)
-    # Invariant phase B (§9 C) : les articles réels (se:) doivent égaler le décompte de scan.
     import re as _re
     import zipfile as _zip
     se_ids: set[str] = set()
@@ -491,7 +361,6 @@ def run(law_id: str, lang: str, download: bool, apply_local: bool, apply_remote:
 
     return _ecrit_et_applique(law_id, lang, law, divisions, articles, rep,
                               show, strict, apply_local, apply_remote)
-
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Pipeline d'ingestion Lois du Québec (EPUB -> D1).")
@@ -528,7 +397,6 @@ def main(argv: list[str] | None = None) -> int:
                  a.show, a.strict, a.refresh_dates, a.allow_not_in_force)
         worst = max(worst, rc)
     return worst
-
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -1,15 +1,4 @@
-/**
- * Routeur MCP bâti sur `@poirierlavoie/mcp-socle`.
- *
- * Il ne réimplémente rien : enveloppe JSON-RPC, validateur, négociation de version,
- * validation d'en-têtes, quotas journaliers et événements techniques sans contenu
- * viennent du socle. Ce fichier ne porte que ce qui est PROPRE à ce connecteur — son
- * identité, ses descripteurs (`PUBLIES`), la préférence `hybride_permis` (S19) et la
- * normalisation des arguments coercés.
- */
-
 import {
-  avecServerInfo,
   type ClasseOutil,
   type CodeErreurTechnique,
   type DescripteurOutil,
@@ -36,20 +25,10 @@ import { PUBLIES } from "./schemas";
 import { CAPACITES, INSTRUCTIONS, SERVER_INFO, VERSIONS } from "./serveur";
 import { construireOutils, estHybrideConfigure } from "./tools";
 
-/** Une heure : le registre ne bouge qu'au déploiement. */
 const TTL_LISTE = 3_600_000;
 
-/**
- * Ce dépôt sert-il les clients antérieurs à `2025-06-18` ?
- *
- * OUI, et c'est COUPLÉ au fait que `2025-03-26` reste servie.
- * ⚠ NE PAS BASCULER CE DRAPEAU SANS RETIRER `2025-03-26` DE `VERSIONS`, ni l'inverse.
- */
 const SERT_AVANT_2025_06_18 = true;
 
-/**
- * Champs que Zod CONVERTISSAIT et que le validateur du socle REFUSERAIT.
- */
 const COERCITIONS: Record<string, readonly string[]> = {
   get_article: ["article"],
   get_articles: ["from", "to", "numbers"],
@@ -317,9 +296,6 @@ async function appeler(
   }
 }
 
-/**
- * Sert une requête MCP déjà AUTHENTIFIÉE.
- */
 export async function servirMcp(
   request: Request,
   env: Env,
@@ -341,5 +317,3 @@ export async function servirMcp(
     },
   });
 }
-
-export { avecServerInfo };

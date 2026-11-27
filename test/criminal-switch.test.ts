@@ -367,7 +367,6 @@ describe("CRIMINAL_CORPUS fermé ('0', undefined, 'true')", () => {
       const gateEnv = { FEDERAL_CORPUS: "1", PDF_CORPUS: "1", CRIMINAL_CORPUS: crimVal };
       const outils = makeRegistre(gateEnv);
 
-      // 1) list_laws (domains=['all'], domains=['penal'], jurisdiction='ca')
       const llAll = await outils.list_laws({ domains: ["all"] } as never);
       const llAllSc = llAll.structuredContent as { count: number; laws: { id: string }[] };
       expect(llAllSc.count).toBe(3);
@@ -385,7 +384,6 @@ describe("CRIMINAL_CORPUS fermé ('0', undefined, 'true')", () => {
       const caAll = await listLaws(db(), { jurisdiction: "ca" }, "fr", gateEnv);
       expect(caAll.map((l) => l.id)).toEqual(["essai-ca-core"]);
 
-      // 2) get_article, get_articles, get_structure, get_division refusent essai-ca-penal sans fuiter son id
       const ga = await outils.get_article({ law: "essai-ca-penal", article: "1" } as never);
       expect(ga.isError).toBe(true);
       expect(ga.content[0].text).not.toContain("essai-ca-penal\n");
@@ -406,7 +404,6 @@ describe("CRIMINAL_CORPUS fermé ('0', undefined, 'true')", () => {
       const gd = await outils.get_division({ law: "essai-ca-penal", path: "fh1:1" } as never);
       expect(gd.isError).toBe(true);
 
-      // qc+penal et ca+core restent accessibles directement
       expect(
         (await outils.get_article({ law: "essai-qc-penal", article: "1" } as never)).isError,
       ).toBeUndefined();
@@ -414,7 +411,6 @@ describe("CRIMINAL_CORPUS fermé ('0', undefined, 'true')", () => {
         (await outils.get_article({ law: "essai-ca-core", article: "1" } as never)).isError,
       ).toBeUndefined();
 
-      // 3) resolve_reference refuse L.R.C. (1985), ch. C-46 mais résout C-5
       const rrCrim = await outils.resolve_reference({
         citation: "L.R.C. (1985), ch. C-46, art. 1",
       } as never);
@@ -424,13 +420,11 @@ describe("CRIMINAL_CORPUS fermé ('0', undefined, 'true')", () => {
       } as never);
       expect(rrCore.isError).toBeUndefined();
 
-      // 4) related_laws masque l'arête vers essai-ca-penal et refuse essai-ca-penal
       const rlQcPenal = await outils.related_laws({ law: "essai-qc-penal" } as never);
       expect(rlQcPenal.isError).toBe(true);
       expect(rlQcPenal.content[0].text).not.toContain("essai-ca-penal");
       expect((await outils.related_laws({ law: "essai-ca-penal" } as never)).isError).toBe(true);
 
-      // 5) list_subjects n'inclut pas essai-ca-penal dans les décomptes
       const ls = await outils.list_subjects({} as never);
       const subs = (
         ls.structuredContent as {
@@ -440,7 +434,6 @@ describe("CRIMINAL_CORPUS fermé ('0', undefined, 'true')", () => {
       expect(subs.find((s) => s.id === "sujet-penal-qc")?.laws_count).toBe(1);
       expect(subs.find((s) => s.id === "sujet-criminel-ca")?.laws_count).toBe(0);
 
-      // 6) find_relevant S1-S4 exclut essai-ca-penal même sous domains=['penal'] ou ['all']
       const frPenal = await outils.find_relevant({
         query: "poursuite penale",
         domains: ["penal"],
@@ -456,7 +449,6 @@ describe("CRIMINAL_CORPUS fermé ('0', undefined, 'true')", () => {
       } as never);
       expect(frCrim.isError).toBe(true);
 
-      // 7) search_text lexical exclut essai-ca-penal (dans penal, all, et targeted)
       const stExcl = await outils.search_text({
         query: "voies de fait",
         domains: ["all"],
@@ -530,7 +522,6 @@ describe("CRIMINAL_CORPUS='1', quarantaine core et indépendance avec FEDERAL_CO
     };
     const outils = makeRegistre(gateEnv);
 
-    // Par défaut (core), essai-ca-penal reste en quarantaine et ne paraît que dans other_domains
     const llDefault = await outils.list_laws({} as never);
     const llDefSc = llDefault.structuredContent as {
       laws: { id: string }[];
@@ -547,7 +538,6 @@ describe("CRIMINAL_CORPUS='1', quarantaine core et indépendance avec FEDERAL_CO
     expect(stDefSc.results.map((r) => r.law_id).sort()).toEqual(["essai-ca-core", "essai-qc-core"]);
     expect(stDefSc.other_domains).toEqual([{ domain: "penal", lexical_hits: 2 }]);
 
-    // Avec domains=['penal'], essai-ca-penal est servi
     const llPenal = await outils.list_laws({ domains: ["penal"] } as never);
     expect(
       (llPenal.structuredContent as { laws: { id: string }[] }).laws.map((l) => l.id).sort(),

@@ -1,9 +1,3 @@
-"""Dédoublonnage fail-closed d'un article fantôme abrogé en doublon (cas Q-2 EN art. 114.2).
-
-Hors réseau, en CI : vérifie que lorsqu'un EPUB LégisQuébec contient deux `<div id="se:...">`
-portant le même numéro — un en vigueur et un jalon nu `(Repealed).` / `(Abrogé).` — seule la
-version en vigueur est conservée, alors que tout doublon ambigu échoue à `validate.validate`.
-"""
 from __future__ import annotations
 
 import tempfile
@@ -21,7 +15,6 @@ _CONTAINER_XML = """<?xml version="1.0" encoding="UTF-8"?>
     <rootfile full-path="OPF/content.opf" media-type="application/oebps-package+xml"/>
   </rootfiles>
 </container>"""
-
 
 def _build_epub(tmpdir: Path, name: str, body: str, lang: str = "en") -> Path:
     epub_path = tmpdir / name
@@ -41,7 +34,6 @@ def _build_epub(tmpdir: Path, name: str, body: str, lang: str = "en") -> Path:
         zf.writestr("OPF/page1.xhtml", xhtml)
     return epub_path
 
-
 def _art_block(eid: str, label: str, text: str) -> str:
     return (
         f'<div id="{eid}">'
@@ -50,7 +42,6 @@ def _art_block(eid: str, label: str, text: str) -> str:
         "</div>"
     )
 
-
 def _run_parse(body: str):
     div_start = (
         '<div id="ga:l_i">'
@@ -58,12 +49,11 @@ def _run_parse(body: str):
     )
     with tempfile.TemporaryDirectory() as tmp:
         ep = _build_epub(Path(tmp), "q-2-en.epub", div_start + body + "</div>")
-        law = Law(id="q-2", name_fr="Q-2", name_en="Q-2", rlrq_cite="RLRQ, c. Q-2")
+        law = Law(id="q-2", name_fr="Q-2", name_en="Q-2", official_cite="RLRQ, c. Q-2")
         divs, arts = parse_epub(ep, law, "en")
         load.prepare(law, divs, arts, id_base=1000)
         rep = validate.validate("q-2", "en", divs, arts)
         return divs, arts, rep
-
 
 class TestRepealedGhostArticle(unittest.TestCase):
     def test_drops_repealed_ghost_when_active_counterpart_exists(self):
@@ -113,7 +103,6 @@ class TestRepealedGhostArticle(unittest.TestCase):
         _, arts, rep = _run_parse(body)
         self.assertEqual(len(arts), 3)
         self.assertFalse(rep.ok)
-
 
 if __name__ == "__main__":
     unittest.main()

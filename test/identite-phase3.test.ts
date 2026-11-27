@@ -310,7 +310,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
       RL_ECHEC_IP: { limit: async () => ({ success: false }) },
     } as unknown as Env;
 
-    // 1. Le titulaire légitime utilise d'abord son jeton depuis l'IP partagée -> empreinte mémorisée.
     const ctx1 = createExecutionContext();
     const premier = await worker.fetch(
       new Request("https://legislation.test/mcp/oauth", {
@@ -329,7 +328,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     await waitOnExecutionContext(ctx1);
     expect(premier.status).toBe(200);
 
-    // 2. Un attaquant sur la même IP échoue et franchit le seuil de RL_ECHEC_IP -> IP en quarantaine.
     const ctxEchec = createExecutionContext();
     const echec = await worker.fetch(
       new Request("https://legislation.test/mcp/oauth", {
@@ -347,7 +345,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     await waitOnExecutionContext(ctxEchec);
     expect(echec.status).toBe(401);
 
-    // 3. Toute nouvelle sonde inconnue sur cette IP est bloquée dès le pré-auth (429 sur /mcp/oauth, 404 sur /mcp).
     const sondeOAuth = await worker.fetch(
       new Request("https://legislation.test/mcp/oauth", {
         method: "POST",
@@ -378,7 +375,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     );
     expect(sondeDirecte.status).toBe(404);
 
-    // 4. Le titulaire légitime derrière la MÊME IP partagée continue de passer en 200.
     const ctxLegit = createExecutionContext();
     const legitime = await worker.fetch(
       new Request("https://legislation.test/mcp/oauth", {
@@ -612,7 +608,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     expect(corpsQuota.result.content[0]?.text).toContain("[QUOTA_EPUISE]");
     expect(corpsQuota.result.content[0]?.text).toContain("150");
 
-    // Et sur classe `semantique` au plafond limite (15/jour) :
     await dbIdentite()
       .prepare(
         `INSERT INTO compteur_jour (titulaire_id, jour, classe, appels, erreurs, introuvables, sortants)
@@ -653,7 +648,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     expect(corpsQuotaSem.result.content[0]?.text).toContain("[QUOTA_EPUISE]");
     expect(corpsQuotaSem.result.content[0]?.text).toContain("semantique");
 
-    // En revanche `tools/list` reste disponible même lorsque le quota d'outils est atteint.
     const rListe = await SELF.fetch("https://legislation.test/mcp", {
       method: "POST",
       headers: {
@@ -665,7 +659,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
     });
     expect(rListe.status).toBe(200);
 
-    // Vérifie que `RL_TITULAIRE_LIMITE` s'applique uniquement à l'état `limite` (429 + Retry-After 300s).
     const envDebit = {
       ...(env as unknown as Record<string, unknown>),
       RL_TITULAIRE_LIMITE: { limit: async () => ({ success: false }) },
@@ -735,7 +728,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
       return res;
     };
 
-    // 1. Outil inconnu contenant un nom de dossier/parties : jamais écrit tel quel dans evenement_technique.outil (S13/G13).
     await appelerOutil("Dupont_c_Tremblay_500-17-123456-261", {});
     const evtInconnu = await dbIdentite()
       .prepare(
@@ -748,16 +740,13 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
       code: "OUTIL_INCONNU",
     });
 
-    // 2. search_text sur loi inconnue ou requête sans jeton FTS (« !!! ») : n'invoque pas Workers AI -> facturé en `local`, non `semantique`.
     await appelerOutil("search_text", { query: "faute", law: "loi_inexistante" });
     await appelerOutil("search_text", { query: "!!!" });
     expect(appelsAi).toBe(0);
 
-    // 3. search_text valide avec HYBRID_SEARCH="true" : invoque Workers AI -> facturé en `semantique`.
     await appelerOutil("search_text", { query: "préjudice faute", lang: "fr" });
     expect(appelsAi).toBe(1);
 
-    // 4. Modes INCOMPATIBLES (get_articles) et absence de path/division_id (get_division) -> erreur_usager (ARGUMENTS_INVALIDES).
     await appelerOutil("get_articles", {
       law: "ccq",
       from: "1457",
@@ -777,7 +766,6 @@ describe("Phase 3 — DB_IDENTITE, double montage /mcp + /mcp/oauth, quotas et o
       { classe: "semantique", appels: 1, erreurs: 0, introuvables: 0 },
     ]);
 
-    // 5. Panne D1 sur lireCompteursJourD1 => refus fermé isError: true (G21), jamais erreur JSON-RPC -32603.
     const dbIdentitePanne = {
       prepare(sql: string) {
         if (sql.includes("FROM jeton") || sql.includes("UPDATE jeton")) {

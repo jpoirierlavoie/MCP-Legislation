@@ -1,15 +1,5 @@
 name: ci
 
-# Vérifications sans réseau ni secret : type-check du Worker, tests unitaires du
-# détecteur de veille, garde anti-dérive de la documentation, comportement du JS client
-# de la page publique, ordre de laws.config.json (invariant 1) et reconstructibilité
-# d'une D1 vierge.
-#
-# Les tests Python du PARSEUR (test_ccq_fr, test_corpus) téléchargent les EPUB : ils
-# tournent en local, pas ici. Mais test_config.py, lui, ne fait AUCUN appel réseau — il
-# lit laws.config.json sur disque. Il était exclu par ricochet, ce qui laissait
-# l'invariant le plus destructeur du dépôt sans aucun garde : une PR qui réordonne
-# laws.config.json décalait toutes les plages d'id et passait la CI au vert.
 on:
   push:
     branches: [main]
@@ -33,116 +23,44 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx wrangler types # génère worker-configuration.d.ts (pas d'auth requise)
+      - run: npx wrangler types
       - run: npx tsc --noEmit
       - run: npx biome check .
       - run: npm run audit
 
-      # Une seule commande pour DEUX projets (cf. vitest.config.mts) :
-      #   « node »    — gardes de provenance, qui lisent le TypeScript comme du texte
-      #                 (catalogue source unique des titres, littéraux SQL du commutateur
-      #                 fédéral, porte d'accès analysée dans src/auth.ts, JS client).
-      #   « workerd » — ce qui exige une vraie D1 et de vraies liaisons.
-      # Aucun réseau, aucune clef : le projet workerd lit wrangler.test.jsonc, d'où les
-      # liaisons `ai` et `vectorize` sont retirées — sans quoi le greffon ouvrirait une
-      # session mandataire distante et réclamerait CLOUDFLARE_API_TOKEN.
-      # `npm test`, non `npx vitest run` : le script `pretest` engendre d'abord
-      # wrangler.test.jsonc, qui n'est pas versionné.
       - run: npm test
 
-      # INVARIANT 1 : l'ordre de laws.config.json porte les plages d'id. Le réordonner
-      # fait écraser les articles d'autres lois à la prochaine ingestion, EN SILENCE.
-      # test_config.py (test_ordre_fige, test_plages_id_disjointes) ne fait aucun appel
-      # réseau : il a sa place ici, contrairement aux tests du parseur.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      # beautifulsoup4 seulement : test_config n'en a pas besoin lui-même, mais il importe
-      # pipeline.ingest pour _id_base, et ingest importe le parseur. lxml est OPTIONNEL
-      # (BeautifulSoup retombe sur html.parser), donc écarté ici — rien ne parse en CI.
       - run: pip install --require-hashes -r pipeline/requirements-ci.txt
       - run: python -m unittest pipeline.tests.test_config -v
 
-      # Numérotage des annexes (pipeline/parser.py). Mesure du 2026-09-16 : les 24 annexes
-      # françaises du Code municipal portaient TOUTES le numéro `formulaire-ule` — dans
-      # l'alternance des labels, `form` s'accrochait comme PRÉFIXE du mot « formule » et la
-      # branche fourre-tout `[a-z]+` avalait le radical à la place du numéro. `get_article`
-      # rendait donc une annexe sur 24, au hasard, EN SILENCE. Le défaut était unilatéral
-      # (l'anglais « FORM 23 » passait), ce qui cassait aussi le pont FR/EN. Le contrôle qui
-      # compte : 24 intitulés doivent rendre 24 clés. Aucun réseau.
       - run: python -m unittest pipeline.tests.test_disposition_number -v
 
-      # Désambiguïsation des chemins de division en doublon (c-73.2-r.6 : deux
-      # « CHAPITRE II » officiels portant tous deux `ga:l_ii`). EPUB synthétiques en
-      # répertoire temporaire, aucun réseau.
       - run: python -m unittest pipeline.tests.test_duplicate_divisions -v
 
-      # Le validateur de la couche de curation (phase 3) : il REFUSE de charger un lien ou
-      # un concept dont la cible ne résout pas. `pipeline/discovery/` n'avait aucun test —
-      # la porte anti-données-fausses n'était elle-même gardée par rien. Fausse base en
-      # mémoire : ni réseau, ni wrangler, ni D1.
       - run: python -m unittest pipeline.tests.test_curation -v
 
-      # Resolution des chapitres dans discovery/relations.py. Mesure du 2026-09-11 : la
-      # regex RLRQ `c\.` est SENSIBLE A LA CASSE, or le federal s'ecrit « ch. B-3 » —
-      # les 18 textes se reduisaient a la MEME cle vide, le dernier l'emportant. Et le
-      # RLRQ et les L.R.C. partagent le schema lettre-chiffre : sans juridiction dans la
-      # cle, un renvoi quebecois resoudrait un jour vers une loi FEDERALE. Aucun reseau.
       - run: python -m unittest pipeline.tests.test_relations -v
 
-      # discovery/load.py ne doit pas DETRUIRE ce que l'ingestion a ecrit. Mesure du
-      # 2026-09-14 : `seed_laws` remettait a NULL la date de consolidation des 18 textes
-      # federaux — leur config n'en porte pas, elle est lue sur la page officielle — A
-      # CHAQUE chargement de la couche de decouverte. Silencieux, et rejoue apres chaque
-      # reparation.
       - run: python -m unittest pipeline.tests.test_discovery_load -v
 
-      # Moitie PYTHON du miroir de date federale. `consol_date_*` des 18 textes vient de
-      # la page de Justice Canada depuis le 2026-09-14 : `lims:current-date` sous-declarait
-      # la fraicheur de pres d'un an, et n'etait pas ce que la veille compare. Le bloc
-      # `<p id="assentedDate">` porte DEUX dates — « a jour » et « derniere modification » —
-      # donc borner la portee ne suffit pas, c'est l'ancrage sur la phrase qui les
-      # distingue. L'autre moitie du miroir est `extractConsolidationFederale`
-      # (scripts/check-consolidation.test.mjs). Aucun reseau.
       - run: python -m unittest pipeline.tests.test_consolidation_federale -v
 
-      # PORTE DE LA PHASE 0 du corpus fédéral : le classement des balises LIMS est une
-      # liste BLANCHE. Une balise absente du classement doit ARRÊTER l'ingestion, pas
-      # être traversée en silence. Ce test verrouille les propriétés du classement ;
-      # la correspondance avec les fichiers réels exige le clone, donc du réseau, et
-      # reste la porte manuelle (pipeline.discovery.recon_lims).
       - run: python -m unittest pipeline.tests.test_lims_tags -v
-      # Miroir du decoupeur de chemins : meme colonne `divisions.path` des deux cotes.
-      # Une divergence est du meme ordre que celle de sort_key <-> sortKeyOf (invariant 2),
-      # qui avait vide silencieusement le mode plage de 36 lois sur 38.
       - run: python -m unittest pipeline.tests.test_paths -v
 
-      # Temoins de recette du parseur LIMS. Contrairement aux tests du parseur EPUB
-      # (test_ccq_fr, test_corpus) qui telechargent, ceux-ci lisent des fixtures
-      # VERSIONNEES et figees par SHA : ils tournent donc en CI. Le temoin principal
-      # est l'art. 2 de la L.F.I. et ses 51 blocs Definition — 99,6 % de l'article
-      # serait perdu si le walker ne les descendait pas.
       - run: python -m unittest pipeline.tests.test_parser_lims -v
-      # Le SQL genere par load.py, lu comme du texte : colonnes de 0004, couple
-      # staging/bascule d'article_numbers, et l'invariant 3 sur la PAIRE de citations
-      # (une passe EN ecrasait official_cite, la forme francaise).
       - run: python -m unittest pipeline.tests.test_load_federal -v
 
-      # Rafraichissement incremental (pipeline/refresh.py) : extraction banniere Quebec,
-      # modes witness drift + planchers anti-retrecissement, diff D1, et portes de pre-vol
-      # avant toute ecriture distante. Aucun reseau.
       - run: python -m unittest pipeline.tests.test_refresh -v
 
-      # Reconstructibilité : schema.sql décrit l'ÉTAT INITIAL, les migrations s'appliquent
-      # PAR-DESSUS. Sans ce garde, un DROP COLUMN sans garde dans une migration casse le
-      # bootstrap d'une base neuve sans que rien ne le signale — c'est arrivé avec 0002,
-      # découvert seulement à l'audit. Le harnais d'éval ne teste que contre une base déjà
-      # peuplée ; ceci est le seul contrôle qui parte du vide. Local, sans réseau ni secret.
       - name: Bootstrap d'une D1 vierge (schema.sql + migrations)
         run: |
           set -euo pipefail
           T=$(mktemp -d)
-          npx wrangler d1 execute legislation --local --persist-to "$T" --file=./schema.sql -y
+          npx wrangler d1 execute legislation --local --persist-to "$T" --file=./data/schema.sql -y
           npx wrangler d1 migrations apply legislation --local --persist-to "$T"
           for t in search_log division_links concept_gazetteer article_headnotes vector_state refresh_state; do
             npx wrangler d1 execute legislation --local --persist-to "$T" --json \

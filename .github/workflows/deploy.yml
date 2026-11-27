@@ -1,22 +1,5 @@
 name: deploy
 
-# Déploiement continu vers Cloudflare Workers (`legislation.poirierlavoie.ca`).
-#
-# Gardes stricts :
-#   1. 4 contrôles préalables en LECTURE SEULE sur `api.cloudflare.com` (jeton présent sans
-#      retour chariot, reconnu par Cloudflare, compte unique, D1 `legislation` égale à
-#      `wrangler.jsonc`).
-#   2. Porte complète hors réseau (`wrangler types`, `tsc --noEmit`, `biome check .`,
-#      `npm test`, reconstruction d'une D1 vierge depuis `schema.sql` + migrations,
-#      `wrangler deploy --dry-run`).
-#   3. `npm run deploy` (`scripts/deployer.mjs`) : migrations D1 PUIS `wrangler deploy`
-#      avec `--var COMMIT:<sha>`. AUCUNE ingestion du corpus (`pipeline/`) ni aucun
-#      `wrangler rollback` automatique (le recyclage des Durable Objects et les migrations DO
-#      restent supervisés).
-#   4. Vérification vivante post-déploiement sur `/health` (fenêtre 60 s), `/mcp/server-card`
-#      et `/` (HTTP 200).
-#
-# Aucune expression `${{ }}` n'apparaît dans un `run:` : tout passe par `env:`.
 on:
   push:
     branches: [main]
@@ -42,7 +25,6 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # ── LES QUATRE CONTRÔLES PRÉALABLES (lecture seule) ────────────────────
       - name: Contrôle 1/4 — le secret CLOUDFLARE_API_TOKEN parvient-il au job ?
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -186,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           T=$(mktemp -d)
-          npx wrangler d1 execute legislation --local --persist-to "$T" --file=./schema.sql -y
+          npx wrangler d1 execute legislation --local --persist-to "$T" --file=./data/schema.sql -y
           npx wrangler d1 migrations apply legislation --local --persist-to "$T"
           npx wrangler d1 execute legislation --local --persist-to "$T" --json \
             --command "SELECT COUNT(*) AS n FROM pragma_table_info('laws') WHERE name='official_cite'" \

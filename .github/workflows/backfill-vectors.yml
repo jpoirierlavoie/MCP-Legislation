@@ -1,10 +1,5 @@
 name: backfill-vectors
 
-# Rattrapage Vectorize (plan v2 / Phase 0) + évals de production supervisés.
-#
-# Exécuté manuellement via `workflow_dispatch` dans l'environnement `production`
-# (secrets BACKFILL_TOKEN, CLOUDFLARE_API_TOKEN, MCP_TOKEN_VEILLE). Aucune expression
-# `${{ }}` n'apparaît dans un bloc `run:` : tout passe par `env:`.
 on:
   workflow_dispatch:
     inputs:

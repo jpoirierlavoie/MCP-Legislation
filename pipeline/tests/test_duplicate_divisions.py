@@ -1,19 +1,3 @@
-"""Désambiguïsation des chemins de division en doublon dans les EPUB (c-73.2-r.6, etc.).
-
-Hors réseau, en CI : construit de petits EPUB valides en répertoire temporaire puis
-enchaîne `parse_epub` -> `load.prepare` -> `validate.validate`.
-
-POURQUOI CE TEST EXISTE. Le Règlement sur les instances disciplinaires de l'OACIQ
-(RLRQ, c. C-73.2, r. 6 ; D. 297-2010) édicte officiellement deux « CHAPITRE II »
-consécutifs (et « CHAPTER II » en anglais), portant tous deux l'id Irosoft `ga:l_ii` :
-  - page3.xhtml : CHAPITRE II — COMITÉ DE RÉVISION DES DÉCISIONS DU SYNDIC -> SECTION I COMPOSITION (art. 6-7)
-  - page4.xhtml : CHAPITRE II — RÈGLES DE FONCTIONNEMENT (art. 8-13)
-
-Fusionner le second en une fausse « SECTION II » altérerait les intitulés officiels
-(violation de R4). À l'inverse, laisser deux divisions partager `ga:l_ii` faisait que
-`load.prepare` écrasait `by_path['ga:l_ii']` et rattachait `SECTION I COMPOSITION` au
-SECOND Chapitre II, en plus d'être refusé par `validate.py` (« chemins de division uniques »).
-"""
 from __future__ import annotations
 
 import tempfile
@@ -31,7 +15,6 @@ _CONTAINER_XML = """<?xml version="1.0" encoding="UTF-8"?>
     <rootfile full-path="OPF/content.opf" media-type="application/oebps-package+xml"/>
   </rootfiles>
 </container>"""
-
 
 def _build_epub(tmpdir: Path, name: str, pages: dict[str, str], lang: str = "fr") -> Path:
     epub_path = tmpdir / name
@@ -61,7 +44,6 @@ def _build_epub(tmpdir: Path, name: str, pages: dict[str, str], lang: str = "fr"
             zf.writestr(f"OPF/{fname}", xhtml)
     return epub_path
 
-
 def _art_html(num: int) -> str:
     return (
         f'<div id="se:{num}">'
@@ -70,14 +52,12 @@ def _art_html(num: int) -> str:
         "</div>"
     )
 
-
 def _div_open(eid: str, label_word: str, ordinal: str, heading: str) -> str:
     return (
         f'<div id="{eid}">'
         f'<div id="{eid}-h1"><div><span>{label_word} </span>{ordinal}</div>'
         f'<div id="{eid}-h1-t1-nb:1">{heading}</div></div>'
     )
-
 
 class TestDuplicateDivisions(unittest.TestCase):
     def test_c_73_2_r_6_twin_chapter_ii(self):
@@ -111,7 +91,7 @@ class TestDuplicateDivisions(unittest.TestCase):
                 id="c-73.2-r.6",
                 name_fr="Règlement OACIQ",
                 name_en="OACIQ Regulation",
-                rlrq_cite="RLRQ, c. C-73.2, r. 6",
+                official_cite="RLRQ, c. C-73.2, r. 6",
             )
             divs, arts = parse_epub(ep, law, "fr")
             load.prepare(law, divs, arts, id_base=1000)
@@ -128,7 +108,6 @@ class TestDuplicateDivisions(unittest.TestCase):
         self.assertEqual(by_path["ga:l_ii__2"].heading, "RÈGLES DE FONCTIONNEMENT")
         self.assertIsNone(by_path["ga:l_ii__2"].parent_id)
 
-        # SECTION I COMPOSITION appartient au PREMIER Chapitre II, jamais au second.
         sec_i = by_path["ga:l_ii-gb:l_i"]
         self.assertEqual(sec_i.parent_id, by_path["ga:l_ii"].id)
         self.assertNotEqual(sec_i.parent_id, by_path["ga:l_ii__2"].id)
@@ -158,7 +137,7 @@ class TestDuplicateDivisions(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             ep = _build_epub(Path(tmp), "nested.epub", pages, lang="fr")
-            law = Law(id="test-nested", name_fr="Test", name_en="Test", rlrq_cite="RLRQ, c. T-1")
+            law = Law(id="test-nested", name_fr="Test", name_en="Test", official_cite="RLRQ, c. T-1")
             divs, arts = parse_epub(ep, law, "fr")
             load.prepare(law, divs, arts)
             rep = validate.validate("test-nested", "fr", divs, arts)
@@ -195,13 +174,13 @@ class TestDuplicateDivisions(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             ep1 = _build_epub(Path(tmp), "triple.epub", pages_triple, lang="fr")
-            law1 = Law(id="test-triple", name_fr="Test", name_en="Test", rlrq_cite="RLRQ, c. T-2")
+            law1 = Law(id="test-triple", name_fr="Test", name_en="Test", official_cite="RLRQ, c. T-2")
             d1, a1 = parse_epub(ep1, law1, "fr")
             load.prepare(law1, d1, a1)
             r1 = validate.validate("test-triple", "fr", d1, a1)
 
             ep2 = _build_epub(Path(tmp), "preexisting.epub", pages_preexisting, lang="fr")
-            law2 = Law(id="test-pre", name_fr="Test", name_en="Test", rlrq_cite="RLRQ, c. T-3")
+            law2 = Law(id="test-pre", name_fr="Test", name_en="Test", official_cite="RLRQ, c. T-3")
             d2, a2 = parse_epub(ep2, law2, "fr")
             load.prepare(law2, d2, a2)
             r2 = validate.validate("test-pre", "fr", d2, a2)
@@ -213,7 +192,6 @@ class TestDuplicateDivisions(unittest.TestCase):
         self.assertEqual([d.path for d in d2], ["ga:l_ii", "ga:l_ii__2", "ga:l_ii__3"])
         self.assertEqual(d2[1].heading, "PREEXISTANT")
         self.assertEqual(d2[2].heading, "COLLISION")
-
 
 if __name__ == "__main__":
     unittest.main()

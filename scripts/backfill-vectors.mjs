@@ -1,34 +1,18 @@
-// Pilote du rattrapage des vecteurs (plan v2, 2.2).
-//
-//   node scripts/backfill-vectors.mjs                          # mode full (tout le corpus)
-//   node scripts/backfill-vectors.mjs --mode incremental --prune
-//   node scripts/backfill-vectors.mjs --mode incremental --seed-if-empty --laws ccq,cpc
-//   node scripts/backfill-vectors.mjs --mode seed
-//   node scripts/backfill-vectors.mjs --mode ping --laws ccq
-//   node scripts/backfill-vectors.mjs --resume                 # reprend un mode full
-//
-// Boucle sur POST /admin/backfill-vectors (Worker) avec le Bearer de BACKFILL_TOKEN
-// (variable d'environnement ; cf. CLAUDE.md et scripts/deployer.mjs).
-
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import lawsConfig from "../laws.config.json" with { type: "json" };
+import lawsConfig from "../data/laws.config.json" with { type: "json" };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BASE = "https://legislation.poirierlavoie.ca";
 const PROGRESS = join(HERE, ".backfill-progress.json");
 
-// Cadence : le WAF de la zone bloque les rafales de POST non-navigateur (constaté :
-// page HTML de blocage après ~20 appels serrés). On espace les appels, on se présente
-// avec un User-Agent de navigateur, et on recule LONGUEMENT en cas de blocage.
 const PACE_MS = 500;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) legislation-backfill";
 const MODES_VALIDES = new Set(["full", "incremental", "seed", "prune", "ping"]);
 
 const sleep = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
 
-/** Analyse les arguments CLI du pilote de backfill. */
 export function parseBackfillArgs(argv) {
   const arg = (name, def) => {
     const i = argv.indexOf(`--${name}`);
@@ -52,7 +36,6 @@ export function parseBackfillArgs(argv) {
   };
 }
 
-/** Résout BACKFILL_TOKEN depuis l'environnement (aucun fichier secret lu en direct). */
 export function resolveBackfillToken(env = process.env) {
   const fromEnv = env.BACKFILL_TOKEN?.trim();
   if (fromEnv) return fromEnv;

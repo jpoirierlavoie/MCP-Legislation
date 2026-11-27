@@ -1,14 +1,3 @@
-"""Client D1 minimal, trois dorsales interchangeables :
-
-* CloudD1 — API HTTP D1 (plan §2 : « API HTTP D1 ») : POST .../d1/database/{id}/query.
-* WranglerRemoteD1 — D1 distante via `wrangler d1 execute --remote` (OAuth, sans jeton API).
-* LocalD1 — D1 local de dev via `wrangler d1 execute --local` (validation sans réseau).
-
-Toutes exposent `run(sql) -> list[dict]` (résultats de la DERNIÈRE instruction) et
-`run_file(sql_path)` (exécution d'un fichier `.sql` complet via `wrangler d1 execute`).
-Le SQL de `run()` est inline (littéraux échappés via `q`) pour passer indifféremment par le
-corps JSON HTTP, `--command=...` ou un fichier `.sql`.
-"""
 from __future__ import annotations
 
 import json
@@ -25,38 +14,28 @@ from . import config
 ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "6276df02799535c0e96225fdf6184023"
 DB_NAME = "legislation"
 
-
 class D1Error(Exception):
     pass
 
-
 def npx_command() -> str:
-    """Résout l'exécutable npx sans passer par `shell=True`."""
     return shutil.which("npx") or ("npx.cmd" if os.name == "nt" else "npx")
 
-
 def _wrangler_cmd() -> list[str]:
-    """Appelle `node .../wrangler.js` directement (évite `cmd.exe` / limite 8 Ko de `npx.cmd` sous Windows)."""
     node = shutil.which("node")
     wrangler_js = config.REPO_ROOT / "node_modules" / "wrangler" / "bin" / "wrangler.js"
     if node and wrangler_js.is_file():
         return [node, str(wrangler_js)]
     return [npx_command(), "wrangler"]
 
-
 _LEADING_COMMENTS = re.compile(r"^(?:\s+|--[^\r\n]*|/\*[\s\S]*?\*/)+")
 
-
 def _is_write_without_rows(sql: str) -> bool:
-    """Vrai si `sql` est une écriture pure (sans `RETURNING`) pouvant passer par `--file`."""
     stripped = _LEADING_COMMENTS.sub("", sql)
     if not re.match(r"^(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b", stripped, re.I):
         return False
     return re.search(r"\bRETURNING\b", stripped, re.I) is None
 
-
 def _parse_wrangler_json(stdout: str) -> list[dict]:
-    """Extrait le JSON résultat de `wrangler d1 execute --json` malgré les préfixes `[WARNING]`."""
     decoder = json.JSONDecoder()
     idx = 0
     n = len(stdout)
@@ -85,9 +64,7 @@ def _parse_wrangler_json(stdout: str) -> list[dict]:
         idx = end
     return []
 
-
 def q(v) -> str:
-    """Littéral SQL sûr (None -> NULL, int tel quel, str échappée)."""
     if v is None:
         return "NULL"
     if isinstance(v, bool):
@@ -96,14 +73,12 @@ def q(v) -> str:
         return str(v)
     return "'" + str(v).replace("'", "''") + "'"
 
-
 def _database_id() -> str:
     txt = (config.REPO_ROOT / "wrangler.jsonc").read_text(encoding="utf-8")
     m = re.search(r'"database_id"\s*:\s*"([^"]+)"', txt)
     if not m:
         raise D1Error("database_id introuvable dans wrangler.jsonc")
     return m.group(1)
-
 
 class CloudD1:
     name = "cloud"
@@ -140,9 +115,7 @@ class CloudD1:
         if p.returncode != 0:
             raise D1Error(p.stderr or p.stdout)
 
-
 class WranglerRemoteD1:
-    """D1 distante via `wrangler d1 execute --remote` (session OAuth, sans `CLOUDFLARE_API_TOKEN`)."""
 
     name = "cloud"
     _CMD_WRITE_FILE_THRESHOLD = 24_000
@@ -213,7 +186,6 @@ class WranglerRemoteD1:
         if p.returncode != 0:
             raise D1Error((p.stderr or "").strip() or (p.stdout or "").strip() or f"wrangler code {p.returncode}")
 
-
 class LocalD1:
     name = "local"
 
@@ -240,7 +212,7 @@ class LocalD1:
             if p.returncode != 0:
                 raise D1Error(p.stderr or p.stdout)
             out = p.stdout.strip()
-            start = out.find("[")  # --json peut être précédé d'un avertissement
+            start = out.find("[")
             data = json.loads(out[start:]) if start >= 0 else []
             return data[-1].get("results", []) if data else []
         finally:
@@ -255,7 +227,6 @@ class LocalD1:
         p = subprocess.run(cmd, cwd=config.REPO_ROOT, capture_output=True, text=True, encoding="utf-8")
         if p.returncode != 0:
             raise D1Error(p.stderr or p.stdout)
-
 
 def make_client(target: str, persist_to: str | Path | None = None):
     if target == "cloud":

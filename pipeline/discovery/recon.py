@@ -1,10 +1,3 @@
-"""DRY-RUN de reconnaissance des textes du corpus hors ccq/cpc (plan §5, §9 phase B).
-
-Télécharge (FR + EN tolérant), scanne la structure, teste le parseur, moissonne les renvois,
-détecte les anomalies — et écrit docs/reconnaissance-courante.md. NE CHARGE RIEN en base.
-
-    python -m pipeline.discovery.recon
-"""
 from __future__ import annotations
 
 import io
@@ -22,22 +15,13 @@ from ..parser import (harvest_renvois, is_division_id, opf_metadata, parse_epub,
                       _ART_ID, _KIND_BY_PREFIX, _SEG_SPLIT)
 
 UA = {"User-Agent": config.USER_AGENT}
-# Artefact de dry-run daté et REPRODUCTIBLE : chaque lot d'extension produit le sien.
-# Gitignoré depuis le 2026-07-30 — versionné, il finissait par se lire comme un document
-# de référence alors que ce n'est qu'une sortie de programme (les vidages des lots
-# précédents ont été retirés de docs/archive/ ; git log les a).
 REPORT = config.REPO_ROOT / "docs" / "reconnaissance-courante.md"
-# ids connus (hors motif de division/article) — le reste est une anomalie à signaler.
 _KNOWN_HEAD = re.compile(r"^(?:se|sc|page\d+|d\d+e\d+|header|HFContainer)$")
 _MARKERS = ("h1", "t1", "nb", "ss", "p1", "p2")
-# Intitulé de bloc structurel (annexe/formulaire), à ne compter que HORS d'un article se:.
-# NB : pas de « FORM » seul (capterait l'abréviation « form. VI » des références en table).
 _STRUCT_HEAD = re.compile(r"^\s*(?:ANNEXE|SCHEDULE|FORMULAIRE|FORMULES)\b", re.I)
-
 
 def _ws(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
-
 
 def download(url: str) -> bytes | None:
     try:
@@ -45,14 +29,11 @@ def download(url: str) -> bytes | None:
     except Exception:
         return None
 
-
 def _content_pages(zf: zipfile.ZipFile) -> list[str]:
     ns = [n for n in zf.namelist() if re.search(r"page\d+\.xhtml$", n)]
     return sorted(ns, key=lambda n: int(re.search(r"page(\d+)", n).group(1)))
 
-
 def scan(data: bytes) -> dict:
-    """Scan structurel indépendant du parseur (robuste : ne dépend pas d'un parse réussi)."""
     zf = zipfile.ZipFile(io.BytesIO(data))
     pages = _content_pages(zf)
     art_ids: list[str] = []
@@ -75,20 +56,17 @@ def scan(data: bytes) -> dict:
                 kinds[_KIND_BY_PREFIX.get(_SEG_SPLIT.split(i)[-1].split(":")[0], "?")] += 1
             else:
                 head = re.split(r"[-:]", i)[0]
-                # un sous-élément connu (…-h1, …-ss:K, …) n'est pas une anomalie
                 segs = re.split(r"-", i)
                 if not (_KNOWN_HEAD.match(head) or i.startswith("ga:")
                         or any(s.split(":")[0] in _MARKERS for s in segs)):
                     unknown[head] += 1
-        for t in soup.find_all("table"):  # tables de CONTENU (hors boilerplate en-tête/pied)
+        for t in soup.find_all("table"):
             if (t.get("id") == "HFContainer" or "TotalWidth" in (t.get("class") or [])
                     or t.find_parent(id="HFContainer")):
                 continue
             tables += 1
             if t.find_parent(id=_ART_ID):
                 art_with_table += 1
-        # intitulés STRUCTURELS annexe/formulaire/formules, HORS article se: (vrais blocs —
-        # pas les références « Annexe I : … » à l'intérieur du texte d'un article)
         for el in soup.find_all(string=_STRUCT_HEAD):
             if el.parent is not None and el.parent.find_parent(id=_ART_ID) is None:
                 struct += 1
@@ -116,13 +94,11 @@ def scan(data: bytes) -> dict:
         "renvois": harvest_renvois(htmls), "opf": opf_metadata(zf),
     }
 
-
 def parse_test(data: bytes, law_id: str, name_fr: str, rlrq: str, lang: str) -> dict:
-    """Teste parse_epub (le pipeline) sur le texte ; capture comptes et exceptions."""
     try:
         with open(config.SAMPLES_DIR / f"_recon_{law_id}_{lang}.epub", "wb") as f:
             f.write(data)
-        law = Law(id=law_id, name_fr=name_fr, name_en=name_fr, rlrq_cite=rlrq)
+        law = Law(id=law_id, name_fr=name_fr, name_en=name_fr, official_cite=rlrq)
         divs, arts = parse_epub(f.name, law, lang)
         disp_nums = ("préliminaire", "finales", "annexe")
         disp = [a.number for a in arts if a.number in disp_nums]
@@ -133,17 +109,12 @@ def parse_test(data: bytes, law_id: str, name_fr: str, rlrq: str, lang: str) -> 
     except Exception as e:  # noqa: BLE001 — on rapporte l'anomalie, on ne devine pas
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
-
 def base_chapter(rlrq_cite: str) -> str | None:
-    """Chapitre racine, avec le même alias que discovery/relations.py : le Code civil est
-    « c. CCQ-1991 » mais ses règlements sont « c. CCQ, r. N » — sans cela le rapport
-    afficherait « Parent : — » pour ccq-r.6 / ccq-r.8."""
     m = re.search(r"c\.\s*([^,]+)", rlrq_cite or "")
     if not m:
         return None
     chap = m.group(1).strip()
     return "CCQ-1991" if chap.upper() == "CCQ" else chap
-
 
 def anomalies(law: dict, s: dict, pt: dict, name_en: str | None) -> list[str]:
     a: list[str] = []
@@ -172,7 +143,6 @@ def anomalies(law: dict, s: dict, pt: dict, name_en: str | None) -> list[str]:
         a.append("EN indisponible (404) — charger FR seul en phase C")
     return a
 
-
 def process(law: dict, parents: dict) -> dict:
     lid = law["id"]
     data_fr = download(law["epub"]["fr"])
@@ -187,7 +157,6 @@ def process(law: dict, parents: dict) -> dict:
     out["parent"] = parents.get(base_chapter(law["official_cite"]))
     out["anomalies"] = anomalies(law, out["scan"], out["parse"], out["name_en"])
     return out
-
 
 def build_report(results: list[dict]) -> str:
     ok = [r for r in results if not r.get("fatal")]
@@ -280,24 +249,9 @@ def build_report(results: list[dict]) -> str:
         L.append("")
     return "\n".join(L) + "\n"
 
-
 def main() -> int:
-    # BORNÉ AUX TEXTES QUÉBÉCOIS. Ce module est la reconnaissance des EPUB Irosoft : il
-    # télécharge un zip et le parse. Les textes fédéraux arrivent en XML LIMS et ont leur
-    # propre reconnaissance (`recon_lims.py`) — les laisser ici produisait DEUX faussetés
-    # mesurées le 2026-09-11 :
-    #
-    #   · un téléchargement d'EPUB voué à l'échec pour 18 textes, donc 18 « fatal » qui ne
-    #     disent rien de leur balisage réel ;
-    #   · `base_chapter` renifle `official_cite` avec une regex `c\.` SENSIBLE À LA CASSE, or
-    #     le fédéral s'écrit « ch. B-3 » : elle rendait None pour les 18, tous réduits à la
-    #     MÊME clé None dans `parents`, le dernier l'emportant. Chaque texte fédéral se voyait
-    #     donc attribuer `ca-crc-368` comme loi habilitante, dans un rapport destiné à la
-    #     revue humaine. Une porte de revue qui AFFIRME DU FAUX est pire qu'une porte absente.
     laws = [l for l in config.load_all_laws()
             if l["id"] not in ("ccq", "cpc") and (l.get("jurisdiction") or "qc") == "qc"]
-    # carte chapitre -> id des lois habilitantes (non-règlements) pour parent_law_id (§3.3)
-    # Les clés None sont ÉCARTÉES : une clé None les fait toutes collisionner entre elles.
     parents = {base_chapter(l["official_cite"]): l["id"]
                for l in config.load_all_laws()
                if (l.get("jurisdiction") or "qc") == "qc"
@@ -307,7 +261,6 @@ def main() -> int:
     print(f"Dry-run sur {len(laws)} textes (téléchargement FR+EN, parse, SANS chargement)…")
     with ThreadPoolExecutor(max_workers=6) as ex:
         results = list(ex.map(lambda l: process(l, parents), laws))
-    # nettoyage des epubs temporaires de test
     for f in config.SAMPLES_DIR.glob("_recon_*.epub"):
         f.unlink(missing_ok=True)
     REPORT.parent.mkdir(parents=True, exist_ok=True)
@@ -317,7 +270,6 @@ def main() -> int:
     print(f"Rapport écrit : {REPORT} — {len(results)} textes, {n_fatal} échec(s) fatals, "
           f"{n_anom} anomalie(s) signalée(s).")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

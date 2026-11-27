@@ -1,6 +1,3 @@
-// Helpers et requêtes D1 (lecture seule) pour le serveur MCP « Lois du Québec ».
-// Le schéma est décrit dans schema.sql / PLAN.md §2 et schema-decouverte.sql.
-
 import {
   depthOf,
   isFederalPath,
@@ -23,19 +20,12 @@ import {
   RELAX_MIN_LOO_TOTAL,
   RRF_K,
   SEMANTIC_MIN_SCORE,
+  stripAccents,
   tokenize,
   VECTOR_TOP_K,
 } from "./relevance";
 
 export type LawSource = "epub" | "lims" | "pdf";
-
-export type LawFonction =
-  | "loi"
-  | "reglement"
-  | "regles-procedure"
-  | "tarif"
-  | "directive"
-  | "orientation";
 
 export type CorpusGateEnv = {
   FEDERAL_CORPUS?: string;
@@ -49,46 +39,21 @@ export interface LawRow {
   id: string;
   name_fr: string;
   name_en: string;
-  /**
-   * TOLÉRANCE DÉLIBÉRÉE ET TEMPORAIRE, le temps d'une migration.
-   *
-   * `laws.rlrq_cite` devient `official_cite` (le nom mentait dès qu'une citation fédérale
-   * y entre). Or `getLaw` et `listLaws` lisent en `SELECT *` / `SELECT l.*` : la FORME de
-   * l'objet JS suit la base, donc après la migration la propriété change de nom toute
-   * seule — sans une ligne de SQL à corriger, et `tsc` ne peut rien y voir puisqu'il ne lit
-   * pas le SQL (cf. l'avertissement au-dessus d'ARTICLE_COLS : `all<T>()` est une
-   * ASSERTION, pas une vérification).
-   *
-   * Conséquences mesurées du demi-renommage, si le Worker n'était pas tolérant :
-   * `get_article` et `resolve_reference` échouent BRUYAMMENT, mais `list_laws` échoue en
-   * SILENCE — `JSON.stringify` efface une clé `undefined` — et la page publique rend une
-   * colonne « citation » vide sur tout le corpus. Un `citationOf(undefined, '1457')`
-   * rendrait « undefined, art. 1457 » comme citation officielle d'un article de droit.
-   *
-   * Les DEUX noms sont donc optionnels ici, et TOUT lecteur passe par `citeOf()`. Le
-   * resserrement (`official_cite: string` obligatoire, `rlrq_cite` et `citeOf` supprimés)
-   * est un commit SÉPARÉ, postérieur à la migration : `tsc` sert alors de liste de courses.
-   */
-  rlrq_cite?: string;
-  official_cite?: string;
-  /** Forme anglaise de la citation (« CQLR, c. … », « R.S.C. 1985, c. … »). */
+  official_cite: string;
   official_cite_en?: string | null;
   consol_date_fr: string | null;
   consol_date_en: string | null;
-  /** Provenance d'ingestion ('epub' | 'lims' | 'pdf', migration 0007). */
   source?: LawSource;
-  /** Domaine de quarantaine ('core' | silo sectoriel, migration 0008). */
   domain?: string | null;
   chapter?: string | null;
   jurisdiction?: string;
   in_force?: number;
   last_amended?: string | null;
   unit?: Unit | string | null;
-  // colonnes de la couche découverte (schema-decouverte.sql)
   fonction: string | null;
-  forum: string | null; // multi-valeurs jointes par ' ; '
-  scope_fr: string | null; // repli d'affichage : name_fr
-  parent_law_id: string | null; // loi habilitante d'un règlement
+  forum: string | null;
+  scope_fr: string | null;
+  parent_law_id: string | null;
   name_norm: string | null;
 }
 
@@ -106,14 +71,6 @@ export interface DivisionRow {
   sort_order: number;
 }
 
-/**
- * Ce que le Worker LIT d'un article — pas ce que la table contient.
- *
- * `html` et `sort_key` existent en base mais ne sont projetées par AUCUNE requête d'ici
- * (voir ARTICLE_COLS) : les déclarer ferait mentir le type, car `all<T>()` est une
- * assertion que rien ne vérifie. `html` reste écrite par le pipeline ; `sort_key` sert aux
- * `ORDER BY` et aux bornes de plage, jamais à la sortie.
- */
 export interface ArticleLink {
   label: string;
   url: string;
@@ -150,27 +107,12 @@ export interface ArticleRow {
 
 export type Lang = "fr" | "en";
 
-// --- clés & citations ---------------------------------------------------------
-
-/**
- * Base de tri des pseudo-articles de disposition — miroir de DISPOSITION_SORT_BASE
- * (pipeline/model.py) : ils se rangent APRÈS tout le corpus.
- */
 export const DISPOSITION_SORT_BASE = 9_000_000_000_000_000;
 
 const SORT_COMP_RE = /^(\d+)([A-Za-z]?)$/;
 const SORT_BASES = [13_500, 2_700, 864] as const;
 const SORT_MAX_NUMS = [9999, 499, 99, 31] as const;
 
-/**
- * Clé de tri — MIROIR EXACT de sort_key() dans pipeline/model.py : packing mixte à 4 composantes
- * (c0..c3) avec suffixe lettre optionnel A–Z (27 états), strictement < DISPOSITION_SORT_BASE.
- *
- * ⚠️ Cette fonction et sa jumelle Python DOIVENT rester alignées : elles indexent la même
- * colonne `articles.sort_key`. Une divergence d'échelle rend les plages silencieusement
- * vides (le mode from/to ne trouve plus rien).
- * Max = 270000*13500*2700*864 - 1 = 8_503_055_999_999_999 < 9e15 < 2^53 : exact en nombre JS.
- */
 export function sortKeyOf(article: string): number {
   if (
     article === "préliminaire" ||
@@ -199,26 +141,8 @@ export function sortKeyOf(article: string): number {
   return key;
 }
 
-/**
- * Citation officielle d'une loi, tolérante aux DEUX noms de colonne.
- *
- * Point de passage UNIQUE : aucun appelant ne doit lire `official_cite` ni `rlrq_cite`
- * directement, sinon la fenêtre entre la migration et le recyclage des Durable Objects
- * (30-60 s) rend « undefined » dans une citation. Le repli sur la chaîne vide est
- * volontairement le dernier recours — une citation vide est visible, « undefined » se
- * lit comme une valeur.
- */
-export function citeOf(l: Pick<LawRow, "rlrq_cite" | "official_cite">): string {
-  return l.official_cite ?? l.rlrq_cite ?? "";
-}
-
-/**
- * Unité de numérotation d'un texte. Les *Règles des Cours fédérales* se citent par
- * RÈGLE, les directives judiciaires par PARAGRAPHE (`par.` / `para.`), et le reste par ARTICLE.
- */
 export type Unit = "article" | "regle" | "paragraphe";
 
-/** Le mot d'unité, par langue. Table EXPLICITE : une règle de dérivation mentirait. */
 const MOT_UNITE: Record<Unit, Record<Lang, string>> = {
   article: { fr: "art.", en: "s." },
   regle: { fr: "règle", en: "rule" },
@@ -230,7 +154,6 @@ export function unitLabel(unit: string | null | undefined, lang: Lang = "fr"): s
   return MOT_UNITE[u][lang];
 }
 
-/** Pseudo-articles, par langue. Table explicite pour la même raison. */
 const MOT_PSEUDO: Record<string, Record<Lang, string>> = {
   préliminaire: { fr: "disposition préliminaire", en: "preliminary provision" },
   "note-preliminaire": { fr: "note préliminaire", en: "preliminary note" },
@@ -239,31 +162,14 @@ const MOT_PSEUDO: Record<string, Record<Lang, string>> = {
   preamble: { fr: "préambule", en: "preamble" },
 };
 
-/**
- * Citation d'un article : « <citation officielle>, art. N » — ou « règle N », ou « s. N ».
- *
- * Prend la LOI et non une chaîne, pour pouvoir choisir la forme anglaise (`official_cite_en`)
- * et l'unité (`laws.unit`). L'ancienne signature à deux chaînes ne pouvait faire ni l'un ni
- * l'autre : elle rendait « RLRQ, c. CCQ-1991, art. 1457 » MÊME en anglais, alors que la
- * compilation s'appelle « CQLR » en anglais et que « art. » s'y écrit « s. ».
- *
- * `official_cite_en` absente ⇒ repli sur la forme française. Elle est NULL sur les lignes
- * québécoises jusqu'à la passe qui les remplit : le repli est donc le comportement
- * d'origine, et non une régression.
- */
 export function citationOf(
-  law: Pick<LawRow, "rlrq_cite" | "official_cite" | "official_cite_en"> & { unit?: string | null },
+  law: Pick<LawRow, "official_cite" | "official_cite_en"> & { unit?: string | null },
   article: string,
   lang: Lang = "fr",
 ): string {
-  // La forme anglaise est TOUT OU RIEN, et c'est délibéré. Sans `official_cite_en`, rendre
-  // « RLRQ, c. CCQ-1991, s. 1457 » mêlerait le nom FRANÇAIS de la compilation au marqueur
-  // ANGLAIS d'article — pire que l'un ou l'autre. Tant que la colonne n'est pas remplie, on
-  // reste donc intégralement en français : comportement IDENTIQUE à l'actuel, ce qui est la
-  // promesse de cette étape. La correction québécoise (« CQLR ») arrive avec la donnée.
   const citeEn = lang === "en" ? law.official_cite_en : null;
   const langueDeSortie: Lang = citeEn ? "en" : "fr";
-  const cite = citeEn || citeOf(law);
+  const cite = citeEn || law.official_cite;
   const pseudo = MOT_PSEUDO[article];
   if (pseudo) return `${cite}, ${pseudo[langueDeSortie]}`;
   const unite: Unit =
@@ -276,8 +182,6 @@ export function consolOf(law: LawRow | null, lang: Lang): string | null {
   return lang === "en" ? law.consol_date_en : law.consol_date_fr;
 }
 
-// --- pagination ---------------------------------------------------------------
-
 export interface Page {
   limit: number;
   offset: number;
@@ -289,31 +193,6 @@ export function paginate(limit?: number, offset?: number, def = 50, max = 200): 
   return { limit: l, offset: o };
 }
 
-// --- chemins de divisions ------------------------------------------------------
-//
-// Le découpage, l'intervalle de sous-arbre et la reconnaissance de famille vivent dans
-// `src/paths.ts`, module PUR et POINT DE VÉRITÉ UNIQUE. Ils étaient auparavant en TROIS
-// copies incompatibles ici même — dont deux bornées à `/-(?=g[a-z]:)/`, qui voient un
-// chemin fédéral `fh1:3-fh2:5` comme UN SEUL segment.
-
-// --- requêtes -----------------------------------------------------------------
-
-/**
- * Une loi par son id, MASQUE COMPRIS.
- *
- * C'est le POINT D'ÉTRANGLEMENT de l'interrupteur : presque tous les outils appellent
- * `getLaw` en garde et refusent « Loi inconnue » si elle rend `null`. Masquer ici ferme donc
- * d'un coup `get_article`, `get_articles`, `get_structure`, `get_division` et
- * `related_laws`.
- *
- * ⚠️ POURQUOI CE PARAMÈTRE EXISTE. Mesuré en production le 2026-09-11, juste après
- * l'ingestion du premier texte fédéral : le masque n'était posé que dans `listLaws`.
- * Résultat — `list_laws` rendait bien 79 lois et zéro texte `ca-*`, mais
- * `get_article(law='ca-i-15', article='2')` SERVAIT l'article, et `search_text` rendait
- * 3 résultats fédéraux. Un interrupteur qui ne ferme qu'une porte sur cinq est PIRE que pas
- * d'interrupteur : il donne l'apparence du contrôle. La carte du corpus disait 79 pendant
- * que quatre autres portes servaient du fédéral.
- */
 export async function getLaw(
   db: D1Database,
   lawId: string,
@@ -324,31 +203,11 @@ export async function getLaw(
   return db.prepare(`SELECT * FROM laws WHERE id = ?${masque}`).bind(lawId).first<LawRow>();
 }
 
-/**
- * Clause de masquage pour une colonne portant un `law_id` (FTS, subject_map, relations…).
- * Vide quand les deux interrupteurs sont ouverts.
- */
 export function masqueLawId(env: CorpusGateEnv, col: string): string {
   const c = clauseCorpus(env, "");
   return c ? `AND ${col} IN (SELECT id FROM laws WHERE ${c})` : "";
 }
 
-/**
- * Masquage de l'AUTRE EXTRÉMITÉ d'une relation — et c'est un prédicat DIFFÉRENT de
- * `masqueLawId`, pas une variante de style.
- *
- * `law_relations` porte des arêtes vers des textes HORS corpus (`in_corpus = 0`), qui n'ont
- * aucune ligne dans `laws`. Le `IN (SELECT id FROM laws …)` de `masqueLawId` les supprimerait
- * toutes — ce serait une régression québécoise causée par l'interrupteur fédéral. On exige
- * donc l'inverse : on ne retire une arête que si son autre bout est une loi PRÉSENTE en base
- * et masquée (non québécoise ou source PDF quand l'interrupteur correspondant est fermé).
- *
- * Mesuré en production le 2026-09-11 : 0 arête concernée aujourd'hui, parce que
- * `discovery/relations.py` n'a pas encore été rejoué depuis l'ingestion d'`ca-i-15`. Ce
- * masque est donc bit pour bit neutre aujourd'hui, et c'est la PROCHAINE étape de la phase 4
- * qui l'arme. « Comme si le texte n'était pas chargé » veut dire ici que l'arête n'existe
- * pas : avant l'ingestion, aucune arête ne référençait un id `ca-*`.
- */
 export function masqueAutreBout(env: CorpusGateEnv, col: string): string {
   const excl: string[] = [];
   if (!federalOuvert(env)) excl.push("jurisdiction <> 'qc'");
@@ -368,9 +227,7 @@ export interface MappedDivision {
 export interface LawSummary extends LawRow {
   langs: string[];
   article_count: number;
-  /** Libellés des sujets rattachés (taxonomie). */
   subjects: string[];
-  /** Divisions précises rattachées à un sujet (pour les grands codes : les Livres). */
   mapped_divisions: MappedDivision[];
 }
 
@@ -379,23 +236,19 @@ export interface LawFilters {
   fonction?: string;
   forum?: string;
   subject?: string;
-  /** Ordre de gouvernement : 'qc' | 'ca'. */
   jurisdiction?: string;
 }
 
-/** Interrupteur de quarantaine par domaine (R8 : actif sauf DOMAIN_QUARANTINE === "0"). */
-export function quarantaineDomaineActive(env: CorpusGateEnv): boolean {
+function quarantaineDomaineActive(env: CorpusGateEnv): boolean {
   return env.DOMAIN_QUARANTINE !== "0";
 }
 
-/** Interrupteur du filtrage vectoriel par métadonnées Vectorize (R8 : "1" après création d'index). */
-export function vectorDomainFilterActif(env: CorpusGateEnv): boolean {
+function vectorDomainFilterActif(env: CorpusGateEnv): boolean {
   return env.VECTOR_DOMAIN_FILTER === "1";
 }
 
 const VALID_DOMAINS = new Set<string>(ALL_DOMAINS);
 
-/** Résout la portée de domaines active : défaut `['core']` sous quarantaine, ou explicite / `['all']`. */
 export function resolveActiveDomains(
   rawDomains: readonly string[] | undefined,
   env: CorpusGateEnv = {},
@@ -417,12 +270,7 @@ export function resolveActiveDomains(
   return { active, excluded, explicit, isAll: excluded.length === 0 };
 }
 
-/**
- * Filtre de forum pour find_relevant et search_text : les textes sans forum ou marqués
- * 'Transversal' restent toujours actifs ; seuls les règlements/directives d'un autre forum
- * sont écartés.
- */
-export function matchesForumScope(
+function matchesForumScope(
   lawForum: string | null | undefined,
   requestedForum: string | undefined,
 ): boolean {
@@ -438,58 +286,18 @@ function forumScopeSqlClause(alias = "l"): string {
   return `(${p}forum IS NULL OR ${p}forum = '' OR ${p}forum LIKE '%Transversal%' OR ${p}forum LIKE ?)`;
 }
 
-/**
- * Carte du corpus (§4.1) : lois enrichies (fonction, forum, sujets, portée, loi habilitante).
- * Trois requêtes agrégées au total — pas de N+1.
- */
-/**
- * L'INTERRUPTEUR DU CORPUS FÉDÉRAL (R8 : « rollback = flip de variable, pas revert »).
- *
- * À « 0 » — ou non défini —, les textes `jurisdiction = 'ca'` sont INVISIBLES à tous les
- * outils, même chargés en base. On peut donc ingérer les 18 textes, les vérifier et
- * mesurer le repérage en production sans rien servir, puis ouvrir d'un flip — et refermer
- * de même si la qualité se dégrade. Le filet le plus utile du chantier, pour le coût d'une
- * clause WHERE.
- *
- * Fermé par défaut à dessein : un déploiement qui oublierait la variable ne sert rien de
- * neuf, au lieu de tout servir d'un coup.
- *
- * ⚠️ CE QUE L'INTERRUPTEUR NE PEUT PAS FAIRE — mesuré le 2026-09-11, à ne pas réapprendre.
- *
- * Il cache les DOCUMENTS fédéraux des résultats. Il ne défait PAS leur effet sur les
- * statistiques de `bm25()`, qui sont GLOBALES à l'index fts5 : nombre de documents et
- * longueur moyenne. Une clause WHERE filtre APRÈS le score, elle ne change pas les
- * statistiques qui l'ont produit. Donc ingérer un texte fédéral déplace, d'un cheveu, le
- * score de TOUTES les requêtes — y compris celles bornées à une loi québécoise.
- *
- * Constaté sur le cas d'éval 15 (« clause non-concurrence fin d'emploi », borné à `ccq`)
- * après l'ingestion d'`ca-i-15`, soit 22 documents de plus sur 49 255 (+0,045 %) : le 10e
- * rang est passé de `ccq|2402` à `ccq|2096`. Ces deux articles sont séparés de
- * **3,4 × 10⁻³**, soit 0,03 % de leur bm25 — une égalité de fait, que le moindre décalage
- * de statistiques fait basculer. Stable sur trois passes : ce n'est pas du bruit de mesure.
- *
- * CONSÉQUENCE POUR LA PORTE D'ÉVAL. « Identique bit pour bit à la baseline d'avant le
- * fédéral » devient INATTEIGNABLE dès la première ingestion, interrupteur fermé ou non. La
- * porte à tenir est donc : `recall_at_10`, `mrr`, `first_rank` et `must_found` inchangés cas
- * par cas — et les permutations de la QUEUE du top-10 entre scores quasi ex æquo examinées,
- * puis expliquées, jamais ignorées. Les 17 textes restants ajoutent ~6 800 articles (+13,8 %),
- * donc ces bascules seront plus fréquentes, pas moins.
- */
 export function federalOuvert(env: CorpusGateEnv): boolean {
   return env.FEDERAL_CORPUS === "1";
 }
 
-/** L'interrupteur du corpus PDF (R8 : fermé par défaut tant qu'il ne vaut pas "1"). */
 export function pdfOuvert(env: CorpusGateEnv): boolean {
   return env.PDF_CORPUS === "1";
 }
 
-/** L'interrupteur du silo criminel fédéral (`penal`, R8 : fermé par défaut tant qu'il ne vaut pas "1"). */
 export function criminalOuvert(env: CorpusGateEnv): boolean {
   return env.CRIMINAL_CORPUS === "1";
 }
 
-/** Clause SQL de masquage combinée (fédéral + PDF + criminel), à coller dans un WHERE. Vide si tout ouvert. */
 export function clauseCorpus(env: CorpusGateEnv, alias = "l"): string {
   const p = alias ? `${alias}.` : "";
   const conds: string[] = [];
@@ -526,7 +334,6 @@ export async function listLaws(
     binds.push(filters.fonction);
   }
   if (filters.forum) {
-    // forum est multi-valué (' ; ') : on cherche l'occurrence
     where.push("l.forum LIKE ?");
     binds.push(`%${filters.forum}%`);
   }
@@ -567,7 +374,6 @@ export async function listLaws(
       }>()
   ).results;
 
-  // subject_map ne contient que des chemins FR : on les traduit si une autre langue est demandée
   const traduits = new Map<string, Map<string, TranslatedPath>>();
   if (lang !== "fr") {
     for (const law of laws) {
@@ -587,12 +393,7 @@ export async function listLaws(
     return {
       ...law,
       langs: mine.map((r) => r.lang).sort(),
-      // décompte de la LANGUE DEMANDÉE (jamais la somme, ni le maximum des deux : quelques
-      // textes ont une division de plus d'un côté, ce qui surévaluait l'autre langue).
       article_count: mine.find((r) => r.lang === lang)?.n ?? Math.max(0, ...mine.map((r) => r.n)),
-      // Libellé de matière DANS LA LANGUE DEMANDéE : listLaws reçoit lang et s'en sert
-      // déjà pour les chemins et le décompte d'articles ; il rendait pourtant toujours le
-      // libellé français. Repli sur le français, patron retenu pour list_subjects.
       subjects: [...new Set(mapped.map(libelle))],
       mapped_divisions: mapped
         .filter((m) => m.division_path)
@@ -608,7 +409,6 @@ export async function listLaws(
   });
 }
 
-/** Compte les lois conformes aux filtres dans les domaines exclus de la portée courante. */
 export async function countExcludedDomainLaws(
   db: D1Database,
   excludedDomains: readonly string[],
@@ -652,24 +452,11 @@ export async function countExcludedDomainLaws(
   return rows.map((r) => ({ domain: r.domain, laws_count: r.n }));
 }
 
-// --- pont entre les chemins de divisions FR et EN -----------------------------
-
 export interface TranslatedPath {
   path: string;
   heading: string | null;
 }
 
-/**
- * Traduit des chemins de divisions FRANÇAIS vers la langue demandée.
- *
- * Les identifiants Irosoft sont PROPRES À LA LANGUE (`ga:l_cinquieme` / `ga:l_five`), or
- * `subject_map` ne stocke que des chemins français. Sans traduction, une réponse en anglais
- * renvoie des chemins que get_division(lang='en') refuse — la piste est alors inexploitable.
- *
- * Le pont se fait par les NUMÉROS D'ARTICLES, invariants d'une langue à l'autre : on relie
- * les divisions par un article qu'elles partagent, puis on tronque le chemin cible à la même
- * profondeur (un Livre est à la profondeur 1, un Titre à 2, etc.).
- */
 export async function translatePaths(
   db: D1Database,
   lawId: string,
@@ -692,7 +479,7 @@ export async function translatePaths(
       .all<{ fr_path: string; other_path: string }>()
   ).results;
 
-  const wanted = new Map<string, string>(); // chemin traduit -> chemin FR d'origine
+  const wanted = new Map<string, string>();
   for (const p of frPaths) {
     const hit = pairs.find((x) => x.fr_path === p || x.fr_path.startsWith(`${p}-`));
     if (!hit?.other_path) continue;
@@ -718,28 +505,12 @@ export async function translatePaths(
   return out;
 }
 
-// --- pont de langue à l'ENTRÉE des outils (plan v2, 1.5) ----------------------
-
-/**
- * Traduit UN chemin de division donné dans l'autre langue que celle demandée.
- *
- * Les identifiants Irosoft sont propres à la langue (`ga:l_cinquieme` FR / `ga:l_five` EN) ;
- * un agent qui tient un chemin d'une réponse FR et le passe avec lang='en' recevait
- * « Division introuvable ». Pont par les numéros d'articles (invariants), puis troncature
- * à la même profondeur. Retourne aussi le chemin source résolu — utile pour le repli
- * d'intitulé `[fr]` quand la cible n'en a pas.
- */
 export async function translateDivisionPath(
   db: D1Database,
   lawId: string,
   path: string,
   toLang: Lang,
 ): Promise<{ path: string; heading: string | null } | null> {
-  // Un chemin fédéral est POSITIONNEL, donc identique dans les deux langues (mesuré sur
-  // les 19 textes : docs/phase0-structure-lims.md §3.1). Il n'y a RIEN à traduire, et le
-  // pont par les numéros d'articles rendrait ici une division DESCENDANTE — une réponse
-  // fausse, pas vide. Le no-op est donc EXPLICITE, au lieu d'être espéré d'une
-  // segmentation juste.
   if (isFederalPath(path) || isPdfPath(path)) {
     return (
       (await db
@@ -768,7 +539,6 @@ export async function translateDivisionPath(
   return div ?? null;
 }
 
-/** Intitulé de la même division dans l'autre langue (repli `[fr]` du plan v2, 1.5). */
 export async function headingInOtherLang(
   db: D1Database,
   lawId: string,
@@ -780,8 +550,6 @@ export async function headingInOtherLang(
   return t?.heading ?? null;
 }
 
-// --- plan profondeur 2 des grands codes (plan v2, 1.4) ------------------------
-
 export interface OutlineNode {
   kind: string;
   number: string | null;
@@ -790,13 +558,6 @@ export interface OutlineNode {
   children: Omit<OutlineNode, "children">[];
 }
 
-/**
- * Plan profondeur 2 (Livres + leurs enfants directs) des lois qui ont des Livres.
- * Justification (post-mortem) : l'intitulé du Livre V C.p.c. ne porte aucun signal
- * (« LES RÈGLES APPLICABLES À CERTAINES MATIÈRES CIVILES ») — le signal est au Titre
- * (« LES DEMANDES INTÉRESSANT LE DROIT INTERNATIONAL PRIVÉ »). Les lois plates ne sont
- * pas concernées.
- */
 export async function lawOutlines(
   db: D1Database,
   lang: Lang,
@@ -851,8 +612,6 @@ export async function lawOutlines(
   return out;
 }
 
-// --- taxonomie & graphe -------------------------------------------------------
-
 export interface SubjectSummary {
   id: string;
   label_fr: string;
@@ -869,11 +628,6 @@ export async function listSubjects(
   db: D1Database,
   env: CorpusGateEnv = {},
 ): Promise<SubjectSummary[]> {
-  // Le masque va dans le ON du LEFT JOIN, PAS dans le WHERE : au WHERE, une matière mappée
-  // uniquement à des textes masqués DISPARAÎTRAIT de la taxonomie, alors qu'au ON elle reste
-  // listée avec un décompte de 0 — ce qui est vrai (« rien de servable ici ») au lieu d'être
-  // absent. `laws_count` est un fait VIVANT (R10) : non masqué, il annoncerait « 8 lois » pour
-  // une matière dont `list_laws` n'en rend que 6, sans qu'aucun test ne le voie.
   const m = masqueLawId(env, "sm.law_id");
   const rows = (
     await db
@@ -916,11 +670,8 @@ export interface RelationRow {
 }
 
 export interface RelationEdge extends RelationRow {
-  /** 'out' : law -> autre ; 'in' : autre -> law. */
   direction: "out" | "in";
-  /** Id de l'autre extrémité. */
   other_id: string;
-  /** Nom de l'autre extrémité si elle est au corpus. */
   other_name: string | null;
 }
 
@@ -933,11 +684,6 @@ export async function relatedLaws(
   env: CorpusGateEnv = {},
 ): Promise<RelationEdge[]> {
   const typeClause = relType ? "AND rel_type = ?" : "";
-  // Le bout SUJET est déjà gardé : `related_laws` passe par `getLaw(db, law, env)` et
-  // refuse avant d'arriver ici. C'est l'AUTRE bout qui fuyait — une arête vers un texte
-  // fédéral serait rendue avec `in_corpus = 1` et son nom résolu, donc le modèle irait
-  // appeler `get_article` dessus et se ferait refuser. Servir une piste qu'on refuse ensuite
-  // est pire que ne pas la servir.
   const edges: RelationEdge[] = [];
   if (direction === "out" || direction === "both") {
     const rows = (
@@ -975,12 +721,6 @@ export async function relatedLaws(
       })),
     );
   }
-  // Noms des extrémités présentes au corpus, DANS LA LANGUE DEMANDÉE. `name_en` est
-  // NOT NULL (schema.sql) ; le repli sur le français ne sert donc qu'en cas de ligne
-  // anormale, mais il évite de rendre un nom vide si la base diverge du schéma.
-  // Le masque est répété ici À DESSEIN : si une arête fédérale survivait au filtre ci-dessus,
-  // son nom ne se résoudrait pas pour autant. Deux verrous coûtent une sous-requête ; un seul
-  // verrou coûte un nom de loi servi par un outil qui la déclare invisible.
   const ids = [...new Set(edges.filter((e) => e.in_corpus).map((e) => e.other_id))];
   if (ids.length) {
     const rows = (
@@ -997,7 +737,6 @@ export async function relatedLaws(
     );
     for (const e of edges) e.other_name = byId.get(e.other_id) ?? null;
   }
-  // les plus significatives d'abord : curées, puis poids décroissant
   return edges.sort(
     (a, b) =>
       (a.source === "cure" ? 0 : 1) - (b.source === "cure" ? 0 : 1) ||
@@ -1020,14 +759,6 @@ export async function getArticle(
 ): Promise<ArticleJoined | null> {
   return db
     .prepare(
-      // Colonnes NOMMÉES, pas `a.*` : ce dernier ramenait `articles.html` — 651 o par
-      // article en moyenne, 56 % du poids de la table — que le Worker ne lit nulle part.
-      // Voir ARTICLE_COLS pour la liste et le piège.
-      // La citation NE vient plus d'ici. C'était la SEULE occurrence littérale de la
-      // colonne dans tout le SQL du Worker, donc la seule que la migration aurait cassée
-      // bruyamment — et la jointure `laws` doublonnait un `getLaw` que les deux appelants
-      // font déjà (src/tools.ts, get_article et resolve_reference). Ils passent désormais
-      // la loi à `citationOf`, ce qui rend aussi la forme anglaise et l'unité accessibles.
       `SELECT ${ARTICLE_COLS.split(", ")
         .map((c) => `a.${c}`)
         .join(", ")},
@@ -1061,15 +792,6 @@ function trailingIntOf(s: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-/**
- * Numéros d'articles voisins, insensible à l’échelle historique de `sort_key` en D1 —
- * pour les erreurs actionnables.
- *
- * Calcule la distance sur `sortKeyOf(number)` des deux côtés : en production, certaines
- * lois EPUB conservent l’ancienne échelle `1000^4` tandis que `sortKeyOf()` utilise la
- * base mixte alphanumérique (`27 * 13500 * 2700 * 864`), ce qui décalait « 3169 » vers
- * `2693..2697` en SQL brut.
- */
 export async function nearestArticles(
   db: D1Database,
   lawId: string,
@@ -1089,12 +811,7 @@ export async function nearestArticles(
   ).results;
 
   const isNonNumericTarget = typeof target === "string" && !/^\d/.test(target.trim());
-  const foldTarget = (s: string) =>
-    s
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-  const foldedTarget = isNonNumericTarget ? foldTarget(target.trim()) : "";
+  const foldedTarget = isNonNumericTarget ? normalize(target) : "";
 
   return rows
     .map((r) => {
@@ -1109,7 +826,7 @@ export async function nearestArticles(
       const isPseudo = r.sort_key === 0 || r.sort_key >= DISPOSITION_SORT_BASE ? 0 : 1;
       let textTier = 3;
       if (isNonNumericTarget && isPseudo === 0) {
-        const fn = foldTarget(r.number);
+        const fn = normalize(r.number);
         if (fn === foldedTarget) textTier = 0;
         else if (fn.startsWith(foldedTarget)) textTier = 1;
         else if (fn.includes(foldedTarget) || foldedTarget.includes(fn)) textTier = 2;
@@ -1128,18 +845,13 @@ export async function nearestArticles(
     .map((r) => r.number);
 }
 
-/** Borne de plage résolue : la clé de tri, l'`id` quand la borne est un article RÉEL, et son existence. */
 export interface BoundRef {
   key: number;
   id: number | null;
   exists?: boolean;
 }
 
-/**
- * Clé de tri historique base 1000 (utilisée par certaines lois EPUB encore en production),
- * bornée sous DISPOSITION_SORT_BASE pour préserver l’exclusion des pseudo-articles sur `..9999`.
- */
-export function legacySortKeyOf(article: string): number {
+function legacySortKeyOf(article: string): number {
   if (
     article === "préliminaire" ||
     article === "preambule" ||
@@ -1160,31 +872,6 @@ export function legacySortKeyOf(article: string): number {
   return Math.min(DISPOSITION_SORT_BASE - 1, k);
 }
 
-/**
- * Résout une borne de plage. On LIT la clé en base quand l'article existe, au lieu de la
- * recalculer : c'est la seule façon d'être insensible à un changement d'échelle de sort_key
- * (une divergence entre le pipeline et le serveur vidait silencieusement toutes les plages).
- * Repli sur le calcul dans l’échelle de la loi si le numéro n'existe pas (borne ouverte, ex. to='9999').
- *
- * On rend AUSSI l'`id`, parce que `sort_key` N'EST PAS UN ORDRE TOTAL et que deux articles
- * distincts peuvent y collisionner — mesuré en production le 2026-09-07 : `15.01` et `15.1`
- * de ccq-r.8 partagent la clé 15001000000000, `15.02`/`15.2` la 15002000000000, idem
- * `31.01`/`31.1` et `31.02`/`31.2` dans t-15.01, dans les DEUX langues. Cause : `sort_key`
- * empaquette `int(composante)`, donc `int("01") === int("1")` — le zéro de tête est perdu.
- * Conséquence mesurée : `from='15.1' to='15.2'` rendait QUATRE articles, en y ajoutant en
- * silence 15.01 et 15.02, qui relèvent d'un tout autre chapitre.
- *
- * `id` est l'ordre du DOCUMENT à l'intérieur d'un couple (law_id, lang) : `load.prepare`
- * (pipeline/load.py) attribue `id_base + j` dans l'ordre d'émission du parseur. Vérifié
- * strictement croissant sur les 48 803 articles réels de la production.
- *
- * `id` reste NULL dans deux cas, où la plage retombe alors sur `sort_key` — le comportement
- * d'origine : (1) borne absente du corpus ; (2) PSEUDO-ARTICLE (préliminaire, annexes), dont
- * l'`id` ne suit PAS l'ordre du document, l'émission du parseur les plaçant hors de leur
- * position réelle et de façon variable d'une loi à l'autre (mesuré : dans ccq FR
- * `préliminaire` précède l'article 1, mais dans b-1-r.3.1 EN il porte l'id de l'article 3
- * plus un).
- */
 export async function boundRef(
   db: D1Database,
   lawId: string,
@@ -1218,37 +905,8 @@ export async function boundRef(
   };
 }
 
-/**
- * Colonnes d'`articles` que le Worker lit VRAIMENT. `html` n'y est PAS.
- *
- * Pourquoi ça vaut la peine : mesuré sur 48 673 lignes (98,8 % du corpus), `html` pèse
- * **651 o par article en moyenne, soit 56 % de la table** et 1,64 × `text` — et il n'est lu
- * nulle part (0 occurrence dans tools.ts, relevance.ts, site.ts ; backfill.ts vectorise sur
- * `text`). Un `SELECT *` sur `get_articles` à la borne de 200 articles déplaçait ~226 Kio
- * pour ~91 Kio utiles. Le pipeline continue de l'écrire ; la colonne reste en base.
- *
- * ⚠️ AUCUN FILET DE TYPAGE ICI. `D1PreparedStatement.all<T>()` est une ASSERTION, pas une
- * vérification : le compilateur ne lit pas le SQL. Retirer une colonne de cette liste
- * compile parfaitement et produit `undefined` à l'exécution — `text` manquant ferait rendre
- * « undefined » À LA PLACE DU TEXTE OFFICIEL, et `repealed` manquant ferait passer un
- * article ABROGÉ pour en vigueur (`!!undefined === false`). Le seul garde réel est du côté
- * des évals : trois contrôles de tests/evals.mjs inspectent la FORME de la sortie.
- */
 const ARTICLE_COLS = "id, law_id, lang, number, division_path, text, history, repealed, links";
 
-/**
- * Articles d'une plage. DEUX chemins, et la réponse DIT lequel a servi (`resolution`) —
- * une étiquette qui borne un résultat voyage dans la sortie typée, jamais en prose seule.
- *
- * - `"document"` : les deux bornes désignent des articles réels existants. L'étendue est
- *   celle du TEXTE, de la première borne à la seconde, sur `id`. EXACTE par construction :
- *   `id` est une clé primaire, donc aucune collision n'est possible — ce que `sort_key` ne
- *   peut pas garantir (cf. `boundRef`). C'est aussi la bonne sémantique : « de l'article
- *   15.1 à l'article 15.2 » désigne une étendue de texte, pas un intervalle numérique.
- * - `"cle"` : au moins une borne est ouverte ou désigne un pseudo-article. Intervalle sur
- *   `sort_key`, comportement d'origine inchangé. Ce chemin peut sur-inclure si une borne
- *   inexistante retombe par calcul sur une clé partagée ; c'est pourquoi il est ÉTIQUETÉ.
- */
 export async function articlesByRange(
   db: D1Database,
   lawId: string,
@@ -1259,9 +917,6 @@ export async function articlesByRange(
 ): Promise<{ rows: ArticleRow[]; total: number; resolution: "document" | "cle" }> {
   if (from.id != null && to.id != null) {
     const [lo, hi] = from.id <= to.id ? [from.id, to.id] : [to.id, from.id];
-    // Les pseudo-articles dont l'`id` tombe DANS l'intervalle sont exclus : leur position
-    // d'émission n'est pas leur position dans le document (cf. `boundRef`). Sans ce filtre,
-    // une plage 3..4 de b-1-r.3.1 EN ramasserait `préliminaire`.
     const filtre =
       `law_id=? AND lang=? AND id BETWEEN ? AND ?` +
       ` AND sort_key > 0 AND sort_key < ${DISPOSITION_SORT_BASE}`;
@@ -1289,10 +944,6 @@ export async function articlesByRange(
   const rows = (
     await db
       .prepare(
-        // `sort_key` n'est PAS projetée : SQLite trie sur une colonne non projetée sans
-        // difficulté (même patron que articlesInDivision, plus bas). Départage par `id` :
-        // sans lui, deux articles à clé identique s'ordonnent au hasard et la pagination
-        // peut en sauter ou en répéter un.
         `SELECT ${ARTICLE_COLS} FROM articles WHERE law_id=? AND lang=? AND sort_key BETWEEN ? AND ?
        ORDER BY sort_key, id LIMIT ? OFFSET ?`,
       )
@@ -1316,8 +967,6 @@ export async function articlesByNumbers(
     const chunkRows = (
       await db
         .prepare(
-          // Départage par `id` : deux numéros demandés peuvent partager une clé de tri
-          // (cf. `boundRef`), et sans départage leur ordre serait arbitraire.
           `SELECT ${ARTICLE_COLS}, sort_key FROM articles WHERE law_id=? AND lang=? AND number IN (${placeholders})
        ORDER BY sort_key, id`,
         )
@@ -1357,7 +1006,6 @@ export async function childDivisions(db: D1Database, parentId: number): Promise<
   ).results;
 }
 
-/** Articles d'une division ET de tout son sous-arbre (division_path = path ou descendant). */
 export async function articlesInDivision(
   db: D1Database,
   lawId: string,
@@ -1378,8 +1026,6 @@ export async function articlesInDivision(
   const rows = (
     await db
       .prepare(
-        // Départage par `id` : la pagination doit être stable même quand deux articles
-        // partagent une clé de tri (cf. `boundRef`).
         `SELECT ${cols} FROM articles WHERE law_id=? AND lang=? AND ${sub}
        ORDER BY sort_key, id LIMIT ? OFFSET ?`,
       )
@@ -1388,8 +1034,6 @@ export async function articlesInDivision(
   ).results;
   return { rows, total };
 }
-
-// --- arbre de structure -------------------------------------------------------
 
 export interface StructureNode {
   path: string;
@@ -1408,12 +1052,6 @@ export async function getStructure(
   rootPath?: string,
   depth?: number,
 ): Promise<StructureNode[]> {
-  // Les sept colonnes que l'arbre consomme, sur les douze de la table. `getStructure('ccq')`
-  // sans root_path lit 802 divisions : les cinq non lues (law_id, lang, history, sort_order
-  // et heading_norm — cette dernière n'étant même pas déclarée par DivisionRow) pèsent 38 %
-  // des octets. `sort_order` sert au tri sans être projetée. PERDRE `parent_id` APLATIRAIT
-  // L'ARBRE en silence — toutes les divisions deviendraient racines ; c'est ce que le
-  // contrôle « l'arbre a plus d'un niveau » de tests/evals.mjs surveille.
   const COLS = "id, law_id, lang, path, kind, number, heading, repealed, parent_id";
   let rows: DivisionRow[];
   if (rootPath) {
@@ -1452,7 +1090,7 @@ export async function getStructure(
     if (r.parent_id != null && inScope.has(r.parent_id)) {
       byId.get(r.parent_id)!.children.push(node);
     } else {
-      roots.push(node); // racine réelle, ou racine du sous-arbre demandé
+      roots.push(node);
     }
   }
   if (depth != null && depth >= 0) pruneDepth(roots, depth);
@@ -1466,8 +1104,6 @@ function pruneDepth(nodes: StructureNode[], depth: number): void {
   }
 }
 
-// --- analyse d'une citation libre (resolve_reference) -------------------
-
 export interface AmbiguousLaw {
   id: string;
   official_cite: string;
@@ -1477,33 +1113,14 @@ export interface AmbiguousLaw {
 export interface ParsedCitation {
   law: string | null;
   article: string | null;
-  /** Comment la loi a été reconnue, pour l'expliquer dans la réponse. */
   law_source: "chapitre" | "abreviation" | "defaut" | null;
-  /** Chapitre RLRQ cité explicitement mais absent du corpus (pour un refus circonstancié). */
   chapitre_inconnu: string | null;
-  /**
-   * Texte NOMMÉMENT hors corpus, reconnu comme tel plutôt que rabattu sur son successeur.
-   * Aujourd'hui une seule valeur : « C-25 », l'ANCIEN Code de procédure civile.
-   */
   hors_corpus: string | null;
-  /** Candidats multiples quand la citation est ambiguë (ex. « Directives C.S. », « 45-106 », « L.I. »). */
   ambigu: AmbiguousLaw[] | null;
-  /** Borne haute éventuelle lorsque la citation mentionne une plage (ex. « art. 1726 à 1731 »). */
   plage_fin?: string | null;
-  /** Alinéa ou sous-division mentionné après le numéro d’article (ex. « al. 2 »). */
   alinea?: string | null;
 }
 
-/**
- * Motif reconnaissant un chapitre RLRQ comme UNE UNITÉ COMPLÈTE dans une citation.
- *
- * Un simple `includes` est faux et dangereux : « B-1 » est contenu dans « B-1.1 », si bien
- * qu'une citation de la Loi sur le bâtiment (c. B-1.1, hors corpus) se résolvait
- * silencieusement en Loi sur le Barreau (c. B-1). D'où les garde-fous :
- *  - rien qui prolonge le chapitre avant ni après (lettre, chiffre, trait d'union) ;
- *  - ni un « . » SUIVI D'UN CHIFFRE après (c'est ce qui distingue B-1.1 de « c. B-1. ») ;
- *  - espaces libres à l'intérieur, pour accepter « C-25.01, r. 9 » comme « C-25.01,r.9 ».
- */
 function chapterRegex(chapter: string): RegExp {
   const esc = [...chapter]
     .filter((c) => !/\s/.test(c))
@@ -1513,15 +1130,9 @@ function chapterRegex(chapter: string): RegExp {
   return new RegExp(`(?<![A-Za-z0-9-])${esc}(?![A-Za-z0-9-])(?!\\.\\d)${regGuard}`, "i");
 }
 
-/** Mention explicite de chapitre (« c. B-1.1 », « ch. B-3 », « chapitre T-16 »), pour refuser en le nommant. */
 const CHAPITRE_EXPLICITE =
   /\b(?:c\.|ch\.|chapitres?|chapters?)\s*([A-Za-z]{1,6}-[0-9][0-9.]*(?:(?:\s*,\s*|\s+)r\.\s*[0-9][0-9.]*)?)/i;
 
-/**
- * Numéro d'article/paragraphe/règle (y compris alphanumérique CSA/AMF : 2A.1, 4B.2),
- * introduit par un marqueur. « a. » est la forme courante au Québec, et « s. » la forme
- * anglaise — ancrées pour ne pas mordre sur « C.S. 115 ».
- */
 const MARQUEUR_ARTICLE =
   /(?:(?:\barticles?\b|\barts?\.|\bparagraphes?\b|\bpara\.|\bpar\.|\bdir\.|\br[eè]gles?\b|\brules?\b|(?<![A-Za-zÀ-ÿ0-9.])a\.|(?<![A-Za-zÀ-ÿ0-9.])ss?\.)\s*|§\s*)(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*(?![A-Za-z0-9]))/i;
 
@@ -1532,7 +1143,6 @@ const AMF_PAIRS: Record<string, { regId: string; igId: string }> = {
 };
 const AMF_REG_IDS = new Set(Object.values(AMF_PAIRS).map((p) => p.regId));
 
-/** Districts, villes et régions administratives du Québec non couverts par un texte QCCS/QCCQ ingéré. */
 const AUTRES_DISTRICTS_QC =
   /\b(?:laval|longueuil|sherbrooke|gatineau|trois[- ]rivieres|rimouski|saguenay|chicoutimi|alma|terrebonne|joliette|saint[- ]jerome|st[- ]jerome|saint[- ]hyacinthe|st[- ]hyacinthe|drummond|drummondville|granby|victoriaville|shawinigan|valleyfield|salaberry|sorel|thetford(?:[- ]mines)?|roberval|sept[- ]iles|baie[- ]comeau|val[- ]d['’ ]?or|val[- ]dor|amos|rouyn(?:[- ]noranda)?|abitibi|outaouais|estrie|mauricie|laurentides|lanaudiere|monteregie|bas[- ]saint[- ]laurent|gaspe|gaspesie|bonaventure|charlevoix|beauce|frontenac|megantic|lac[- ]megantic|arthabaska|richelieu|iberville|bedford|saint[- ]francois|st[- ]francois|kamouraska|mingan|labelle|hull|pontiac|temiscamingue|chaudiere|appalaches|beauharnois|mont[- ]laurier|cowansville|la\s+malbaie|malbaie|perce|montmagny|riviere[- ]du[- ]loup|matane|chibougamau|amqui|new\s+carlisle|campbell['’]?s\s+bay|havre[- ]saint[- ]pierre|havre[- ]st[- ]pierre|sainte[- ]anne[- ]des[- ]monts|ste[- ]anne[- ]des[- ]monts|saint[- ]jean[- ]sur[- ]richelieu|st[- ]jean[- ]sur[- ]richelieu|saint[- ]joseph[- ]de[- ]beauce|st[- ]joseph[- ]de[- ]beauce|saint[- ]maurice|st[- ]maurice|la\s+tuque|ville[- ]marie|iles[- ]de[- ]la[- ]madeleine|chandler|dolbeau|jonquiere|brossard|repentigny|blainville|saint[- ]eustache|st[- ]eustache|magog)\b/i;
 
@@ -1541,7 +1151,6 @@ const DISTRICT_NON_MTL =
 const DIVISION_QCCS_NON_INGERE =
   /\bdivision\s+(?:de\s+l['’]|de\s+la\s+|de\s+|du\s+|des\s+|d['’]|of\s+)(?!montreal\b|mtl\b|quebec\b|qc\b|pratique\b|famille\b|civile?\b|criminel(?:le)?\b|commerciale?\b|faillite\b|administrat|appel\b|jeunesse\b)[a-z]/i;
 
-/** Pseudo-articles / annexes nommés (captés avant l'extraction de chiffre nu). */
 const PSEUDO_ANNEXE_TIRETS =
   /\b(annexe(?:-[a-z0-9]+)+|formulaire(?:-[a-z0-9]+)+|formule(?:-[a-z0-9]+)+|form(?:-[a-z0-9]+)+)\b/i;
 const ANNEXE_PREPS = "(?:de|du|des|d['’]|au|aux|a|sur|la|le|les|l['’])";
@@ -1569,7 +1178,7 @@ const STRIP_PSEUDO_NORM = new RegExp(
 );
 
 function extractPseudoArticle(rest: string, isIG = false): string | null {
-  const restNorm = rest.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const restNorm = stripAccents(rest);
   const mTirets = restNorm.match(PSEUDO_ANNEXE_TIRETS);
   if (mTirets) return mTirets[1].toLowerCase();
   const ORDRE_ANNEXE: Record<string, string> = {
@@ -1652,7 +1261,7 @@ const STRIP_DATES_ET_SALLES = [
 
 const toAmbiguous = (l: LawRow): AmbiguousLaw => ({
   id: l.id,
-  official_cite: citeOf(l),
+  official_cite: l.official_cite,
   name_fr: l.name_fr,
 });
 
@@ -1674,17 +1283,6 @@ function citesInstructionGenerale(norm: string): boolean {
   );
 }
 
-/**
- * Analyse « art. 1457 C.c.Q. », « RLRQ, c. T-16, art. 12 », « Directives C.S. Montréal, par. 12 »,
- * « IG 45-106, art. 4B.2 »…
- *
- * Deux pièges que la version naïve (« premier nombre trouvé », « défaut ccq ») ne gérait
- * pas, et qui faisaient rendre SILENCIEUSEMENT le mauvais article de la mauvaise loi :
- *  1. le chapitre ou la directive contient des chiffres (« c. T-16 », « (2026) », « 45-106 ») :
- *     on retire d'abord la mention de texte reconnue et les années parenthésées ;
- *  2. toute citation non reconnue ou ambiguë (ex. « Directives C.S. » ou « 45-106 » nu) est
- *     refusée plutôt que devinée.
- */
 export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation {
   const norm = normalize(citation);
   const amfMatch = norm.match(/(?<![0-9-])(31-103|45-106|51-102)(?![0-9-])/);
@@ -1695,21 +1293,14 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     );
   const citesV11Act = /\b(?:loi\s+sur\s+les\s+valeurs\s+mobilieres|securities\s+act)\b/i.test(norm);
 
-  // 1) Citation officielle (FR ou EN) la PLUS LONGUE présente comme unité complète
   let law: string | null = null;
   let lawSource: ParsedCitation["law_source"] = null;
   let bestLen = 0;
   let motif: RegExp | null = null;
   for (const l of laws) {
-    // Une citation explicite d'Instruction générale / Policy Statement mentionnant entre
-    // parenthèses le règlement d'accompagnement (« ... (RLRQ, c. V-1.1, r. 21) ») ne doit
-    // pas être détournée par le chapitre RLRQ du règlement à l'étape 1.
     if (isIG && AMF_REG_IDS.has(l.id)) continue;
-    // Une citation AMF explicite (« Règlement 45-106 … », « IG 45-106 … ») ou mentionnant
-    // la loi habilitante (« RLRQ, c. V-1.1 », « c. V-1.1 », « (V-1.1) ») ne doit pas être
-    // capturée par v-1.1 à l'étape 1, même si elle nomme la Loi sur les valeurs mobilières.
     if (amfMatch && (!citesV11Act || isIG || isReg) && l.id === "v-1.1") continue;
-    const cands = [citeOf(l), l.official_cite_en ?? ""];
+    const cands = [l.official_cite, l.official_cite_en ?? ""];
     for (const rawCite of cands) {
       const chap = rawCite.replace(/^(?:RLRQ|CQLR),\s*c\.\s*/i, "").trim();
       if (!chap || chap.length <= bestLen) continue;
@@ -1722,7 +1313,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
       }
     }
   }
-  // 2) L'ANCIEN Code de procédure civile (C-25) EST NOMMÉ, PAS RABATTU.
   const ancienCpc =
     !law &&
     /c\.?\s*p\.?\s*c\.?|\bcpc\b|code\s+de\s+proc[ée]dure\s+civile|code\s+of\s+civil\s+procedure|\bc\.?\s*c\.?\s*p\.?\b/i.test(
@@ -1730,7 +1320,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     ) &&
     /\bancien(?:ne)?s?\b|\bold\b|\bformer\b|\b1965\b/i.test(citation);
 
-  // 3) Abréviations usuelles & désambiguïsation dynamique sur `laws`
   let ambigu: AmbiguousLaw[] | null = null;
   let extraStrip: RegExp | null = null;
   if (!law && !ancienCpc) {
@@ -1741,7 +1330,7 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
       for (const pair of Object.values(AMF_PAIRS)) {
         const regRow = byId.get(pair.regId);
         if (!regRow) continue;
-        for (const rawCite of [citeOf(regRow), regRow.official_cite_en ?? ""]) {
+        for (const rawCite of [regRow.official_cite, regRow.official_cite_en ?? ""]) {
           const chap = rawCite.replace(/^(?:RLRQ|CQLR),\s*c\.\s*/i, "").trim();
           const re = chap ? chapterRegex(chap) : null;
           if (re?.test(citation)) {
@@ -1804,7 +1393,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
           DISTRICT_NON_MTL.test(normSansCour) ||
           DIVISION_QCCS_NON_INGERE.test(normSansCour)
         ) {
-          // District/division explicite hors Montréal/Québec : refuser plutôt que rabattre
           law = null;
         } else {
           const hasDist = /\bdistrict\b/.test(normSansCour);
@@ -1815,27 +1403,29 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
           let cands = qccsLaws;
           if (hasMtl) {
             cands = cands.filter((l) =>
-              /montreal|mtl/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+              /montreal|mtl/.test(normalize(`${l.id} ${l.name_fr} ${l.official_cite}`)),
             );
           }
           if (hasQc) {
             cands = cands.filter((l) =>
-              /quebec|\bqc\b/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+              /quebec|\bqc\b/.test(normalize(`${l.id} ${l.name_fr} ${l.official_cite}`)),
             );
           }
           if (hasDist) {
             cands = cands.filter((l) =>
-              /district|\bdist\b/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+              /district|\bdist\b/.test(normalize(`${l.id} ${l.name_fr} ${l.official_cite}`)),
             );
           }
           if (hasDiv) {
             cands = cands.filter((l) =>
-              /division|\bdiv\b/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+              /division|\bdiv\b/.test(normalize(`${l.id} ${l.name_fr} ${l.official_cite}`)),
             );
           }
           if (hasJugeAssociee && !hasMtl) {
             cands = cands.filter((l) =>
-              /juge\s+en\s+chef\s+associee/.test(normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`)),
+              /juge\s+en\s+chef\s+associee/.test(
+                normalize(`${l.id} ${l.name_fr} ${l.official_cite}`),
+              ),
             );
           }
           if (cands.length === 1) {
@@ -1866,7 +1456,7 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
           const narrow = (re: RegExp) => {
             cands = cands.filter((l) =>
               re.test(
-                normalize(`${l.id} ${l.name_fr} ${citeOf(l)}`).replace(
+                normalize(`${l.id} ${l.name_fr} ${l.official_cite}`).replace(
                   /\bcour\s+du\s+quebec\b/g,
                   "cour",
                 ),
@@ -2019,8 +1609,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
       motif =
         /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*I\.?(?!\.?[A-Za-zÀ-ÿ0-9])|\bloi\s+d['’]interpr[ée]tation\b|\binterpretation\s+act\b/i;
     } else {
-      // Abréviations fédérales usuelles (ordre du plus spécifique au plus court, servies
-      // uniquement si la loi correspondante est présente dans `laws`, donc derrière FEDERAL_CORPUS).
       const FEDERAL_ABBREVS: ReadonlyArray<readonly [string, RegExp]> = [
         [
           "ca-c-50",
@@ -2104,7 +1692,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
           "ca-d-3.4",
           /(?<![A-Za-zÀ-ÿ0-9.])L\.?\s*D\.?(?!\.?[A-Za-zÀ-ÿ0-9])(?!\s+[A-Za-z]\.(?!\s*\d))/i,
         ],
-        // Abréviations et titres usuels québécois ajoutés à la Vague 2
         [
           "a-3.001",
           /\bloi\s+sur\s+les\s+accidents\s+du\s+travail\s+et\s+les\s+maladies\s+professionnelles\b|(?<![A-Za-zÀ-ÿ0-9.])(?:L\.?\s*A\.?\s*T\.?\s*M\.?\s*P\.?|A\.?\s*I\.?\s*A\.?\s*O\.?\s*D\.?)(?!\.?[A-Za-zÀ-ÿ0-9])/i,
@@ -2155,7 +1742,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     }
   }
 
-  // 4) Extraction du numéro d'article/paragraphe après retrait du texte reconnu, dates et salles
   let rest = motif ? citation.replace(motif, " ") : citation;
   if (extraStrip) rest = rest.replace(extraStrip, " ");
   for (const stripRe of STRIP_DATES_ET_SALLES) rest = rest.replace(stripRe, " ");
@@ -2179,7 +1765,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     rest.match(/(?<![A-Za-z0-9.-])(\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*(?![A-Za-z0-9-]))/)?.[1] ??
     null;
 
-  // 5) Chapitre explicitement cité mais inconnu du corpus (jamais déclenché si ambigu)
   let explicite = law || ambigu ? null : (citation.match(CHAPITRE_EXPLICITE)?.[1]?.trim() ?? null);
   if (
     amfMatch &&
@@ -2191,7 +1776,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
     explicite = null;
   }
 
-  // Le chapitre C-25 cité SOUS N'IMPORTE QUELLE FORME
   const horsCorpus =
     law || ambigu ? null : ancienCpc || chapterRegex("C-25").test(citation) ? "C-25" : null;
 
@@ -2207,9 +1791,6 @@ export function parseCitation(citation: string, laws: LawRow[]): ParsedCitation 
   };
 }
 
-// --- données de pertinence (find_relevant) ------------------------------
-
-/** Plafond de divisions préfiltrées ramenées du SQL (le tri fin se fait en mémoire). */
 const DIVISION_PREFILTER_LIMIT = 2000;
 
 export interface RelevanceData {
@@ -2218,24 +1799,15 @@ export interface RelevanceData {
   laws: LawLite[];
   divisions: DivisionLite[];
   relations: RelationLite[];
-  /** Clé `law_id|path_FR` -> cible (chemin + intitulé) dans la langue demandée. */
   mappedHeadings: Map<string, { path: string; heading: string | null }>;
 }
 
-/**
- * Charge le nécessaire au classement. Les tables de découverte sont petites (quelques
- * dizaines de matières et de mappages, moins de deux cents lois) : on les lit en entier. Seules les divisions (5 000+) sont
- * PRÉFILTRÉES en SQL par sous-chaîne ; l'ancrage au début de mot se fait ensuite en mémoire.
- */
 export async function loadRelevanceData(
   db: D1Database,
   tokens: string[],
   lang: Lang,
   env: CorpusGateEnv = {},
 ): Promise<RelevanceData> {
-  // Le masque de l'interrupteur, posé sur CHAQUE source du routeur. `find_relevant` ne
-  // passe par aucun `getLaw`, donc le point d'étranglement ne le couvre pas : mesuré, il
-  // rendait des candidats fédéraux pendant que `list_laws` annonçait 79 lois.
   const mLaw = masqueLawId(env, "law_id");
   const cLaws = clauseCorpus(env, "");
   const mId = cLaws ? `WHERE ${cLaws}` : "";
@@ -2293,9 +1865,6 @@ export async function loadRelevanceData(
     ).results;
   }
 
-  // Cibles des divisions citées par subject_map (pour nommer et ADRESSER les candidats S1).
-  // Les chemins de subject_map sont français ; en anglais il faut les traduire, sinon la
-  // piste renvoyée n'est pas ouvrable avec get_division(lang='en').
   const mappedHeadings = new Map<string, { path: string; heading: string | null }>();
   const parLoi = new Map<string, string[]>();
   for (const m of subjectMap.results) {
@@ -2327,8 +1896,6 @@ export async function loadRelevanceData(
     }
   }
 
-  // En anglais, on apparie le NOM ANGLAIS (présent en base pour tout le corpus) : sinon le signal S3
-  // était muet dès qu'une requête anglaise nommait la loi en anglais.
   const lawsLite: LawLite[] = laws.results.map((l) => ({
     id: l.id,
     name_fr: lang === "en" ? l.name_en || l.name_fr : l.name_fr,
@@ -2339,8 +1906,6 @@ export async function loadRelevanceData(
     forum: l.forum,
   }));
 
-  // S1 apparie le libellé ET la description : sans leur version anglaise, le signal le plus
-  // lourd du routeur (+3) ne se déclenchait jamais sur une requête anglaise.
   const subjectsLite: SubjectLite[] = subjects.results.map((s) => ({
     id: s.id,
     label_fr: lang === "en" ? s.label_en || s.label_fr : s.label_fr,
@@ -2358,7 +1923,6 @@ export async function loadRelevanceData(
   };
 }
 
-/** Restreint en mémoire les données de pertinence à une portée (domaines, juridiction, forum). */
 export function scopeRelevanceData(
   data: RelevanceData,
   scope: { domains: readonly string[]; jurisdiction?: string; forum?: string },
@@ -2383,8 +1947,6 @@ export function scopeRelevanceData(
   };
 }
 
-// --- fils d'Ariane (plan v2, 1.3) ---------------------------------------------
-
 export interface CrumbNode {
   path: string;
   kind: string;
@@ -2392,12 +1954,6 @@ export interface CrumbNode {
   heading: string | null;
 }
 
-/**
- * Chaînes d'ancêtres (racine -> feuille) pour un lot de (law_id, division_path) —
- * pour rendre les résultats de recherche AUTO-EXPLICATIFS (cause n° 3 du post-mortem :
- * un chemin opaque n'apprend rien ; « Livre V, Titre IV : … droit international privé »
- * permet de RECONNAÎTRE la pertinence). Une requête IN par loi représentée.
- */
 export async function breadcrumbChains(
   db: D1Database,
   lang: Lang,
@@ -2460,7 +2016,6 @@ export async function breadcrumbChains(
   return out;
 }
 
-/** Noms des lois pour les en-têtes de groupes de résultats. */
 export async function lawNames(
   db: D1Database,
   ids: string[],
@@ -2619,56 +2174,17 @@ export async function normativeRelations(
   return out;
 }
 
-// --- journal des recherches retiré à l'exécution (Phase 3 — S13, S14, G9) ---
-// Aucune écriture dans `search_log` n'a plus lieu à l'exécution : seuls les compteurs agrégés
-// (`compteur_jour`) et événements techniques sans contenu (`evenement_technique`) sont tenus
-// dans `DB_IDENTITE`. La migration `0001_search_log.sql` reste conservée uniquement pour la
-// reproductibilité de la chaîne historique D1.
-
-// --- recherche plein texte (FTS5) --------------------------------------------
-
 export interface SearchHit {
   law_id: string;
   number: string;
   division_path: string;
   snippet: string;
-  /** Score bm25 (négatif : plus bas = plus pertinent). Présent sur les chemins relaxés. */
   score?: number;
-  /** Résultat issu du seul chemin vectoriel (repérage sémantique). */
   semantic?: boolean;
-  /** Fonction normative de la loi (pour pondération et plafond de diversité). */
   fonction?: string | null;
-  /** Langue effective du brief matérialisé (ex. 'fr' en repli sur une requête 'en'). */
   hit_lang?: Lang;
 }
 
-/**
- * CE QUE FTS5 FAIT RÉELLEMENT SUR D1 — sondes exécutées contre la base DISTANTE le
- * 2026-07-20. Ce sont des faits sur la PLATEFORME, pas sur le corpus : ils ne vieillissent
- * pas quand le corpus grandit, contrairement à tout décompte. Les refaire coûte une
- * campagne de sondes en production, d'où leur place ici plutôt que dans un document daté.
- *
- * - **Tokenizer par défaut (`unicode61`), `remove_diacritics` ACTIF** : `MATCH 'extranéité'`
- *   ≡ `MATCH 'extraneite'` (3 = 3). Inutile donc de replier les accents avant d'interroger.
- * - **Aucun stemming français** : *signification* ≠ *signifiée* (94 vs 74 documents
- *   distincts au vocabulaire). C'est la raison d'être de l'appariement par préfixe borné de
- *   `src/relevance.ts` — FTS5 ne rapprochera jamais deux flexions tout seul.
- * - Disponibles et vérifiés : `bm25()`, `snippet()` (~30 tokens rendus correctement),
- *   `highlight()`, et `fts5vocab` (table sonde acceptée puis supprimée, 0 trace).
- * - **Une seule colonne indexée (`text`)** — cf. `schema.sql`. Une colonne headnotes
- *   pondérée exigerait de RECRÉER la table FTS : c'est une migration, pas un ALTER.
- *
- * CAS FONDATEUR, art. 490 C.p.c. — mesuré, et à l'origine de toute l'échelle de recherche :
- * | `signification hors du Québec délai`        | **0 résultat** — « hors » est absent du texte et tue le ET |
- * | `signification Québec délai` (leave-one-out) | cpc 490 en 1re position |
- * | `extranéité` (corpus entier)                 | ccq 3111, cpc 490, cpc 622 |
- *
- * Le Livre V du C.p.c. s'intitule « LES RÈGLES APPLICABLES À CERTAINES MATIÈRES CIVILES »
- * (aucun signal) ; le signal est au Titre IV, « LES DEMANDES INTÉRESSANT LE DROIT
- * INTERNATIONAL PRIVÉ » — d'où l'indexation des divisions en profondeur 2.
- */
-
-/** Tokens FTS d'une requête (même découpage que toFtsQuery — un seul point de vérité). */
 export function ftsTokens(query: string): string[] {
   return query.normalize("NFC").match(/[\p{L}\p{N}][\p{L}\p{N}'’.-]*/gu) ?? [];
 }
@@ -2699,41 +2215,19 @@ const quoteTok = (t: string) => {
   return `(${vars.map(quoteSingleTok).join(" OR ")})`;
 };
 
-/**
- * En FTS5 SQLite, `"a" ("b" OR "c")` sans opérateur explicite est une erreur de syntaxe
- * dès qu'une expansion parenthésée suit ou précède un terme. Lorsque tous les termes
- * sont simples, on conserve la séparation par espace (exactement comme avant).
- */
 const joinFtsTerms = (terms: string[]) =>
   terms.some((x) => x.startsWith("(")) ? terms.join(" AND ") : terms.join(" ");
 
-/**
- * Tokenise en requête FTS5 sûre : chaque mot en littéral quoté, combinés en ET.
- *
- * Cet ET implicite est la CAUSE Nº 1 de l'échec fondateur ci-dessus : un seul mot absent du
- * texte suffit à vider le résultat. Il est conservé — il donne des résultats justes quand
- * il en donne — et c'est l'échelle de relaxation qui le rattrape, en le DISANT (R7).
- */
 export function toFtsQuery(query: string): string {
   return joinFtsTerms(ftsTokens(query).map(quoteTok));
 }
 
-/**
- * Issue d'une recherche : les résultats + le CHEMIN qui les a produits (plan v2, R7 :
- * fail open, toujours étiqueté). `elsewhere` couvre le cas du post-mortem que le seul
- * élargissement sur zéro ne couvre pas : une recherche RESTREINTE qui a des résultats
- * (« extranéité » sur ccq -> 3111) cachait ceux des autres lois (cpc 490).
- */
 export interface SearchOutcome {
   hits: SearchHit[];
   total: number;
-  /** null = exact dans la portée demandée ; 'semantic' = aucune correspondance lexicale. */
   fallback: null | "widened" | { loo: string } | "or_relax" | "semantic";
-  /** Aperçu hors portée quand la recherche restreinte a des résultats ET que d'autres lois en ont. */
   elsewhere: { total: number; hits: SearchHit[] } | null;
-  /** Correspondances de STRUCTURE (intitulés de divisions) par repérage sémantique. */
   divisions?: DivisionMatch[];
-  /** Signal radar : domaines exclus ayant des correspondances lexicales. */
   otherDomains?: { domain: string; lexical_hits: number }[];
 }
 
@@ -2755,9 +2249,6 @@ async function runMatch(
   env: CorpusGateEnv = {},
 ): Promise<{ hits: SearchHit[]; total: number }> {
   const clauses: string[] = [];
-  // MATCH sur `text` (poids 1.0) et `marginal_note` (poids MARGINAL_NOTE_WEIGHT = 0.5) ;
-  // `snippet(articles_fts, 0, …)` demeure borné à la colonne 0 (`text`) pour ne jamais
-  // servir une note marginale hors texte comme extrait officiel (art. 14 L.i., R4).
   const binds: unknown[] = [`{text marginal_note} : (${match})`, lang];
   if (scope.law) {
     clauses.push("AND articles_fts.law_id = ?");
@@ -2787,17 +2278,6 @@ async function runMatch(
       );
     }
   }
-  // `articles_fts` ne porte PAS de colonne `jurisdiction` (et lui en ajouter une exigerait
-  // de recréer la table), donc le masque passe par une sous-requête sur `laws`.
-  //
-  // POSÉ INCONDITIONNELLEMENT, y compris quand `scope.law` borne déjà la recherche — où il
-  // est effectivement redondant, `src/tools.ts` ayant déjà fait `getLaw(db, law, env)`.
-  //
-  // J'ai essayé de ne le poser que sur les barreaux non bornés, en croyant qu'il déplaçait
-  // l'ordre d'un cas d'éval. C'ÉTAIT FAUX, et la mesure l'a dit (voir ci-dessous). Il reste
-  // donc entier : la fuite que ce masque referme était née exactement du raisonnement
-  // « c'est déjà garanti en amont », et une sous-requête indexée ne se paie pas au prix
-  // d'un second verrou dans un outil juridique.
   const m = masqueLawId(env, "articles_fts.law_id");
   if (m) clauses.push(m);
   const where = `articles_fts MATCH ? AND articles_fts.lang = ? ${clauses.join(" ")}`;
@@ -2829,13 +2309,9 @@ async function runMatch(
   return { hits, total: totalRow?.n ?? 0 };
 }
 
-/** Bornes de l'échelle de relaxation (plan v2, 1.2). */
 const RELAX_MIN_TERMS = 2;
-const RELAX_MAX_LOO_TERMS = 6; // au-delà : sauter le leave-one-out, aller à l'étape OU
+const RELAX_MAX_LOO_TERMS = 6;
 
-// --- couche sémantique (plan v2, 2.3) -----------------------------------------
-
-/** Modèle d'embedding — multilingue (les requêtes EN atteignent les vecteurs FR). */
 export const EMBED_MODEL = "@cf/baai/bge-m3";
 
 export interface VectorBackend {
@@ -2855,7 +2331,6 @@ interface VectorHits {
   divs: DivisionMatch[];
 }
 
-/** Embed la requête UNE fois (réutilisable entre la passe restreinte et l'élargie). */
 async function embedQuery(v: VectorBackend, query: string): Promise<number[] | null> {
   try {
     const res = (await v.ai.run(EMBED_MODEL as Parameters<Ai["run"]>[0], {
@@ -2863,7 +2338,7 @@ async function embedQuery(v: VectorBackend, query: string): Promise<number[] | n
     })) as { data?: number[][] };
     return res?.data?.[0] ?? null;
   } catch {
-    return null; // fail open : l'hybride se dégrade en FTS pur
+    return null;
   }
 }
 
@@ -2907,7 +2382,7 @@ async function queryVectors(
     for (const m of res.matches ?? []) {
       const md = (m.metadata ?? {}) as Record<string, string>;
       if (md.type === "article" && md.law && md.article) {
-        if (m.score < SEMANTIC_MIN_SCORE) continue; // plancher anti-bruit
+        if (m.score < SEMANTIC_MIN_SCORE) continue;
         out.arts.push({ law: md.law, number: md.article, score: m.score });
       } else if (md.type === "division" && md.law && md.path) {
         out.divs.push({
@@ -2920,27 +2395,10 @@ async function queryVectors(
     }
     return out;
   } catch {
-    return null; // fail open
+    return null;
   }
 }
 
-/**
- * L'INTERRUPTEUR APPLIQUÉ AU CANAL VECTORIEL — la porte que le masque D1 ne peut PAS fermer.
- *
- * `queryVectors` lit `md.law` dans les métadonnées de Vectorize, pas dans D1 : aucune clause
- * WHERE ne l'atteint. Et les deux sorties ne fuient pas de la même façon. `arts` est
- * rematérialisée en base, donc un masque en aval la rattraperait ; `divs` est servie
- * DIRECTEMENT (`law_id`, `path`, `heading` viennent des métadonnées) et n'est jamais
- * rematérialisée — un intitulé de division fédérale serait rendu tel quel.
- *
- * Filtrer ici plutôt qu'en aval a une seconde raison, moins visible : un résultat fédéral
- * qui entre dans la fusion RRF OCCUPE UN RANG, et déplace donc un résultat québécois même si
- * son texte n'est jamais rendu. Écarté après la fusion, il aurait dégradé le classement sans
- * apparaître nulle part.
- *
- * Applique aussi les filtres `domains`, `jurisdiction` et `forum` contre D1 lorsque le
- * filtrage natif Vectorize par métadonnées (`VECTOR_DOMAIN_FILTER`) n'est pas encore armé.
- */
 async function filtreVecteurs(
   db: D1Database,
   vec: VectorHits | null,
@@ -2974,8 +2432,6 @@ async function filtreVecteurs(
       .bind(...ids, ...extraBinds)
       .all<{ id: string }>()
   ).results;
-  // Liste BLANCHE : un id absent de `laws` (vecteur périmé) est écarté lui aussi, plutôt que
-  // toléré par défaut. C'est le même choix que la liste blanche d'ancêtres du parseur.
   const permis = new Set(rows.map((r) => r.id));
   return {
     arts: vec.arts.filter((a) => permis.has(a.law)),
@@ -3000,7 +2456,6 @@ async function loadLawFonctions(
   return new Map(rows.map((r) => [r.id, r.fonction]));
 }
 
-/** Matérialise des (law, number) en SearchHit dans la LANGUE DEMANDÉE (extrait ~240 car.). */
 async function articleBriefs(
   db: D1Database,
   lang: Lang,
@@ -3068,10 +2523,6 @@ async function articleBriefs(
   return out;
 }
 
-/**
- * Fusion RRF (k = RRF_K) des listes FTS et vectorielle, pondérée par `fonctionWeight`.
- * Les résultats absents du FTS sont matérialisés depuis D1 (avec repli `[fr]`) et marqués `semantic`.
- */
 async function fuseHybrid(
   db: D1Database,
   lang: Lang,
@@ -3122,7 +2573,6 @@ async function fuseHybrid(
   const briefs = missing.length
     ? await articleBriefs(db, lang, missing)
     : new Map<string, SearchHit>();
-  // score cosine des correspondances vectorielles, pour l'observabilité (calibrage du plancher)
   const cosOf = new Map(vec.arts.map((a) => [`${a.law}|${a.number}`, a.score]));
   const hits: SearchHit[] = [];
   for (const s of scored) {
@@ -3222,9 +2672,6 @@ export async function searchText(
     forum: opts.forum,
   };
 
-  // Hybride (plan v2, 2.3) : embed de la requête EN PARALLÈLE du FTS exact — une seule
-  // fois, réutilisé par tous les barreaux. Pagination au-delà de la 1re page : FTS pur
-  // (une liste fusionnée ne se pagine pas).
   const useVector = !!opts.vector && page.offset === 0;
   const activeVecScope: VectorQueryScope = lawId
     ? { lawId }
@@ -3269,7 +2716,6 @@ export async function searchText(
     );
   }
   semDivs = semDivs.slice(0, DIVISION_MATCH_MAX);
-  // vecteurs corpus entier (embedding réutilisé), pour les barreaux élargis — paresseux
   const wideVecScope: VectorQueryScope = {
     domains: wideDomains,
     jurisdiction: opts.jurisdiction,
@@ -3283,8 +2729,6 @@ export async function searchText(
   let vecWideCache: Awaited<ReturnType<typeof queryVectors>> | undefined;
   const vecWide = async () => {
     if (vecWideCache === undefined) {
-      // Le barreau ELARGI repose le filtre : sans lawId, la requete Vectorize porte sur
-      // tout l'index (ou la portée du domaine), donc c'est le chemin le PLUS expose.
       vecWideCache =
         lawId && qVec
           ? await filtreVecteurs(
@@ -3302,14 +2746,6 @@ export async function searchText(
     v: Awaited<ReturnType<typeof queryVectors>>,
   ) => (v?.arts.length ? await fuseHybrid(db, lang, fts, v, page.limit, env) : fts.hits);
 
-  // ÉCHELLE (décision 2.4, tranchée par l'éval) : dérouler le LEXICAL jusqu'à sa meilleure
-  // liste, PUIS fusionner avec les vecteurs. Le sémantique seul n'est que l'ultime barreau :
-  // (a) des correspondances exactes ailleurs au corpus valent mieux que des voisins
-  // sémantiques dans la loi demandée (« extranéité » restreinte à b-9) ; (b) deux voisins
-  // au-dessus du plancher ne doivent pas court-circuiter l'étape OU qui trouve ccq 1726
-  // (« vice caché maison recours » — régression attrapée par l'éval, corrigée ici).
-
-  // 1) exact, portée demandée
   if (exact.total > 0) {
     let elsewhere: SearchOutcome["elsewhere"] = null;
     if (lawId) {
@@ -3334,7 +2770,6 @@ export async function searchText(
     };
   }
 
-  // 2) élargissement automatique dans la portée du domaine (plan v2, 1.1)
   if (lawId) {
     const wide = await runMatch(db, match, lang, wideScope, page, false, env);
     if (wide.total > 0) {
@@ -3352,7 +2787,6 @@ export async function searchText(
   const tokens = ftsTokens(query);
   const relaxable = !!opts.relax && tokens.length >= RELAX_MIN_TERMS;
 
-  // 3) leave-one-out (plan v2, 1.2), portée demandée — ≤ 6 SELECT
   if (relaxable && tokens.length <= RELAX_MAX_LOO_TERMS) {
     let best: { hits: SearchHit[]; total: number; omitted: string; sum: number } | null = null;
     for (let i = 0; i < tokens.length; i++) {
@@ -3362,11 +2796,6 @@ export async function searchText(
       const sum = r.hits.reduce((acc, h) => acc + (h.score ?? 0), 0);
       if (!best || sum < best.sum) best = { ...r, omitted: tokens[i], sum };
     }
-    // Le rendement est une CONDITION D'ARRÊT, pas un filtre de résultats : une liste trop
-    // maigre laisse l'échelle continuer vers le OU, qui apparie les flexions que l'ET ne
-    // peut pas atteindre (FTS5 sur D1 n'a aucune racinisation française). Cf.
-    // RELAX_MIN_LOO_TOTAL, dont le commentaire porte la mesure des deux cas limites.
-    // Le `Math.min` évite de rejeter une liste qui remplit déjà la page demandée.
     if (best && best.total >= Math.min(RELAX_MIN_LOO_TOTAL, page.limit)) {
       return {
         hits: await fuse(best, vec),
@@ -3379,8 +2808,6 @@ export async function searchText(
     }
   }
 
-  // 4) OU + bm25 (plan v2, 1.2) : portée demandée, puis domaine élargi. Termes composés éclatés
-  //    (« non-concurrence » -> non, concurrence).
   if (relaxable) {
     const orTerms = [
       ...new Set(tokens.flatMap((t) => t.split(/[-.'’]/)).filter((t) => t.length >= 2)),
@@ -3416,18 +2843,12 @@ export async function searchText(
     }
   }
 
-  // 5) repérage sémantique SEUL (au-dessus du plancher) : portée demandée, puis domaine élargi
   for (const v of [vec, lawId ? await vecWide() : null]) {
     if (v?.arts.length) {
       const hits = await fuseHybrid(db, lang, { hits: [], total: 0 }, v, page.limit, env);
       if (hits.length) {
         return {
           hits,
-          // `total` compte les appariements LEXICAUX, et rien d'autre — ici il n'y en a
-          // aucun, par construction. Il valait `hits.length` : le champ changeait donc de
-          // NATURE selon le barreau (décompte de corpus non paginé aux barreaux 1-4, taille
-          // de page ici), et nul ne pouvait l'interpréter sans lire `fallback`. Le nombre
-          // réellement rendu est publié à part (`returned`, cf. src/tools.ts).
           total: 0,
           fallback: "semantic",
           elsewhere: null,

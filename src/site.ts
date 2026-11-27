@@ -1,25 +1,7 @@
-// Page publique servie à la racine (R10) et fichiers publics de découverte (/robots.txt, /sitemap.xml, /llms.txt).
-//
-// PRINCIPE : la page ne RECOPIE rien. Les décomptes (lois, matières, articles, dates de
-// consolidation) sont lus en D1 au rendu ; les titres d'outils viennent de catalogue.json
-// (la même valeur que celle servie par tools/list) ; les valeurs de calibration sont
-// importées de src/relevance.ts. C'est la réponse structurelle à la dérive constatée dans
-// ce dépôt : un chiffre recopié dans de la prose devient faux en silence, sans qu'aucun
-// test n'échoue.
-//
-// Le jeton d'accès n'apparaît JAMAIS ici, sous aucune forme : la page décrit un endpoint
-// privé, elle ne le déverrouille pas. Elle n'appelle pas /mcp non plus — elle ne le
-// pourrait pas, src/auth.ts refusant en 404 sans porteur.
-//
-// PIÈGE D'ÉCRITURE (cousin de l'invariant 11) : dans un littéral de gabarit NON balisé,
-// `\d` devient `d` en silence. Le JS client est donc écrit en String.raw — et ne doit
-// contenir aucun `${`, puisque String.raw interpole quand même.
-
-import catalogue from "../catalogue.json";
-import config from "../laws.config.json";
+import catalogue from "../data/catalogue.json";
+import config from "../data/laws.config.json";
 import {
   type CorpusGateEnv,
-  citeOf,
   type LawSummary,
   listLaws,
   listSubjects,
@@ -58,7 +40,6 @@ const SOURCES = new Map(
   ]),
 );
 
-/** Échappement HTML — obligatoire sur TOUT champ venu de D1 (intitulés à apostrophes). */
 function esc(s: unknown): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -68,12 +49,10 @@ function esc(s: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Bloc bilingue : les deux langues sont émises, le CSS n'en montre qu'une. */
 function bi(fr: string, en: string): string {
   return `<span data-l="fr">${esc(fr)}</span><span data-l="en" lang="en">${esc(en)}</span>`;
 }
 
-/** Suite de paragraphes bilingues (avec lang="en" sur le bloc anglais pour lecteurs/indexeurs). */
 function biP(fr: string[], en: string[]): string {
   return (
     `<div data-l="fr">${fr.map((p) => `<p>${esc(p)}</p>`).join("")}</div>\n` +
@@ -179,8 +158,6 @@ function construireJsonLd(nLois: number, nMat: number, nArt: number, consol: str
   return JSON.stringify(graphe).replace(/</g, "\\u003c");
 }
 
-// --- document ----------------------------------------------------------------
-
 export async function renderSite(db: D1Database, env: CorpusGateEnv = {}): Promise<string> {
   const [laws, subjects, map, counts] = await Promise.all([
     listLaws(db, {}, "fr", env),
@@ -263,9 +240,7 @@ ${haut()}
 </html>`;
 }
 
-// --- découverte publique (/robots.txt, /sitemap.xml, /llms.txt) --------------
-
-export const CHEMINS_DECOUVERTE_PUBLIQUE = ["/robots.txt", "/sitemap.xml", "/llms.txt"] as const;
+const CHEMINS_DECOUVERTE_PUBLIQUE = ["/robots.txt", "/sitemap.xml", "/llms.txt"] as const;
 export type CheminDecouvertePublique = (typeof CHEMINS_DECOUVERTE_PUBLIQUE)[number];
 
 export function estCheminDecouvertePublique(
@@ -334,8 +309,6 @@ export function repondreDecouvertePublique(
     ? new Response(null, { status: 200, headers })
     : new Response(corps, { status: 200, headers });
 }
-
-// --- sections ----------------------------------------------------------------
 
 function sautContenu(): string {
   return `<a href="#contenu-principal" class="saut">${bi("Aller au contenu principal", "Skip to main content")}</a>`;
@@ -434,7 +407,7 @@ function corpus(laws: LawSummary[], pdfActive: boolean): string {
           : `<span data-l="${lg}"${attrLg}>${esc(t)}</span>`;
       };
       return `<tr data-law-id="${esc(l.id)}" data-f="${esc(l.fonction)}" data-d="${esc(l.domain ?? "core")}">
-      <td class="cite">${esc(citeOf(l))}</td>
+      <td class="cite">${esc(l.official_cite)}</td>
       <td>${lien(src?.fr, l.name_fr, "fr")}${lien(src?.en, l.name_en, "en")}</td>
       <td>${bi(ffr, fen)}</td>
       <td class="n">${nb(l.article_count ?? 0)}</td>
@@ -517,7 +490,7 @@ function matieres(
           .filter(Boolean)
           .map((x) => {
             const l = x as LawSummary;
-            return `<li>${bi(l.name_fr, l.name_en)} <span class="m">${esc(citeOf(l))} · ${nb(
+            return `<li>${bi(l.name_fr, l.name_en)} <span class="m">${esc(l.official_cite)} · ${nb(
               l.article_count ?? 0,
             )}&nbsp;art.</span></li>`;
           })
@@ -682,8 +655,6 @@ function pied(consol: string): string {
 </footer>`;
 }
 
-// --- CSS / JS ----------------------------------------------------------------
-
 const CLAIR =
   "color-scheme:light;--f:#0f172a;--m:#475569;--b:#cbd5e1;--bi:#64748b;--a:#1d4ed8;--bg:#f8fafc;--card:#fff;" +
   "--th:#f1f5f9;--code:#e2e8f0;--hover:#f1f5f9;--avert-bg:#eff6ff;--avert-b:#93c5fd";
@@ -808,9 +779,9 @@ html.l-fr [data-l=en],html.l-en [data-l=fr]{display:none}
 const BOOT = String.raw`
 try{
   var r=document.documentElement, c=[];
-  var p=localStorage.getItem('qclawLang')||(navigator.language||'fr').slice(0,2);
+  var p=localStorage.getItem('legisLang')||(navigator.language||'fr').slice(0,2);
   c.push(p==='en'?'l-en':'l-fr'); r.lang=(p==='en'?'en':'fr');
-  var t=localStorage.getItem('qclawTheme');
+  var t=localStorage.getItem('legisTheme');
   if(t==='light'||t==='dark') c.push('t-'+t);
   r.className=c.join(' ');
   var ti=document.querySelector&&document.querySelector('title[data-en]');
@@ -828,7 +799,7 @@ const JS = String.raw`
     h.lang=nv;
     var ti=d.querySelector('title[data-en]');
     if(ti) d.title=ti.getAttribute(nv==='en'?'data-en':'data-fr')||d.title;
-    try{localStorage.setItem('qclawLang',nv);}catch(e){}
+    try{localStorage.setItem('legisLang',nv);}catch(e){}
   });
 
   var tb=d.getElementById('theme');
@@ -839,8 +810,8 @@ const JS = String.raw`
     h.classList.remove('t-light'); h.classList.remove('t-dark');
     if(nx!=='auto') h.classList.add('t-'+nx);
     try{
-      if(nx==='auto') localStorage.removeItem('qclawTheme');
-      else localStorage.setItem('qclawTheme',nx);
+      if(nx==='auto') localStorage.removeItem('legisTheme');
+      else localStorage.setItem('legisTheme',nx);
     }catch(e){}
   });
 

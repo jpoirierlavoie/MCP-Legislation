@@ -300,7 +300,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
       const gateEnv = { FEDERAL_CORPUS: "1", PDF_CORPUS: pdfVal };
       const outils = makeRegistre(gateEnv);
 
-      // 1) list_laws & filtre jurisdiction='qc'
       const ll = await outils.list_laws({} as never);
       const llSc = ll.structuredContent as { count: number; laws: { id: string }[] };
       expect(llSc.count).toBe(2);
@@ -309,7 +308,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
       const qcOnly = await listLaws(db(), { jurisdiction: "qc" }, "fr", gateEnv);
       expect(qcOnly.map((l) => l.id)).toEqual(["essai-epub"]);
 
-      // 2) get_article, get_articles, get_structure, get_division refusent essai-pdf sans le lister
       const ga = await outils.get_article({ law: "essai-pdf", article: "1" } as never);
       expect(ga.isError).toBe(true);
       expect(ga.content[0].text).not.toContain("essai-pdf\n");
@@ -326,11 +324,9 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
       const gd = await outils.get_division({ law: "essai-pdf", path: "ph1:1" } as never);
       expect(gd.isError).toBe(true);
 
-      // 3) resolve_reference refuse la citation PDF
       const rr = await outils.resolve_reference({ citation: "Directive P-1, art. 1" } as never);
       expect(rr.isError).toBe(true);
 
-      // 4) related_laws cache essai-pdf mais conserve in_corpus=0
       const rlEpub = await outils.related_laws({ law: "essai-epub" } as never);
       expect(rlEpub.isError).toBeUndefined();
       const rlSc = rlEpub.structuredContent as {
@@ -342,7 +338,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
       const rlPdf = await outils.related_laws({ law: "essai-pdf" } as never);
       expect(rlPdf.isError).toBe(true);
 
-      // 5) list_subjects n'inclut pas essai-pdf dans les décomptes
       const ls = await outils.list_subjects({} as never);
       const subs = (
         ls.structuredContent as {
@@ -356,7 +351,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
       expect(pdfSub?.laws_count).toBe(0);
       expect(pdfSub?.divisions_count).toBe(0);
 
-      // 6) find_relevant S1-S4 exclut essai-pdf (y compris via l'arête curée essai-epub -> essai-pdf)
       const fr1 = await outils.find_relevant({ query: "cautionnement" } as never);
       const fr1Cands = (fr1.structuredContent as { candidates: { law: string }[] }).candidates;
       expect(fr1Cands.some((c) => c.law === "essai-epub")).toBe(true);
@@ -365,7 +359,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
       const fr2 = await outils.find_relevant({ query: "directive particuliere" } as never);
       expect(fr2.isError).toBe(true);
 
-      // 7) search_text lexical exclut essai-pdf
       const stExcl = await outils.search_text({ query: "inscription" } as never);
       expect(stExcl.isError).toBe(true);
       const stShared = await outils.search_text({ query: "cautionnement" } as never);
@@ -384,7 +377,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
   it("filtreVecteurs exclut les articles et divisions PDF en recherche hybride ciblée et élargie", async () => {
     const outils = makeRegistre({ FEDERAL_CORPUS: "1", PDF_CORPUS: "0", HYBRID_SEARCH: "1" });
 
-    // Corpus entier : Vectorize renvoie essai-pdf (score 0.95) + division PDF (0.92), filtrés
     const wide = await outils.search_text({ query: "cautionnement" } as never);
     const wideSc = wide.structuredContent as {
       results: { law_id: string }[];
@@ -394,7 +386,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
     expect(wideSc.divisions_semantiques.some((d) => d.law_id === "essai-pdf")).toBe(false);
     expect(wideSc.divisions_semantiques.some((d) => d.law_id === "essai-epub")).toBe(true);
 
-    // Requête ciblée sur essai-epub dont le lexique rate (« inscription ») -> vecWide()
     const widened = await outils.search_text({ query: "inscription", law: "essai-epub" } as never);
     const widenedSc = widened.structuredContent as {
       results: { law_id: string }[];
@@ -409,7 +400,6 @@ describe("PDF_CORPUS fermé ('0', undefined, 'true')", () => {
     expect(html).toContain('<tr data-law-id="essai-epub"');
     expect(html).toContain('<tr data-law-id="essai-ca"');
     expect(html).not.toContain('data-law-id="essai-pdf"');
-    // 2 lois et 3 articles (2 epub + 1 ca ; les 2 pdf exclus)
     expect(html).toContain("<b>2</b>");
     expect(html).toContain("<b>3</b>");
     expect(html).toContain(
@@ -509,7 +499,6 @@ describe("PDF_CORPUS='1' et indépendance avec FEDERAL_CORPUS", () => {
     const html = await renderSite(db(), gateEnv);
     expect(html).toContain('<tr data-law-id="essai-pdf"');
     expect(html).not.toContain('data-law-id="essai-ca"');
-    // 2 lois (epub + pdf), 4 articles (2 epub + 2 pdf)
     expect(html).toContain("<b>2</b>");
     expect(html).toContain("<b>4</b>");
   });
@@ -549,7 +538,6 @@ describe("PDF_CORPUS='1' et indépendance avec FEDERAL_CORPUS", () => {
     expect(html).toContain('<tr data-law-id="essai-epub"');
     expect(html).not.toContain('data-law-id="essai-ca"');
     expect(html).not.toContain('data-law-id="essai-pdf"');
-    // 1 loi (epub), 2 articles (epub)
     expect(html).toContain("<b>1</b>");
     expect(html).toContain("<b>2</b>");
     expect(html).toContain(

@@ -1,9 +1,3 @@
--- Migration 0008 — quarantaine par domaine (8 domaines : core + 7 silos sectoriels).
---
--- Purement additive : `schema.sql` reste gelé sur l'état initial pré-0001 (règle de
--- `0004_federal.sql`) et `articles_fts` n'est PAS reconstruite (`text` demeure en position
--- 0, `cid = 0`, pour `snippet(articles_fts, 0, …)`). Rollback = `DOMAIN_QUARANTINE="0"` (R8).
-
 ALTER TABLE laws ADD COLUMN domain TEXT NOT NULL DEFAULT 'core';
 CREATE INDEX IF NOT EXISTS idx_laws_domain ON laws(domain);
 

@@ -1,22 +1,3 @@
-"""Reconnaissance de documents PDF (directives judiciaires et instructions AMF) — dry-run.
-
-Pendant de `pipeline/discovery/recon.py` (EPUB) et `pipeline/discovery/recon_lims.py` (LIMS).
-N'ÉCRIT RIEN EN BASE, n'utilise NI LLM NI OCR, et refuse explicitement les PDF numérisés
-(image seulement), chiffrés ou corrompus (`exit code 2`).
-
-Le rapport Markdown régénérable va par défaut dans `docs/reconnaissance-pdf-courante.md`
-(gitignoré) ; le contrat de référence versionné est `docs/phase0-structure-pdf.md`, rédigé
-à la main à partir des mesures réelles et cité par `pipeline/parser_pdf.py`.
-
-⚠️ RECENSEMENT SANS LISTE BLANCHE PRÉALABLE : toutes les polices, tailles, marges `x0`,
-bandes `y0`, annotations de liens, signets (`outline`/TOC) et formes de numérotation
-(y compris alphanumériques CSA/AMF telles `2A.1`, `4B.2`, `1.1.1A`) sont inventoriés.
-
-Emploi :
-    PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.recon_pdf
-    PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.recon_pdf path/to/a.pdf --out docs/reconnaissance-pdf-courante.md
-    PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.recon_pdf path/to/a.pdf --format json --json-out out.json
-"""
 from __future__ import annotations
 
 import argparse
@@ -40,13 +21,11 @@ from pipeline import config
 DEFAULT_REPORT = config.REPO_ROOT / "docs" / "reconnaissance-pdf-courante.md"
 _SUBSET_FONT_RE = re.compile(r"^[A-Z]{6}\+")
 
-# Seuils explicites de reconnaissance (paramètres de mesure documentés)
 Y_LINE_TOLERANCE_PT = 2.5
 X0_CLUSTER_TOLERANCE_PT = 2.0
 TOP_BAND_RATIO = 0.12
 BOTTOM_BAND_RATIO = 0.88
 
-# Motifs de numérotation et structure en début de ligne (après _norm)
 _PROVISION_PREFIX_SRC = (
     r"(?:\d+[A-Za-z]+(?:\.\d+(?:[A-Za-z]+)?)*|"
     r"\d+(?:\.\d+)*(?:[A-Za-z]+(?:\.\d+(?:[A-Za-z]+)?)*)?)"
@@ -106,7 +85,6 @@ _REPEAL_RE = re.compile(
     re.I,
 )
 
-# Codes de drapeaux PyMuPDF (span["flags"])
 _FLAG_BITS: tuple[tuple[int, str], ...] = (
     (1 << 0, "superscript"),
     (1 << 1, "italic"),
@@ -115,65 +93,49 @@ _FLAG_BITS: tuple[tuple[int, str], ...] = (
     (1 << 4, "bold"),
 )
 
-
 class PdfReconError(Exception):
-    """Erreur explicite de reconnaissance PDF (zéro contournement)."""
-
+    pass
 
 class MissingDependencyError(PdfReconError, RuntimeError):
-    """Levée lorsque `pymupdf` n'est pas installé."""
-
+    pass
 
 class ScannedPdfError(PdfReconError, ValueError):
-    """Levée lorsqu'un PDF est vide ou numérisé (image seulement, zéro OCR)."""
-
+    pass
 
 class EncryptedPdfError(PdfReconError, PermissionError):
-    """Levée lorsqu'un PDF exige un mot de passe."""
-
+    pass
 
 class CorruptPdfError(PdfReconError, RuntimeError):
-    """Levée lorsqu'un PDF est corrompu ou illisible."""
-
+    pass
 
 def _norm(text: str) -> str:
-    """Normalise les espaces Unicode (`Zs`) tout en préservant `’` et accents (parité parser.py)."""
     cleaned = "".join(" " if unicodedata.category(c) == "Zs" else c for c in text)
     cleaned = re.sub(r"[ \t\r\f\v]+", " ", cleaned)
     cleaned = re.sub(r" *\n *", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
-
 def audit_unicode_zs(text: str) -> dict[str, int]:
-    """Compte les caractères Unicode de catégorie `Zs` autres que l'espace ASCII."""
     counts: collections.Counter[str] = collections.Counter()
     for ch in text:
         if ch != " " and unicodedata.category(ch) == "Zs":
             counts[f"U+{ord(ch):04X}"] += 1
     return dict(sorted(counts.items()))
 
-
 def strip_font_subset(font_name: str) -> str:
-    """Retire le préfixe de sous-ensemble `ABCDEF+` tout en conservant le nom brut ailleurs."""
     return _SUBSET_FONT_RE.sub("", font_name or "")
 
-
 def decode_font_flags(flags: int) -> list[str]:
-    """Décode le champ binaire `span['flags']` de PyMuPDF."""
     return [name for bit, name in _FLAG_BITS if flags & bit]
 
-
 def normalize_band_text(text: str) -> str:
-    """Normalise un bandeau potentiel en remplaçant les nombres par `<N>` pour détecter les répétitions."""
     normed = _norm(text)
     normed = re.sub(r"\b\d+\b", "<N>", normed)
     return normed.strip()
 
-
 @dataclass
 class SpanRecord:
-    page: int  # 1-indexed
+    page: int
     x0: float
     y0: float
     x1: float
@@ -184,7 +146,6 @@ class SpanRecord:
     flags: int
     text: str
     norm_text: str
-
 
 @dataclass
 class LineRecord:
@@ -197,13 +158,7 @@ class LineRecord:
     norm_text: str
     spans: list[SpanRecord] = field(default_factory=list)
 
-
 def reconstruct_lines(spans: list[SpanRecord], y_tolerance: float = Y_LINE_TOLERANCE_PT) -> list[LineRecord]:
-    """Regroupe les spans d'une page en lignes visuelles par tolérance verticale `y0`.
-
-    Ancre `anchor_y` sur les spans de ligne de base (hors exposants `flags & 1`) afin qu'un
-    exposant rehaussé ne décale pas la fenêtre de tolérance ni n'insère d'espace parasite.
-    """
     if not spans:
         return []
 
@@ -222,7 +177,6 @@ def reconstruct_lines(spans: list[SpanRecord], y_tolerance: float = Y_LINE_TOLER
         if abs(sp.y0 - anchor_y) <= y_tolerance:
             current = groups[-1]
             current.append(sp)
-            # Préférer la coordonnée `y0` des spans de taille dominante du groupe
             max_sz = max(s.size for s in current)
             dom = [s.y0 for s in current if s.size >= 0.8 * max_sz]
             if dom:
@@ -231,7 +185,6 @@ def reconstruct_lines(spans: list[SpanRecord], y_tolerance: float = Y_LINE_TOLER
             groups.append([sp])
             group_anchors.append(sp.y0)
 
-    # Rattacher chaque exposant au groupe de ligne le plus proche dans `y_tolerance`
     for sp in sorted(sup_spans, key=lambda s: (s.y0, s.x0)):
         best_idx: int | None = None
         best_dist = y_tolerance + 1e-6
@@ -246,7 +199,6 @@ def reconstruct_lines(spans: list[SpanRecord], y_tolerance: float = Y_LINE_TOLER
             groups.append([sp])
             group_anchors.append(sp.y0)
 
-    # Trier les groupes verticalement selon leur ancre de ligne de base
     paired = sorted(zip(group_anchors, groups), key=lambda item: (item[0], min(s.x0 for s in item[1])))
 
     lines: list[LineRecord] = []
@@ -266,11 +218,9 @@ def reconstruct_lines(spans: list[SpanRecord], y_tolerance: float = Y_LINE_TOLER
                 gap = sp.x0 - prev_x1
                 if not prev_text[-1:].isspace() and not t[:1].isspace():
                     if cur_is_sup:
-                        # Ne pas insérer d'espace avant un exposant collé (`1` + `er` -> `1er`)
                         if gap > max(4.0, 0.45 * max(prev_size, 6.0)):
                             pieces.append(" ")
                     elif prev_is_sup:
-                        # Préserver l'espace après un exposant devant un mot (`1er` + `janvier` -> `1er janvier`)
                         if t[:1].isalnum() and gap > 0.4:
                             pieces.append(" ")
                     else:
@@ -298,16 +248,10 @@ def reconstruct_lines(spans: list[SpanRecord], y_tolerance: float = Y_LINE_TOLER
         )
     return lines
 
-
 def cluster_x0(
     entries: list[dict[str, Any]] | list[float],
     tolerance: float = X0_CLUSTER_TOLERANCE_PT,
 ) -> list[dict[str, Any]]:
-    """Regroupe les positions horizontales `x0` dans une tolérance en points (`±tolerance`).
-
-    `entries` peut être soit une liste de flottants, soit une liste de dicts contenant
-    `x0`, `font`, `size`, `text`. Retourne les clusters triés par `x0_median` croissant.
-    """
     if not entries:
         return []
 
@@ -362,7 +306,6 @@ def cluster_x0(
         )
     return summary
 
-
 def detect_y0_bands(
     page_lines: list[dict[str, Any]],
     page_count: int,
@@ -370,12 +313,6 @@ def detect_y0_bands(
     top_ratio: float = TOP_BAND_RATIO,
     bottom_ratio: float = BOTTOM_BAND_RATIO,
 ) -> dict[str, Any]:
-    """Détecte les bandeaux d'en-tête (`y0 <= 0.12*H`) et pied de page (`y1 >= 0.88*H`).
-
-    Un bandeau est confirmé s'il se répète sur au moins `max(2, page_count // 2)` pages
-    après normalisation des chiffres. Les lignes en bordure sur des documents d'une seule
-    page ou sous le seuil sont exposées comme candidates sans faux positifs.
-    """
     threshold = max(2, page_count // 2) if page_count > 1 else 2
 
     def _height_for(page_num: int) -> float:
@@ -438,9 +375,7 @@ def detect_y0_bands(
         "edge_candidates_bottom": cand_bot,
     }
 
-
 def classify_line_pattern(line_text: str) -> dict[str, Any]:
-    """Classe une ligne normalisée selon les motifs structurels de début de ligne."""
     txt = _norm(line_text)
     if not txt:
         return {"kind": "empty", "token": None}
@@ -504,17 +439,13 @@ def classify_line_pattern(line_text: str) -> dict[str, Any]:
 
     return {"kind": "prose", "token": None, "sample": txt[:100]}
 
-
 def _rect_intersects(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
     return not (a[2] < b[0] or a[0] > b[2] or a[3] < b[1] or a[1] > b[3])
 
-
 def normalize_target_page(raw_target: Any) -> int | None:
-    """Convertit un index de page cible PyMuPDF (0-indexé) en numéro 1-indexé, ou `None` si < 0."""
     if isinstance(raw_target, int) and not isinstance(raw_target, bool) and raw_target >= 0:
         return int(raw_target) + 1
     return None
-
 
 def _link_kind_name(kind: int) -> str:
     if pymupdf is None:
@@ -529,9 +460,7 @@ def _link_kind_name(kind: int) -> str:
     }
     return mapping.get(kind, f"LINK_{kind}")
 
-
 def inspect_pdf(path: Path | str) -> dict[str, Any]:
-    """Inspecte un fichier PDF avec PyMuPDF sans OCR ni LLM et retourne l'inventaire complet."""
     if pymupdf is None:
         raise MissingDependencyError(
             "Le module `pymupdf` est requis pour inspecter un PDF (`uv pip install -r pipeline/requirements.txt`)."
@@ -600,7 +529,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
             total_images += img_count
 
             p_dict = page.get_text("dict", flags=extract_flags)
-            # get_text("dict") émet les bbox dans le repère non pivoté (p_dict["height"] / cropbox)
             span_space_height = float(p_dict.get("height") or page.cropbox.height or rect.height)
             page_heights[page_num] = span_space_height
             page_spans: list[SpanRecord] = []
@@ -647,7 +575,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
             if is_image_only:
                 image_only_pages.append(page_num)
 
-            # Inventaire des annotations de liens avec ancrage texte par chevauchement de bbox
             for lnk in page.get_links():
                 kind_int = int(lnk.get("kind", 0))
                 kind_name = _link_kind_name(kind_int)
@@ -720,7 +647,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
                 f"sans couche texte exploitable (pages {image_only_pages})."
             )
 
-        # Inventaire complet des polices
         font_acc: dict[tuple[str, str, float, int], dict[str, Any]] = {}
         for sp in all_spans:
             key = (sp.font, sp.base_font, round(sp.size, 2), sp.flags)
@@ -746,7 +672,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
             key=lambda f: (-f["spans"], f["base_font"], f["size"]),
         )
 
-        # Détection des bandeaux y0 (en-têtes/pieds) avant le clustering x0 du corps
         band_input = [
             {"page": ln.page, "y0": ln.y0, "y1": ln.y1, "text": ln.text}
             for ln in all_lines
@@ -756,7 +681,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
         repeating_header_sigs = {b["pattern"] for b in bands["repeating_headers"]}
         repeating_footer_sigs = {b["pattern"] for b in bands["repeating_footers"]}
 
-        # Clustering x0 sur les lignes non vides (et hors bandeaux répétés)
         x0_all_entries: list[dict[str, Any]] = []
         x0_body_entries: list[dict[str, Any]] = []
         for ln in all_lines:
@@ -779,7 +703,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
 
         x0_clusters = cluster_x0(x0_body_entries)
 
-        # Inventaire des motifs de début de ligne, dates de consolidation, abrogations, et bilan des spans
         pattern_counts: collections.Counter[str] = collections.Counter()
         pattern_samples: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
         consolidation_dates: list[dict[str, Any]] = []
@@ -802,7 +725,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
             }
         )
 
-        # Taille dominante du corps pour détecter les titres typographiques
         non_band_font_chars: collections.Counter[float] = collections.Counter()
         for ln in all_lines:
             h = page_heights[ln.page]
@@ -816,8 +738,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
                     non_band_font_chars[round(sp.size, 1)] += len(sp.norm_text)
         body_size = non_band_font_chars.most_common(1)[0][0] if non_band_font_chars else 11.0
 
-        # Marge gauche dominante des dispositions numérotées (`provision_x0`) pour distinguer
-        # les dispositions de premier niveau des sous-items indentés et renvois en cours de ligne
         prov_x0_candidates: list[float] = []
         for ln in all_lines:
             if not ln.norm_text:
@@ -850,7 +770,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
             is_rep_hdr = ln.y0 <= TOP_BAND_RATIO * h and sig in repeating_header_sigs
             is_rep_ftr = ln.y1 >= BOTTOM_BAND_RATIO * h and sig in repeating_footer_sigs
 
-            # Capture des dates de consolidation même dans un bandeau
             if ln.norm_text:
                 for m_dt in _CONSOL_DATE_RE.finditer(ln.norm_text):
                     dt_str = _norm(m_dt.group(0))
@@ -870,7 +789,6 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
                 pkind = pat["kind"]
                 if pkind in ("numeric", "alphanumeric"):
                     if first_non_ws.size < body_size - 2.0:
-                        # Appel de note / note de bas de page (ex. 6.48 pt)
                         pat = {"kind": "prose", "token": None, "sample": ln.norm_text[:100]}
                         pkind = "prose"
                     elif provision_x0 is not None and provision_x0 + 10.0 < first_non_ws.x0 < 250.0:
@@ -975,9 +893,7 @@ def inspect_pdf(path: Path | str) -> dict[str, Any]:
     finally:
         doc.close()
 
-
 def build_json_report(results: list[dict[str, Any]], errors: list[dict[str, str]]) -> str:
-    """Sérialise les résultats d'inspection en JSON UTF-8 déterministe."""
     payload = {
         "tool": "pipeline.discovery.recon_pdf",
         "files_inspected": len(results),
@@ -986,9 +902,7 @@ def build_json_report(results: list[dict[str, Any]], errors: list[dict[str, str]
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
-
 def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, str]]) -> str:
-    """Construit le rapport Markdown exhaustif et reproductible."""
     L: list[str] = []
     L.append("# Reconnaissance PDF — dry-run")
     L.append("")
@@ -1043,7 +957,6 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
             L.append("- **Dates détectées dans le texte :** aucune")
         L.append("")
 
-        # Bilan de spans
         sa = r["span_accounting"]
         L.append("### Bilan des spans (100 % couverture)")
         L.append("")
@@ -1058,7 +971,6 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
             L.append(f"| `{bk}` | {cnt} |")
         L.append("")
 
-        # Polices
         L.append("### Polices et styles")
         L.append("")
         L.append("| Police brute | Police de base | Taille (pt) | Drapeaux | Spans | Car. | Exemple |")
@@ -1072,7 +984,6 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
             )
         L.append("")
 
-        # Clusters x0
         L.append("### Clusters de marge gauche `x0` (hors bandeaux répétés)")
         L.append("")
         L.append("| `x0` médian (pt) | Plage `[min, max]` | Lignes | Polices dominantes | Exemples |")
@@ -1085,7 +996,6 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
             )
         L.append("")
 
-        # Bandeaux y0
         bands = r["y0_bands"]
         L.append(f"### Bandeaux `y0` (seuil répétition : >= {bands['threshold_pages']} pages)")
         L.append("")
@@ -1107,7 +1017,6 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
                     )
         L.append("")
 
-        # Signets TOC
         L.append(f"### Signets (`outline` / TOC : {r['toc']['count']})")
         L.append("")
         if r["toc"]["entries"]:
@@ -1119,7 +1028,6 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
             L.append("*Aucun signet TOC dans ce fichier.*")
         L.append("")
 
-        # Annotations de liens
         L.append(f"### Annotations de liens ({r['links']['total']} — {r['links']['by_kind'] or 'aucun'})")
         L.append("")
         if r["links"]["items"]:
@@ -1142,7 +1050,6 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
             L.append("*Aucune annotation de lien.*")
         L.append("")
 
-        # Motifs structurels et numérotation
         L.append("### Motifs de début de ligne et structure")
         L.append("")
         L.append("| Catégorie | Occurrences | Exemples |")
@@ -1155,12 +1062,10 @@ def build_markdown_report(results: list[dict[str, Any]], errors: list[dict[str, 
 
     return "\n".join(L) + "\n"
 
-
 def _default_sample_pdfs() -> list[Path]:
     if not config.SAMPLES_DIR.is_dir():
         return []
     return sorted(config.SAMPLES_DIR.glob("*.pdf"))
-
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -1249,7 +1154,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  REFUS {err['file']} [{err['error_type']}] : {err['message']}", file=sys.stderr)
 
     return 2 if errors else 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

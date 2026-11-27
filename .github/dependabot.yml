@@ -1,7 +1,5 @@
 version: 2
 updates:
-  # Mises à jour hebdomadaires groupées (npm mineur/correctif et actions GitHub).
-  # Le groupage exclut les montées majeures, qui restent ouvertes individuellement.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:

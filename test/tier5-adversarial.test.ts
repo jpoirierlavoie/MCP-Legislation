@@ -725,7 +725,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
   it("H_SEARCH_TEXT ne tronque pas à 3 hits une requête ne touchant que des directives, tout en gardant le plafond mixte", async () => {
     const outils = makeOutils();
 
-    // 6 paragraphes dans qccs-dist-mtl correspondent à "rôle provisoire" (0 loi/règlement)
     const dirOnly = await outils.search_text({
       query: "rôle provisoire",
       limit: 14,
@@ -740,7 +739,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
     expect(dirSc.returned).toBe(6);
     expect(dirSc.results.every((r) => r.law_id === "qccs-dist-mtl")).toBe(true);
 
-    // Requête mixte touchant cpc + directives + orientation -> max 3 par fonction souple
     const mixed = await outils.search_text({
       query: "procédure",
       limit: 10,
@@ -802,7 +800,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
     expect(text).toMatch(/Directive de pratique judiciaire|Orientation administrative/i);
     expect(text).toMatch(/preseance-sur|interprete/);
 
-    // Loi fr-only interrogée en EN avec HYBRID_SEARCH='0' -> mention explicite langs: ['fr'] (jamais erreur générique)
     const frZero = await outils.search_text({
       query: "nonexistentxyz",
       law: "qccs-dist-mtl",
@@ -811,7 +808,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
     expect(frZero.isError).toBe(true);
     expect(frZero.content[0].text).toContain("published in French only (langs: ['fr'])");
 
-    // Loi fr-only interrogée en EN sur mot élargissant vers cpc EN, avec hybridePermis=false -> avertissement fr-only explicite
     const outilsLex = makeOutils(false);
     const frWidened = await outilsLex.search_text({
       query: "procedure",
@@ -895,7 +891,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
   it("Round 3 Tier 5 : KIND_LABEL traduit 'partie' en 'Partie' (FR) / 'Part' (EN) et resolve_reference résout IG + c. V-1.1, r. 21", async () => {
     const outils = makeOutils();
 
-    // C.4 — get_structure et get_division rendent 'Partie' (FR) et 'Part' (EN)
     const structFr = await outils.get_structure({
       law: "v-1.1-r.21",
       lang: "fr",
@@ -929,7 +924,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
     expect(divEn.isError).toBeUndefined();
     expect(divEn.content[0].text).toContain("Part 1 — MONTRÉAL DIVISION");
 
-    // C.1 via resolve_reference complet contre D1
     const igCite = await outils.resolve_reference({
       citation: "Instruction générale relative au Règlement 45-106 (c. V-1.1, r. 21), 2A.1",
     } as never);
@@ -967,7 +961,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
   it("Round 4 Tier 5 : annexe-division-1 (QCCS), Règlement/IG + RLRQ c. V-1.1, et ch./chapitre/chapter IG contre D1", async () => {
     const outils = makeOutils();
 
-    // Bug 1 : annexe-division-1 sur qccs-dist-mtl vs qccs-div-mtl
     for (const cit of [
       "Directives C.S. District de Montréal, annexe-division-1",
       "Directives de la Cour supérieure — District de Montréal, annexe-division-1",
@@ -992,7 +985,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       number: "annexe-division-1",
     });
 
-    // Bug 2 : AMF Règlement / IG citant RLRQ, c. V-1.1 ne retourne jamais silencieusement v-1.1
     const regV11 = await outils.resolve_reference({
       citation: "Règlement 45-106 (RLRQ, c. V-1.1), art. 2.3",
     } as never);
@@ -1023,7 +1015,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       number: "1",
     });
 
-    // Bug 3 : ch. / chapitre / chapter + lookbehind '.' -> extrait 2.1 (jamais 1 de V-1.1)
     for (const cit of [
       "Instruction générale 45-106 (RLRQ, ch. V-1.1, r. 21), 2.1",
       "Instruction générale 45-106 (chapitre V-1.1, r. 21), 2.1",
@@ -1043,7 +1034,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
   it("Round 5 Tier 5 : resolve_reference contre D1 (AMF L.R.Q./nu, districts QC, 1ᵉʳ, Salles —/;, Annexe division/district)", async () => {
     const outils = makeOutils();
 
-    // 1) AMF L.R.Q. / R.S.Q. -> v-1.1-r.21 ; bare (c. V-1.1) / (V-1.1) -> ambigu (jamais v-1.1)
     for (const cit of [
       "45-106 (L.R.Q., c. V-1.1), art. 2.3",
       "45-106 (R.S.Q., c. V-1.1), s. 2.3",
@@ -1069,7 +1059,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       (v11Explicit.structuredContent as { resolved: { law: string; number: string } }).resolved,
     ).toMatchObject({ law: "v-1.1", number: "1" });
 
-    // 2) Districts non ingérés refusés (jamais rabattus sur qccs-dist-mtl)
     for (const cit of [
       "Directives de la Cour supérieure — District de Mont-Laurier, par. 1",
       "Directives de la Cour supérieure — District de Cowansville, par. 1",
@@ -1080,7 +1069,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       expect(r.content[0].text, cit).not.toContain("qccs-dist-mtl");
     }
 
-    // 3a) Date française avec exposant Unicode 1ᵉʳ -> par. 12 (jamais par. 1)
     const dateSuperscript = await outils.resolve_reference({
       citation:
         "Directives de la Cour supérieure — District de Montréal (1\u1d49\u02b3 janvier 2026), 12",
@@ -1090,7 +1078,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       (dateSuperscript.structuredContent as { resolved: { law: string; number: string } }).resolved,
     ).toMatchObject({ law: "qccs-dist-mtl", number: "12" });
 
-    // 3b) Salles avec — ou ; -> par. 5 (jamais salle 2.02)
     for (const cit of [
       "Mode de fonctionnement C.Q. Montréal (Pratique civile) Salles 2.06, 2.02 — 5",
       "Mode de fonctionnement C.Q. Montréal (Pratique civile) Salles 2.06, 2.02 ; 5",
@@ -1102,7 +1089,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       ).toMatchObject({ law: "qccq-mtl-prat-civile", number: "5" });
     }
 
-    // 4) Annexe division 1 et Annexe district 1 avec espace
     const annDiv = await outils.resolve_reference({
       citation: "Directives C.S. District de Montréal, Annexe division 1",
     } as never);
@@ -1123,7 +1109,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
   it("Round 6 Tier 5 : resolve_reference contre D1 (AMF + V-1.1, Superior Court Directives, Annexe accentuée & subdivisions, ch.)", async () => {
     const outils = makeOutils();
 
-    // 1) AMF Règlement / IG citant aussi la Loi sur les valeurs mobilières (RLRQ, c. V-1.1)
     const regAct = await outils.resolve_reference({
       citation:
         "Règlement 45-106 pris en vertu de la Loi sur les valeurs mobilières (RLRQ, c. V-1.1), art. 2.3",
@@ -1133,7 +1118,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       (regAct.structuredContent as { resolved: { law: string; number: string } }).resolved,
     ).toMatchObject({ law: "v-1.1-r.21", number: "2.3" });
 
-    // Si l'article (art. 1) existe dans v-1.1 mais pas dans le fixture v-1.1-r.21, ne rabat jamais sur v-1.1
     const regActMissing = await outils.resolve_reference({
       citation:
         "Règlement 45-106 pris en vertu de la Loi sur les valeurs mobilières (RLRQ, c. V-1.1), art. 1",
@@ -1157,7 +1141,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       (loiV11.structuredContent as { resolved: { law: string; number: string } }).resolved,
     ).toMatchObject({ law: "v-1.1", number: "1" });
 
-    // 2) Superior Court Directives (District/Division of Montreal, Quebec Division)
     for (const [cit, expLaw] of [
       ["Superior Court Directives — District of Montreal, para. 1", "qccs-dist-mtl"],
       ["Superior Court Directives — Division of Montreal, para. 1", "qccs-div-mtl"],
@@ -1177,7 +1160,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
     } as never);
     expect(qcDist.isError).toBe(true);
 
-    // 3) Annexe accentuée & subdivisions séparées par virgule
     const daaAnn = await outils.resolve_reference({
       citation: "Directive C.Q. (DAA), Annexe déontologie policière",
     } as never);
@@ -1210,7 +1192,6 @@ describe("Tier 5 — Adversarial Hardening & Regression Suite", () => {
       (r45App1.structuredContent as { resolved: { law: string; number: string } }).resolved,
     ).toMatchObject({ law: "v-1.1-r.21", number: "annexe-45-106a1-appendice-1" });
 
-    // 4) CHAPITRE_EXPLICITE avec ch. -> nomme B-3 au refus
     const chB3 = await outils.resolve_reference({
       citation: "L.R.C. 1985, ch. B-3, art. 67",
     } as never);

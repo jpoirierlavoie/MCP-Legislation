@@ -6,7 +6,6 @@ import { construireOutils } from "../src/tools";
 
 const db = () => (env as unknown as { DB: D1Database }).DB;
 
-/** Ancienne échelle `1000^4` encore présente en production sur les lois EPUB non réingérées. */
 const legacySortKey = (n: number) => n * 1_000_000_000_000;
 
 const FEDERAL_LAWS_SAMPLE = [
@@ -148,7 +147,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       )
       .run();
 
-    // D19 : `ccq` utilise ici l'ancienne échelle `1000^4` pour prouver l'immunité de nearestArticles.
     const ccqNums = [2693, 2694, 2695, 2696, 2697, 3165, 3166, 3167, 3168, 3170];
     let artId = 1;
     for (const n of ccqNums) {
@@ -168,7 +166,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       .bind(artId++, DISPOSITION_SORT_BASE + 1_000_000)
       .run();
 
-    // Articles C.p.c. FR/EN + sans-date + ca-b-3
     await d
       .prepare(
         `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
@@ -214,7 +211,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       RELAX_SEARCH: "1",
     } as unknown as Env);
 
-  // --- D7 & D16 : get_articles ----------------------------------------------
   it("D16 : get_articles émet l'en-tête titre/citation + date de consolidation en prose et structuredContent", async () => {
     const outils = makeOutils();
 
@@ -266,7 +262,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       missing_numbers: ["9999"],
     });
 
-    // Normalisation (trim + dédoublonnage) + EN
     const enMissing = await outils.get_articles({
       law: "cpc",
       numbers: [" 145 ", "9999", "145", "8888"],
@@ -279,7 +274,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       missing_numbers: ["9999", "8888"],
     });
 
-    // Tous manquants -> isError: true nommant les numéros introuvables
     const allMissing = await outils.get_articles({
       law: "cpc",
       numbers: ["9998", "9999"],
@@ -288,7 +282,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(allMissing.isError).toBe(true);
     expect(allMissing.content[0].text).toContain("9998, 9999");
 
-    // Liste blanche/vide après trim -> isError: true
     const blankNums = await outils.get_articles({
       law: "cpc",
       numbers: ["  ", ""],
@@ -296,9 +289,7 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(blankNums.isError).toBe(true);
   });
 
-  // --- D17 : détecteur de décalage de langue --------------------------------
   it("D17 : detectLanguageMismatch détecte les décalages francs sans faux positifs bilingues", () => {
-    // Anglais sous lang='fr' -> avertissement
     for (const q of [
       "breach of contract damages",
       "landlord and tenant eviction",
@@ -309,7 +300,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       expect(detectLanguageMismatch(q, "fr"), q).toContain("lang='en'");
     }
 
-    // Français sous lang='en' -> avertissement
     for (const q of [
       "responsabilité civile faute préjudice",
       "délai de prescription",
@@ -322,7 +312,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       expect(detectLanguageMismatch(q, "en"), q).toContain("lang='fr'");
     }
 
-    // Cas bilingues / noms propres / mots isolés : JAMAIS de faux positif
     expect(
       detectLanguageMismatch("Court of Québec civil notice provisional roll", "en"),
     ).toBeNull();
@@ -357,7 +346,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(enSearchWithEnQuery.isError).toBeUndefined();
     expect(enSearchWithEnQuery.structuredContent?.avertissement_langue).toBeUndefined();
 
-    // Requête FR sur texte EN (0 résultats) ou avec résultats (via texte FR)
     const frQueryUnderEn = await outils.search_text({
       query: "règles de conduite et de réparer le préjudice",
       lang: "en",
@@ -365,7 +353,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(frQueryUnderEn.isError).toBe(true);
     expect(frQueryUnderEn.content[0].text).toContain("lang='fr'");
 
-    // Requête EN matchant un résultat avec lang='fr' via mot partagé « rules »/« duty » + avertissement
     await db()
       .prepare(
         `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
@@ -383,7 +370,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(hitWarn.content[0].text).toContain("lang='en'");
     expect(hitWarn.structuredContent?.avertissement_langue).toContain("lang='en'");
 
-    // find_relevant : requête EN sous lang='fr' déclenche l'avertissement (succès et 0 résultat)
     const frFindZero = await outils.find_relevant({
       query: "breach of contract damages",
       lang: "fr",
@@ -407,7 +393,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(enFindHit.content[0].text).toContain("lang='fr'");
     expect(enFindHit.structuredContent?.avertissement_langue).toContain("lang='fr'");
 
-    // Requête bilingue légitime en lang='en' -> aucun avertissement
     const validEnFind = await outils.find_relevant({
       query: "Court of Québec contentious proceedings",
       lang: "en",
@@ -417,7 +402,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(validEnFind.content[0].text).not.toContain("appears to be in French");
   });
 
-  // --- D19 : nearestArticles avec échelle historique 1000^4 ------------------
   it("D19 : get_article(law='ccq', article='3169') et resolve_reference retournent 3165..3168/3170 et jamais 2693..2697", async () => {
     const outils = makeOutils();
 
@@ -440,7 +424,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(rr.content[0].text).not.toContain("2694");
   });
 
-  // --- D20 : abréviations fédérales dans parseCitation et resolve_reference --
   it("D20 : parseCitation résout les abréviations fédérales usuelles FR/EN et respecte FEDERAL_CORPUS", async () => {
     const cases: Array<[string, string, string]> = [
       ["art. 69.3 L.F.I.", "ca-b-3", "69.3"],
@@ -493,17 +476,14 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
       });
     }
 
-    // Garde-fous anti-collision
     expect(parseCitation("art. 10 L.P.C.", FEDERAL_LAWS_SAMPLE).law).toBeNull();
     expect(parseCitation("art. 15 L.D.Q.", FEDERAL_LAWS_SAMPLE).law).toBeNull();
     expect(parseCitation("art. 10 L.C.S.Q.", FEDERAL_LAWS_SAMPLE).law).toBeNull();
     expect(parseCitation("Acme LLC, art. 1", FEDERAL_LAWS_SAMPLE).law).toBeNull();
 
-    // Non-fuite quand FEDERAL_CORPUS="0" (aucun texte ca-* dans `laws`)
     const qcOnly = FEDERAL_LAWS_SAMPLE.filter((l) => !l.id.startsWith("ca-"));
     expect(parseCitation("art. 69.3 L.F.I.", qcOnly).law).toBeNull();
 
-    // Bout en bout contre D1 avec FEDERAL_CORPUS='1' vs '0'
     const outilsOpen = makeOutils("1");
     const rrOpen = await outilsOpen.resolve_reference({ citation: "art. 69.3 L.F.I." } as never);
     expect(rrOpen.isError).toBeUndefined();
@@ -520,11 +500,9 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(rrClosed.isError).toBe(true);
   });
 
-  // --- Wave 4 : B-N1, B-N2, B-N6, B-N8, B-N9, B-N10, B-N11 -----------------
   it("B-N1 & B-N6 & B-N11 : get_articles gère l'échelle 1000^4 sur borne absente, la troncature, l'inversion et les bornes alphabétiques", async () => {
     const outils = makeOutils();
 
-    // 1) Borne haute absente (1457 -> 1457.5) sur échelle 1000^4 ne retombe plus à 0.85x
     const narrow = await outils.get_articles({
       law: "ccq",
       from: "1457",
@@ -538,7 +516,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     ).toEqual(["1457"]);
     expect(narrow.content[0].text).toContain("1457.5");
 
-    // 2) Borne haute au-delà du dernier article sur échelle 1000^4 (3165 -> 3200) reste exacte
     const upperOpen = await outils.get_articles({
       law: "ccq",
       from: "3165",
@@ -552,7 +529,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     ).toEqual(["3165", "3166", "3167", "3168", "3170"]);
     expect(upperOpen.content[0].text).toContain("3200");
 
-    // 3) Borne alphabétique absente refusée explicitement (pas d'inversion silencieuse)
     const alpha = await outils.get_articles({
       law: "ccq",
       from: "abc",
@@ -561,7 +537,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(alpha.isError).toBe(true);
     expect(alpha.content[0].text).toContain("abc");
 
-    // 4) Plage inversée signalée
     const inv = await outils.get_articles({
       law: "ccq",
       from: "3168",
@@ -570,7 +545,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(inv.isError).toBeUndefined();
     expect(inv.content[0].text).toContain("bornes inversées");
 
-    // 5) Pagination explicite avec limit + offset suivant
     const page1 = await outils.get_articles({
       law: "ccq",
       from: "2693",
@@ -582,7 +556,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(page1.content[0].text).toContain("Articles 1–3 / ");
     expect(page1.content[0].text).toContain("suite : offset=3");
 
-    // 6) Chaîne vide dans numbers[] signalée dans les manquants
     const withBlank = await outils.get_articles({
       law: "cpc",
       numbers: ["145", ""],
@@ -665,13 +638,11 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
   it("B-N9, B-N10, B-N11 : NFD/ligature search_text, offset > total, get_article trim/casse/preliminaire, get_division offset", async () => {
     const outils = makeOutils();
 
-    // Trim + casse sur law et article
     const trimmed = await outils.get_article({ law: " CCQ ", article: "1457 " } as never);
     expect(trimmed.isError).toBeUndefined();
     expect(trimmed.structuredContent?.law).toBe("ccq");
     expect(trimmed.structuredContent?.number).toBe("1457");
 
-    // 'preliminaire' non numérique suggère 'finales' plutôt que 3168/3167
     const prelimMiss = await outils.get_article({
       law: "ccq",
       article: "preliminaire",
@@ -679,7 +650,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(prelimMiss.isError).toBe(true);
     expect(prelimMiss.content[0].text).toContain("finales");
 
-    // get_division avec offset > total indique le total
     const divEmpty = await outils.get_division({
       law: "ccq",
       path: "ga:l_v",
@@ -688,7 +658,6 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     expect(divEmpty.isError).toBeUndefined();
     expect(divEmpty.content[0].text).toContain("offset=999 ; total :");
 
-    // NFD + ligature œ/oe + offset > total dans search_text
     await db()
       .prepare(
         `INSERT INTO articles (id, law_id, lang, number, sort_key, division_id, division_path, text)
@@ -699,7 +668,7 @@ describe("Wave 3 Remediation — D7, D16, D17, D19, D20", () => {
     await db().prepare("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')").run();
 
     const nfd = await outils.search_text({
-      query: "pre\u0301judice", // NFD
+      query: "pre\u0301judice",
       law: "ccq",
     } as never);
     expect(nfd.isError).toBeUndefined();

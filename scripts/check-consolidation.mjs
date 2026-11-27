@@ -1,29 +1,3 @@
-// Veille de consolidation — DÉTECTEUR EN LECTURE SEULE. N'écrit RIEN en base.
-//
-// But : savoir quand LégisQuébec a consolidé une loi au-delà de ce qui est chargé en D1,
-// c.-à-d. quand un rafraîchissement (procédure manuelle et supervisée, cf. CLAUDE.md
-// « Rafraîchissement semestriel ») est dû. Ce script se contente de le CONSTATER ; la
-// bascule reste humaine.
-//
-// Deux sources, aucune n'exige de secret :
-//   • date STOCKÉE   ← list_laws sur l'endpoint MCP public (= colonnes consol_date_*
-//                       de D1, telles que servies aux usagers). Une seule session MCP.
-//   • date LIVE      ← page LégisQuébec de chaque loi (« À jour au JJ mois AAAA »).
-//
-// extractConsolidation() est un MIROIR FIDÈLE de pipeline/ingest.py:fetch_consolidation :
-// même portée (blocs class="text-end" uniquement), même regex, même table de mois, même
-// « première date à mois valide ». Une page atteinte (2xx) dont la bannière devient
-// illisible n'est PAS confondue avec une page injoignable : c'est une anomalie du
-// détecteur (le miroir a peut-être cassé), donc un signal ACTIONNABLE — jamais un null
-// silencieux. Contrat : ne JAMAIS produire de faux négatif silencieux.
-//
-// Sortie : consolidation-report.md (corps d'issue) + DEUX drapeaux séparés sur
-// GITHUB_OUTPUT : `drift` (dérive corpus actionnable) et `unreachable` (blocage réseau
-// massif). Le workflow ne clot l'issue que si les DEUX sont éteints — une page
-// injoignable est une loi NON VÉRIFIÉE, pas une loi à jour.
-// Code de sortie : 0 même en cas de dérive (la dérive est le signal attendu, pas une
-// erreur) ; ≠ 0 seulement si le détecteur lui-même n'a rien pu vérifier.
-
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -33,16 +7,11 @@ import { createMcpClient } from "../eval/mcp-client.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const MCP_URL = process.env.MCP_URL || "https://legislation.poirierlavoie.ca/mcp";
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"; // = pipeline/config.py:USER_AGENT
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
 const CONCURRENCY = 8;
 const TIMEOUT_MS = 20_000;
-// Fraction de pages INJOIGNABLES (réseau/HTTP) au-delà de laquelle on ouvre une issue même
-// sans autre dérive : un blocage massif (WAF, filtrage d'IP de centre de données) est en
-// soi une information. Ne s'applique QU'aux injoignables réseau ; une page atteinte mais
-// illisible est traitée à part (bucket `illisible`, toujours actionnable).
 export const UNREACHABLE_ALERT_RATIO = 0.25;
 
-// Miroir de _FR_MONTHS (pipeline/ingest.py).
 export const FR_MONTHS = {
   janvier: 1,
   février: 2,
@@ -58,14 +27,6 @@ export const FR_MONTHS = {
   décembre: 12,
 };
 
-/**
- * Date « À jour au JJ mois AAAA » -> ISO (AAAA-MM-JJ), ou null si aucun bloc text-end n'en
- * porte. MIROIR FIDÈLE de fetch_consolidation() :
- *   - <script>/<style> retirés (leur contenu n'est pas du texte affiché) ;
- *   - on ne lit QUE les blocs class="text-end" (la bannière), comme find_all(class_=…) —
- *     ce qui exclut les fausses dates de l'historique d'articles ailleurs dans la page ;
- *   - première date à MOIS VALIDE, en poursuivant sur un bloc au mois invalide.
- */
 export function extractConsolidation(html) {
   const cleaned = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ");
   const textEnd = /<div[^>]*class="[^"]*\btext-end\b[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
@@ -82,35 +43,6 @@ export function extractConsolidation(html) {
   return null;
 }
 
-/**
- * Date « à jour AAAA-MM-JJ » / « current to AAAA-MM-JJ » d'une page de Justice Canada.
- * MIROIR FIDÈLE de pipeline/ingest.py:extrait_consolidation_federale.
- *
- *   - Portée bornée au SEUL <p id="assentedDate">, comme le couple québécois l'est aux
- *     blocs text-end. La page porte d'autres dates (historique, versions antérieures).
- *   - Ancrage sur la PHRASE, jamais sur la première date du bloc : celui-ci en porte
- *     DEUX — « à jour AAAA-MM-JJ » puis « dernière modification AAAA-MM-JJ ». Mesuré le
- *     2026-09-14 sur les 36 pages : bloc présent partout, phrase présente partout, au
- *     moins deux dates partout. Borner la portée NE SUFFIT DONC PAS.
- *   - La date est DÉJÀ en ISO : aucune table de mois, contrairement à FR_MONTHS. Si
- *     Justice Canada passait un jour au format littéral, les DEUX moitiés du miroir
- *     rendraient null — c'est-à-dire « illisible », donc actionnable, jamais « à jour ».
- *
- * On s'ancre sur « jour » et non sur « à jour » : le « à » arrive tantôt en entité
- * (&agrave;, pages de lois) tantôt en littéral (pages de règlements), et ce
- * dépouillement-ci ne décode PAS les entités là où BeautifulSoup le fait côté Python.
- * L'ancrage court neutralise cette asymétrie — les deux moitiés rendent la même valeur
- * sur le même HTML, ce qui est tout l'objet d'un miroir.
- *
- * Le retrait de <script>/<style> n'a pas d'équivalent côté Python parce que BeautifulSoup
- * PARSE là où l'on dépouille ici : sans lui, une chaîne ressemblant à la balise cible dans
- * un script pourrait être captée par la regex et jamais par le parseur. Cet écart RAPPROCHE
- * les deux moitiés au lieu de les éloigner.
- */
-// Nommée, et non inline, pour être la MOITIÉ COMPARABLE de `_DATE_FEDERALE`
-// (pipeline/ingest.py) : `scripts/check-consolidation.test.mjs` extrait les deux des
-// SOURCES et exige qu'elles soient identiques. Un miroir que rien ne compare finit par
-// diverger — c'est l'invariant 2, appliqué ici avant qu'il ne coûte quelque chose.
 const DATE_FEDERALE = /(?:jour|current\s+to)\s*(\d{4}-\d{2}-\d{2})/i;
 
 export function extractConsolidationFederale(html) {
@@ -122,18 +54,6 @@ export function extractConsolidationFederale(html) {
   return m ? m[1] : null;
 }
 
-/**
- * Trois issues distinctes, jamais confondues :
- *   { status: "ok", date }              page atteinte, date lue
- *   { status: "illisible", note }       page atteinte (2xx) mais date introuvable — le
- *                                        miroir a peut-être cassé : ACTIONNABLE
- *   { status: "injoignable", note }     réseau / HTTP >= 400 / délai / URL absente
- *
- * `extracteur` est passé par l'appelant parce que le corpus a DEUX publieurs, dont les
- * bannières n'ont ni la même portée ni le même format. Le choisir ici, d'après l'URL,
- * reviendrait à deviner le publieur à partir d'une chaîne — alors que la configuration le
- * DIT déjà (`consolidation_source` ou `official_source`).
- */
 async function fetchLiveDate(url, extracteur) {
   if (!url)
     return { status: "injoignable", note: "URL de consolidation absente de laws.config.json" };
@@ -168,7 +88,6 @@ export function parsePdfHeader(buf) {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   const head = Buffer.from(bytes.subarray(0, 16)).toString("latin1");
   if (!head.startsWith("%PDF-")) return { valid: false, modDate: null };
-  // /ModDate est lu à titre informatif uniquement (jamais comme date de consolidation, cf. §7.1).
   const text = Buffer.from(bytes).toString("latin1");
   const m = text.match(/\/ModDate\s*\(D:(\d{4})(\d{2})(\d{2})/i);
   const modDate = m ? `${m[1]}-${m[2]}-${m[3]}` : null;
@@ -187,9 +106,7 @@ export function extractPdfIndexDrift(html, { expectedFilename, baseUrl } = {}) {
     if (baseUrl) {
       try {
         resolved = new URL(rawHref, baseUrl).href;
-      } catch {
-        // conserver brut si URL relative invalide
-      }
+      } catch {}
     }
     links.push(resolved);
   }
@@ -340,7 +257,6 @@ export async function fetchLivePdf(url, pin, storedDate, fetchImpl = fetch, _dep
   }
 }
 
-/** Répartit les contrôles (déjà dotés de status/live/stored) en catégories. */
 export function classify(checks) {
   const retard = [],
     anomalie = [],
@@ -360,27 +276,16 @@ export function classify(checks) {
       retard.push(c);
       continue;
     }
-    // status === "ok" : c.live est une date ISO. Comparaison lexicographique valide.
     if (c.stored == null) {
       sansStockee.push(c);
       continue;
     }
     if (c.live > c.stored) retard.push(c);
     else if (c.live < c.stored) anomalie.push(c);
-    // c.live === c.stored : à jour, rien à signaler
   }
   return { retard, anomalie, sansStockee, illisible, injoignable };
 }
 
-/**
- * Dérive = ce qui est ACTIONNABLE côté corpus (retard, anomalie, date absente, page
- * illisible, loi sans langue). Le blocage réseau massif est un signal SÉPARÉ
- * (unreachableAlert) : une page injoignable est une loi NON VÉRIFIÉE — ni fraîche ni en
- * retard — et l'issue ne doit ni l'annoncer comme un « rafraîchissement dû » (le titre
- * mentait : constaté le 2026-07-23, dérive résolue mais issue tenue ouverte sous ce
- * titre par 33 % de 502), ni la laisser passer pour un corpus vérifié. Les deux drapeaux
- * sortent séparément sur GITHUB_OUTPUT ; le workflow ne clôt que si les DEUX sont éteints.
- */
 export function computeDrift({
   retard,
   anomalie,
@@ -397,7 +302,6 @@ export function computeDrift({
   return { drift: actionable > 0, unreachableRatio, unreachableAlert };
 }
 
-/** Exécute `worker` sur `items` avec un parallélisme borné (politesse envers LégisQuébec). */
 async function pool(items, size, worker) {
   let i = 0;
   const runners = Array.from({ length: Math.min(size, items.length) }, async () => {
@@ -409,7 +313,6 @@ async function pool(items, size, worker) {
   await Promise.all(runners);
 }
 
-/** Trois publieurs, trois modes d'extraction. Le seau est porté par le contrôle. */
 const EXTRACTEURS = {
   legisquebec: extractConsolidation,
   justice: extractConsolidationFederale,
@@ -421,26 +324,6 @@ export const NOM_PUBLIEUR = {
   pdf: "Sources PDF (QCCS/QCCQ/AMF)",
 };
 
-/**
- * Répartit les contrôles PAR PUBLIEUR, applique `classify` puis `computeDrift` à CHAQUE
- * seau, et réunit les drapeaux par OU.
- *
- * C'EST LE CŒUR DU CORRECTIF DU 2026-09-14, et c'est pour ça que cette fonction est
- * extraite et exportée plutôt que fondue dans `main()` : l'agrégation n'était gardée par
- * RIEN, alors que c'est elle qui décide si le job mensuel parle ou se tait.
- *
- * `computeDrift` compare `injoignable.length / total` à un seuil de 25 %. Agrégé sur tout
- * le corpus, ce ratio DILUE : un blocage TOTAL du fédéral (36 pages sur 36) pesait
- * 36/194 = 18,6 %, donc sous le seuil, donc le job passait VERT pendant que 18 textes sur
- * 97 n'étaient vérifiés par rien. La dilution joue dans les DEUX sens — un blocage
- * québécois massif noierait de même un signal fédéral propre.
- *
- * Les SIGNATURES de `classify` et de `computeDrift` ne bougent pas : c'est ce qui préserve
- * leurs contrôles. Seul le NOMBRE d'appels change.
- *
- * Un seau VIDE est omis, et non compté comme sain : sans quoi un corpus qui perdrait
- * toutes ses entrées fédérales rendrait `drift = false` en le présentant comme un succès.
- */
 export function agregeParSeau(checks, sansLangue = []) {
   const seaux = new Map();
   for (const nom of Object.keys(EXTRACTEURS)) {
@@ -456,9 +339,6 @@ export function agregeParSeau(checks, sansLangue = []) {
     seaux,
     drift: vals.some((s) => s.drift),
     unreachableAlert: vals.some((s) => s.unreachableAlert),
-    // Quel publieur a bloqué. Sans cette sortie, le titre d'issue nomme LégisQuébec en dur
-    // et MENTIRAIT dès qu'un blocage viendrait de Justice Canada — le dépôt a déjà corrigé
-    // exactement ce défaut le 2026-07-23 (« le titre mentait »).
     bloquees: [...seaux.entries()]
       .filter(([, s]) => s.unreachableAlert)
       .map(([nom]) => NOM_PUBLIEUR[nom]),
@@ -466,16 +346,8 @@ export function agregeParSeau(checks, sansLangue = []) {
 }
 
 async function main() {
-  const config = JSON.parse(readFileSync(join(ROOT, "laws.config.json"), "utf8"));
+  const config = JSON.parse(readFileSync(join(ROOT, "data", "laws.config.json"), "utf8"));
 
-  // Le corpus a DEUX publieurs, et la configuration DIT lequel : `consolidation_source`
-  // pour LégisQuébec (EPUB), `official_source` pour Justice Canada (XML). Deviner le
-  // publieur d'après l'URL serait deviner ce qui est déjà déclaré.
-  //
-  // Défaut mesuré le 2026-09-14 : seule `consolidation_source` était lue, donc les 36
-  // contrôles fédéraux n'avaient AUCUNE URL, tombaient en `injoignable`, et — exclus
-  // d'`actionable` et noyés sous le seuil global de 25 % (36/194 = 18,6 %) — laissaient le
-  // job MENSUEL passer VERT pendant que 18 textes sur 97 n'étaient surveillés par rien.
   const sources = new Map(
     config.laws.map((l) => [
       l.id,
@@ -488,7 +360,6 @@ async function main() {
   );
   const pdfPins = loadPdfProfilePins(ROOT);
 
-  // 1) Dates stockées, via l'endpoint MCP public (une seule session, tous domaines).
   const mcp = createMcpClient(MCP_URL);
   await mcp.connect();
   const res = await mcp.callTool("list_laws", { domains: ["all"] });
@@ -497,9 +368,6 @@ async function main() {
     throw new Error(`list_laws n'a renvoyé aucune loi (endpoint ${MCP_URL} injoignable ?)`);
   }
 
-  // 2) Un contrôle par (loi, langue). Une loi sans langue déclarée (langs vide -> ligne
-  // laws sans article, cf. invariant n° 1) serait sinon SILENCIEUSEMENT sautée : on la
-  // range dans une catégorie actionnable au lieu de la perdre.
   const checks = [];
   const sansLangue = [];
   for (const law of laws) {
@@ -520,18 +388,14 @@ async function main() {
         lang,
         stored: law[`consol_date_${lang}`] ?? null,
         url: src.urls[lang] ?? null,
-        // `publieur` TRAVERSE `classify` sans qu'elle le lise : sa signature ne bouge pas,
-        // donc ses contrôles restent intacts. C'est l'appelant qui répartit.
         publieur: src.publieur,
       });
     }
   }
-  // Garde : un détecteur qui n'a construit AUCUN contrôle ne doit pas rapporter « vert ».
   if (checks.length === 0 && sansLangue.length === 0) {
     throw new Error("aucun couple (loi, langue) construit — forme de list_laws inattendue ?");
   }
 
-  // 3) Date live (ou empreinte SHA-256 PDF) pour chaque contrôle, avec l'extracteur de SON publieur.
   await pool(checks, CONCURRENCY, async (c) => {
     const res =
       c.publieur === "pdf"
@@ -543,11 +407,8 @@ async function main() {
     if (res.shaDrift) c.shaDrift = true;
   });
 
-  // 4) Classement et dérive, PAR SEAU DE PUBLIEUR — cf. `agregeParSeau`, qui porte le
-  //    raisonnement et que `scripts/check-consolidation.test.mjs` verrouille.
   const { seaux, drift, unreachableAlert, bloquees } = agregeParSeau(checks, sansLangue);
 
-  // Totaux, pour le rapport et le journal : union des seaux, jamais recalculés à part.
   const cat = (cle) => [...seaux.values()].flatMap((s) => s[cle]);
   const retard = cat("retard"),
     anomalie = cat("anomalie"),
@@ -557,7 +418,6 @@ async function main() {
   const total = checks.length;
   const unreachableRatio = total ? injoignable.length / total : 0;
 
-  // 5) Rapport.
   const report = buildReport({
     total,
     laws: laws.length,
@@ -644,8 +504,6 @@ function buildReport(d) {
   md += `— LégisQuébec pour le Québec, Justice Canada pour le fédéral et les sources PDF `;
   md += `(QCCS, QCCQ, AMF).\n\n`;
 
-  // Ventilation par publieur. Le seuil de joignabilité s'applique PAR SEAU : agrégé, un
-  // blocage total d'un des deux se diluerait sous les 25 % et le job passerait vert.
   if (seaux && seaux.size > 1) {
     md += `| Publieur | Couples | Retard | Injoignables | Dérive | Alerte réseau |\n`;
     md += `|---|---|---|---|---|---|\n`;
@@ -717,7 +575,6 @@ function buildReport(d) {
   return md;
 }
 
-// N'exécute main() que si le script est lancé directement (pas à l'import par les tests).
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   main().catch((e) => {

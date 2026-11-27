@@ -1,21 +1,3 @@
-// Harnais d'évaluation du repérage (plan Discovery v2, §0.4).
-//
-//   node eval/run.mjs                          # tableau seulement (endpoint de production)
-//   node eval/run.mjs --out eval/baselines/2026-07-20.json
-//   node eval/run.mjs --gate [baseline.json]   # échoue (code 1) sur toute régression vs baseline
-//   node eval/run.mjs --refresh-paths          # revalide le cache de chemins et SORT (ne mesure rien)
-//   MCP_URL=http://127.0.0.1:8787/mcp node eval/run.mjs   # contre wrangler dev
-//
-// Pour chaque cas de eval/cases.json (vérité terrain — Appendice A, ⛔ modification par
-// Jason seulement) : appelle search_text (portée du cas) et find_relevant,
-// puis calcule :
-//   - recall@10 : fraction des must_include dans le top 10 de la recherche ;
-//   - MRR       : 1/rang du premier must_include atteint (0 si aucun) ;
-//   - FR        : couverture par find_relevant — un article est « couvert » si un candidat
-//                 pointe sa loi et que son division_path tombe sous le chemin du candidat
-//                 (chemins résolus une fois via get_article, cache cases.resolved.json).
-// UNE session MCP pour tous les appels (eval/mcp-client.mjs).
-
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -27,13 +9,6 @@ const RESOLVED_PATH = join(HERE, "cases.resolved.json");
 const keyOf = (a) => `${a.law}|${a.article}`;
 const EPS = 1e-9;
 
-/**
- * Porte de non-régression contre une baseline figée (`eval/baselines/*.json`).
- *
- * Vérifie que `recall_at_10`, `mrr`, `must_found` et `find_relevant.coverage` ne régressent
- * sur AUCUN cas individuel, et que `cases_zero` n'augmente pas. Les permutations d'ordre
- * en queue de top-10 sans perte de métrique sont consignées comme avis, non comme échecs.
- */
 export function checkBaselineGate(current, baseline) {
   const regressions = [];
   const notices = [];
@@ -79,21 +54,6 @@ export function checkBaselineGate(current, baseline) {
   return { ok: regressions.length === 0, regressions, notices };
 }
 
-/**
- * division_path de chaque article de la vérité terrain (résolu une fois, mis en cache).
- *
- * ⚠️ CE CACHE PEUT MENTIR EN SILENCE. Une clé absente est résolue en direct — bon
- * comportement. Mais une clé PRÉSENTE n'était jamais revérifiée : si le division_path d'un
- * article change en base, `covers()` compare un chemin périmé à un chemin courant et la
- * métrique FR-couv chute sans une seule erreur — on imputerait la chute à une régression de
- * calibration. Pire encore : si l'ancien chemin est un PRÉFIXE du nouveau, `covers()` rend
- * `true` à tort et la couverture est SUR-ESTIMÉE.
- *
- * Seule une réingestion du C.c.Q. ou du C.p.c. peut l'invalider (les 38 clés ne portent que
- * sur ces deux textes) — donc le rafraîchissement semestriel, pas la croissance du corpus.
- * `--refresh-paths` revalide les 38 et SORT sans mesurer : régénérer et mesurer d'un même
- * geste rendrait toute comparaison avec eval/baselines/*.json invalide.
- */
 async function resolvePaths(cases, callTool, { refresh = false } = {}) {
   let cache = {};
   try {
@@ -118,7 +78,6 @@ async function resolvePaths(cases, callTool, { refresh = false } = {}) {
     else if (cache[k] !== path) changed.push({ k, avant: cache[k], apres: path });
     cache[k] = path;
   }
-  // Clés devenues orphelines : la vérité terrain ne les demande plus.
   const orphelines = Object.keys(cache).filter((k) => !wanted.has(k));
 
   if (refresh) {
@@ -147,12 +106,10 @@ async function resolvePaths(cases, callTool, { refresh = false } = {}) {
   return cache;
 }
 
-/** Le chemin d'un candidat couvre-t-il celui d'un article ? ('' / null = loi entière) */
 const covers = (candPath, artPath) =>
   !candPath || artPath === candPath || artPath.startsWith(`${candPath}-`);
 
 async function runCase(c, paths, callTool) {
-  // --- search_text (portée du cas, top 10) ---
   const sArgs = { query: c.query, limit: 10 };
   if (c.law_scope) sArgs.law = c.law_scope;
   if (c.domains) sArgs.domains = c.domains;
@@ -172,7 +129,6 @@ async function runCase(c, paths, callTool) {
   const mrr = Number.isFinite(firstRank) ? 1 / firstRank : 0;
   const niceHits = (c.nice_to_have ?? []).map(keyOf).filter((k) => top.includes(k)).length;
 
-  // --- find_relevant (toujours corpus entier ou domaines du cas — c'est un routeur) ---
   const fArgs = { query: c.query };
   if (c.domains) fArgs.domains = c.domains;
   const f = await callTool("find_relevant", fArgs);
@@ -238,7 +194,7 @@ async function main() {
   console.log(`MCP : ${mcpUrl}\n`);
   await connect();
   const paths = await resolvePaths(cases, callTool, { refresh });
-  if (paths === null) return; // --refresh-paths : on revalide, on ne mesure pas.
+  if (paths === null) return;
 
   const rows = [];
   for (const c of cases) rows.push(await runCase(c, paths, callTool));

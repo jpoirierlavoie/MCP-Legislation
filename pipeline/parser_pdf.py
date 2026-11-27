@@ -1,10 +1,3 @@
-"""Parseur PDF déterministe (zéro LLM, zéro OCR) piloté par profils déclaratifs.
-
-Contrat de phase 0 : `docs/phase0-structure-pdf.md` (§1–§9).
-Miroir de tri et chemins : `pipeline/model.py::sort_key`, `pipeline/paths.py`.
-Importé paresseusement depuis `pipeline/ingest.py::_acquiert_pdf` afin de garder
-la suite CI sans `pymupdf` verte.
-"""
 from __future__ import annotations
 
 import collections
@@ -43,7 +36,6 @@ from .norm import normalize
 
 PROFILES_DIR = config.REPO_ROOT / "pipeline" / "pdf_profiles"
 
-# Constantes PyMuPDF de liens (évite toute dépendance dure à pymupdf dans les tests purs)
 LINK_NONE = 0
 LINK_GOTO = 1
 LINK_URI = 2
@@ -84,7 +76,6 @@ _EN_MONTHS: dict[str, int] = {
     "december": 12,
 }
 
-# Normalisation PUA bornée à la police (§7.3)
 _PUA_BY_FONT: dict[str, dict[str, str]] = {
     "SymbolMT": {
         "\uf0e0": "→",
@@ -116,26 +107,20 @@ _PROV_ALPHANUM_RE = re.compile(
 )
 _DIV_REPEAL_RE = re.compile(r"\(?\bAbrog[ée]e?\.?\)?\.?$", re.I)
 
-
 class PdfParseError(Exception):
-    """Erreur déterministe de parsing PDF (fail-closed)."""
-
+    pass
 
 class ProfileMismatchError(PdfParseError, ValueError):
-    """Profil absent, langue non couverte ou empreinte SHA-256 divergente."""
-
+    pass
 
 class SpanBilanError(PdfParseError, ValueError):
-    """Porte 1 : au moins un span non classé ou écart comptabilisés != total."""
-
+    pass
 
 class TocParityError(PdfParseError, ValueError):
-    """Porte 2 : divergence TDM/signets <-> divisions ou doublon de clé/chemin."""
-
+    pass
 
 class ConsolidationDateError(PdfParseError, ValueError):
-    """Date de consolidation introuvable ou illisible dans le corps/page titre."""
-
+    pass
 
 @dataclass
 class PdfBilan:
@@ -180,7 +165,6 @@ class PdfBilan:
             "source_sha256": self.source_sha256,
         }
 
-
 def load_profile(law_id: str, profiles_dir: Path | None = None) -> dict[str, Any]:
     base = profiles_dir or PROFILES_DIR
     path = base / f"{law_id}.json"
@@ -188,9 +172,7 @@ def load_profile(law_id: str, profiles_dir: Path | None = None) -> dict[str, Any
         raise ProfileMismatchError(f"Profil PDF introuvable : {path}")
     return json.loads(path.read_text(encoding="utf-8"))
 
-
 def normalize_pua_text(text: str, base_font: str) -> str:
-    """Normalise les glyphes PUA selon la police d'origine (SymbolMT, Wingdings2)."""
     mapping = _PUA_BY_FONT.get(base_font)
     if not mapping or not text:
         return text
@@ -200,10 +182,8 @@ def normalize_pua_text(text: str, base_font: str) -> str:
             out = out.replace(src, dst)
     return out
 
-
 def _unmapped_pua_chars(text: str) -> list[str]:
     return [ch for ch in text if 0xE000 <= ord(ch) <= 0xF8FF]
-
 
 def _normalize_table_cell_pua(
     cell_text: str,
@@ -214,7 +194,6 @@ def _normalize_table_cell_pua(
     page_num: int,
     bilan_obj: PdfBilan,
 ) -> str:
-    """Normalise les glyphes PUA d'une cellule de tableau selon les polices présentes dans sa bbox."""
     if not cell_text or not _unmapped_pua_chars(cell_text):
         return cell_text
     bx0, by0, bx1, by1 = cell_bbox if cell_bbox is not None else table_bbox
@@ -239,9 +218,7 @@ def _normalize_table_cell_pua(
         )
     return out
 
-
 def parse_consolidation_date_text(text: str, lang: str = "fr") -> str | None:
-    """Convertit une date textuelle ('1er janvier 2026', '23 février 2026', 'January 1, 2026') en ISO."""
     cleaned = re.sub(r"\s+", " ", text or "").strip()
     if not cleaned:
         return None
@@ -267,12 +244,10 @@ def parse_consolidation_date_text(text: str, lang: str = "fr") -> str | None:
                 return f"{int(m2.group(3)):04d}-{month:02d}-{int(m2.group(1)):02d}"
     return None
 
-
 def extract_consolidation_date(
     lines_by_page: dict[int, list[LineRecord]],
     date_cfg: dict[str, Any],
 ) -> str:
-    """Extrait la date « À jour au … » depuis les pages configurées (jamais /ModDate)."""
     pages = date_cfg.get("pages") or [1]
     pattern = re.compile(date_cfg["regex"], re.I)
     lang = date_cfg.get("lang", "fr")
@@ -314,7 +289,6 @@ def extract_consolidation_date(
         f"Date de consolidation introuvable sur les pages {pages} (motif {date_cfg.get('regex')!r})."
     )
 
-
 def _rect_tuple(rect_obj: Any) -> tuple[float, float, float, float] | None:
     if rect_obj is None:
         return None
@@ -323,7 +297,6 @@ def _rect_tuple(rect_obj: Any) -> tuple[float, float, float, float] | None:
     if all(hasattr(rect_obj, k) for k in ("x0", "y0", "x1", "y1")):
         return (float(rect_obj.x0), float(rect_obj.y0), float(rect_obj.x1), float(rect_obj.y1))
     return None
-
 
 def _apply_derotation(rect_obj: Any, derotation_matrix: Any) -> tuple[float, float, float, float] | None:
     if derotation_matrix is not None and rect_obj is not None:
@@ -334,9 +307,7 @@ def _apply_derotation(rect_obj: Any, derotation_matrix: Any) -> tuple[float, flo
         rect_obj = rect_obj * derotation_matrix
     return _rect_tuple(rect_obj)
 
-
 def _clean_link_label(raw: str) -> str:
-    """Nettoie les artefacts de bordure d'une étiquette d'ancre de lien PDF."""
     s = _norm(raw)
     if not s:
         return ""
@@ -348,7 +319,6 @@ def _clean_link_label(raw: str) -> str:
     s = re.sub(r"[,;:\s]+$", "", s)
     return s.strip()
 
-
 def filter_raw_links(
     raw_links: list[dict[str, Any]],
     *,
@@ -357,7 +327,6 @@ def filter_raw_links(
     derotation_matrix: Any = None,
     links_cfg: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Filtre les annotations de liens PyMuPDF selon §4.3 / §7.7."""
     cfg = links_cfg or {}
     allowed_schemes = set(cfg.get("allowed_schemes") or ["https", "http", "mailto"])
     ignore_bad_mailto = bool(cfg.get("ignore_mailto_without_at_domain", True))
@@ -460,9 +429,7 @@ def filter_raw_links(
         item.pop("_raw_anchor", None)
     return kept
 
-
 def deduplicate_article_links(items: list[dict[str, str]]) -> str | None:
-    """Déduplique par URL et sérialise en JSON `[{'label': ..., 'url': ...}]` (ou None)."""
     by_url: dict[str, str] = {}
     order: list[str] = []
     for item in items:
@@ -480,13 +447,10 @@ def deduplicate_article_links(items: list[dict[str, str]]) -> str | None:
     payload = [{"label": by_url[u], "url": u} for u in order]
     return json.dumps(payload, ensure_ascii=False)
 
-
 def _line_non_ws(ln: LineRecord) -> list[SpanRecord]:
     return [sp for sp in ln.spans if sp.norm_text]
 
-
 def match_history_line(ln: LineRecord, history_cfg: dict[str, Any]) -> bool:
-    """Détecte une ligne d'historique par combinaison préfixe + typographie (§4.2)."""
     non_ws = _line_non_ws(ln)
     if not non_ws:
         return False
@@ -506,7 +470,6 @@ def match_history_line(ln: LineRecord, history_cfg: dict[str, Any]) -> bool:
         return True
     return False
 
-
 def match_provision_prefix(
     text: str,
     number_mode: str = "numeric",
@@ -516,7 +479,6 @@ def match_provision_prefix(
     allow_empty_rest: bool = False,
     allow_prose_following: bool = False,
 ) -> tuple[str, str] | None:
-    """Extrait `(numero, reste)` en début de disposition avec gardes anti-faux-positifs (§7.6)."""
     if not text:
         return None
     if number_mode == "alphanumeric":
@@ -532,15 +494,12 @@ def match_provision_prefix(
     if require_dot_in_number and "." not in num:
         return None
 
-    # Garde 1 : sans délimiteur ni point interne, une lettre attachée (ex. « 2A Champ ») est rejetée
     has_letters = any(c.isalpha() for c in num)
     if has_letters and "." not in num and not delim and not allow_undelimited_alphanum:
         return None
-    # Garde 2 : rejeter « 1er », « 12 $ », « 100 % », « 45-106 », « 2026-02-23 »
     if rest and _BAD_NUMERIC_UNIT_RE.match(rest):
         if not (allow_prose_following and re.match(r"^An\s+[A-Za-z]", rest)):
             return None
-    # Garde 3 : chiffre entier sans délimiteur suivi d'un mot-outil minuscule (« 2019 CSC », « 12 ou »)
     if not delim and "." not in num and not has_letters:
         if rest and not allow_prose_following and _BAD_NUMERIC_LOWER_PROSE_RE.match(rest):
             return None
@@ -548,9 +507,7 @@ def match_provision_prefix(
             return None
     return num, rest
 
-
 def parse_printed_toc(toc_lines: list[LineRecord], toc_cfg: dict[str, Any]) -> list[tuple[int, str]]:
-    """Reconstruit les rubriques `(niveau, titre)` depuis les pages liminaires de TDM (§3.1)."""
     trailing_re = re.compile(toc_cfg.get("trailing_page_regex", r"(?:\s*\.{2,}\s*|\s+)\d+\s*$"))
     l1_max = float(toc_cfg.get("level1_x0_max", 98.0))
     req_bold = bool(toc_cfg.get("require_bold_for_level1", True))
@@ -580,7 +537,6 @@ def parse_printed_toc(toc_lines: list[LineRecord], toc_cfg: dict[str, Any]) -> l
         entries.append((buf_lvl, clean))
     return entries
 
-
 def _toc_cmp_norm(s: str | None, *, strip_parentheticals: bool = False) -> str:
     raw = s or ""
     if strip_parentheticals:
@@ -589,7 +545,6 @@ def _toc_cmp_norm(s: str | None, *, strip_parentheticals: bool = False) -> str:
     n = n.replace("\u2019", "'").replace("\u2018", "'")
     n = re.sub(r"\s+", " ", n)
     return n.rstrip(".").strip()
-
 
 def _is_all_bold_non_italic(spans: list[SpanRecord]) -> bool:
     if not spans:
@@ -601,7 +556,6 @@ def _is_all_bold_non_italic(spans: list[SpanRecord]) -> bool:
             return False
     return True
 
-
 def _is_bold_lead_non_italic(spans: list[SpanRecord]) -> bool:
     if not spans:
         return False
@@ -610,10 +564,8 @@ def _is_bold_lead_non_italic(spans: list[SpanRecord]) -> bool:
     is_italic = bool(first.flags & 2) or ("Italic" in first.base_font)
     return is_bold and not is_italic
 
-
 def _is_any_bold(spans: list[SpanRecord]) -> bool:
     return bool(spans) and all(bool(s.flags & 16) or ("Bold" in s.base_font) for s in spans)
-
 
 def _is_subitem_or_new_para(
     text: str,
@@ -638,14 +590,12 @@ def _is_subitem_or_new_para(
     if text.startswith("PRENEZ AVIS"):
         return True
     if x0 >= subitem_x0_min and prev_text.endswith((".", ":", ";")):
-        # Paragraphe distinct s'il s'agit d'une phrase complète débutant par une majuscule après alinéa terminé
         if text[:1].isupper() and (
             abs(x0 - subitem_x0_min) >= 10.0
             or (dy_same_page is not None and dy_same_page >= 20.0)
         ):
             return True
     return False
-
 
 _UNNUMBERED_MID_CITE_TAIL_RE = re.compile(
     r"(?:\b(?:19|20)\d{2}|\b(?:CSC|SCC|QCCA|QCCS|QCCQ|ONCA)|R\.?C\.?S\.?|R\.?J\.?Q\.?)$"
@@ -654,7 +604,6 @@ _UNNUMBERED_END_CITE_RE = re.compile(
     r"(?:\b(?:19|20)\d{2}\s+(?:CSC|SCC|QCCA|QCCS|QCCQ|QCTP|QCBDR|ONCA|UKPC|CanLII)\s+\d+"
     r"|\b(?:R\.?C\.?S\.?|S\.?C\.?R\.?|R\.?J\.?Q\.?|C\.?A\.?)\s+\d+)\s*$"
 )
-
 
 def _is_new_unnumbered_entry(
     prev_text: str,
@@ -685,7 +634,6 @@ def _is_new_unnumbered_entry(
         return prev_line.endswith((".", ")")) or bool(_UNNUMBERED_END_CITE_RE.search(prev_line))
     return False
 
-
 def _match_in_box_blocks(ln: LineRecord, page_num: int, blocks: list[dict[str, Any]]) -> bool:
     non_ws = _line_non_ws(ln)
     if not non_ws:
@@ -705,14 +653,12 @@ def _match_in_box_blocks(ln: LineRecord, page_num: int, blocks: list[dict[str, A
         return True
     return False
 
-
 def _join_lines_dehyphenated(
     prev: str,
     nxt: str,
     preserve_hyphens: set[str],
     enabled: bool = False,
 ) -> str:
-    """Joint deux lignes avec dé-césure des traits d'union finaux (- et U+2010), sauf composés."""
     if not prev:
         return nxt
     if not nxt:
@@ -727,14 +673,12 @@ def _join_lines_dehyphenated(
             return f"{prev[:-1]}{nxt}"
     return f"{prev} {nxt}"
 
-
 def _extract_clean_line_text(
     ln: LineRecord,
     *,
     strip_note_refs: bool = False,
     collapse_smallcaps_ordinals: bool = False,
 ) -> tuple[str, list[int]]:
-    """Reconstruit une ligne en isolant les appels de note en exposant et les ordinaux/petites capitales."""
     if not strip_note_refs and not collapse_smallcaps_ordinals:
         return ln.norm_text, []
 
@@ -807,12 +751,10 @@ def _extract_clean_line_text(
     cleaned = _norm("".join(out))
     return cleaned, refs
 
-
 def _slice_outline_toc(
     raw_toc_all: list[tuple[int, str, int]],
     toc_cfg: dict[str, Any],
 ) -> list[tuple[int, str, int]]:
-    """Extrait un sous-arbre des signets PDF entre deux marqueurs déclaratifs (bilingue multi-lois)."""
     start_after = toc_cfg.get("outline_start_after")
     stop_before = toc_cfg.get("outline_stop_before")
     if not start_after and not stop_before:
@@ -837,7 +779,6 @@ def _slice_outline_toc(
             break
         sliced.append((max(1, lvl - (start_lvl - 1)), title, pg))
     return sliced
-
 
 def _match_band(
     ln: LineRecord,
@@ -873,13 +814,11 @@ def _match_band(
             return False
     return bool(re.match(band_cfg["regex"], ln.norm_text, re.I))
 
-
 def _bucket_line(bilan: PdfBilan, ln: LineRecord, bucket: str) -> None:
     ws_count = sum(1 for sp in ln.spans if not sp.norm_text)
     non_ws_count = len(ln.spans) - ws_count
     bilan.add_span("whitespace_only", ws_count)
     bilan.add_span(bucket, non_ws_count)
-
 
 def _check_vectorize_id_limit(law_id: str, number: str) -> None:
     vid = f"art:{law_id}:{number}"
@@ -888,9 +827,7 @@ def _check_vectorize_id_limit(law_id: str, number: str) -> None:
             f"Identifiant Vectorize trop long (> 64 octets UTF-8) : {vid!r}"
         )
 
-
 def _make_bounded_slug(law_id: str, raw_slug: str, used: set[str]) -> str:
-    """Produit un slug ASCII <= (64 - len('art:' + law_id + ':')) octets, unique dans `used`."""
     prefix_len = len(f"art:{law_id}:".encode("utf-8"))
     max_slug_len = max(8, 64 - prefix_len)
     base = re.sub(r"[^a-z0-9]+", "-", (normalize(raw_slug) or "").lower()).strip("-") or "section"
@@ -908,9 +845,7 @@ def _make_bounded_slug(law_id: str, raw_slug: str, used: set[str]) -> str:
             return c2
         idx += 1
 
-
 def _annexe_section_slug(title: str, parent_slug: str | None) -> str:
-    """Slug déterministe pour une section/sous-section d'annexe AMF (<= 64 o Vectorize)."""
     norm_t = (normalize(title) or "").lower()
     if norm_t.startswith("dispositions transitoires"):
         return "dispositions-transitoires"
@@ -924,7 +859,6 @@ def _annexe_section_slug(title: str, parent_slug: str | None) -> str:
     short = re.sub(r"[^a-z0-9]+", "-", norm_t).strip("-")[:24].rstrip("-")
     return f"{parent_slug}-{short}" if parent_slug else (short or "annexe")
 
-
 def parse_pdf(
     pdf_path: str | Path,
     law: Law,
@@ -935,7 +869,6 @@ def parse_pdf(
     verify_sha256: bool = True,
     bilan: PdfBilan | None = None,
 ) -> tuple[list[Division], list[Article]]:
-    """Parse déterministe d'un PDF officiel selon son profil JSON (§8.1)."""
     if pymupdf is None:
         raise MissingDependencyError("pymupdf n'est pas installé dans cet environnement.")
 
@@ -1097,7 +1030,6 @@ def parse_pdf(
 
             derot = page.derotation_matrix if page.rotation else None
 
-            # Extraction déterministe des tableaux si activée sur cette page
             page_tables: list[dict[str, Any]] = []
             use_tables_on_page = tables_enabled and (
                 (table_pages_set is not None and p_num in table_pages_set)
@@ -1191,7 +1123,6 @@ def parse_pdf(
                     if tmp_tab_doc is not None:
                         tmp_tab_doc.close()
                 if page_tables:
-                    # Exclure les spans contenus dans un tableau (hors bandeaux haut/bas)
                     hdr_y_max = float(running_header_cfg["y_max"]) if running_header_cfg and "y_max" in running_header_cfg else -1.0
                     ftr_y_min = (
                         float(running_footer_cfg["y_ratio_min"]) * page_h
@@ -1234,7 +1165,6 @@ def parse_pdf(
                 links_cfg=fcfg.get("links"),
             )
 
-        # Porte 0 : refus dur numérisé (zéro OCR, zéro LLM)
         denom_pages = max(1, scoped_pages_seen if scope_active else page_count)
         avg_non_ws = total_non_ws_chars / denom_pages
         if (
@@ -1251,18 +1181,15 @@ def parse_pdf(
         if image_only_pages:
             bilan_obj.warnings.append(f"Pages image minoritaires détectées : {image_only_pages}")
 
-        # Date de consolidation depuis le texte (jamais /ModDate)
         date_cfg = fcfg.get("consolidation_date")
         if date_cfg:
             consol_date = extract_consolidation_date(lines_by_page, date_cfg)
             setattr(law, f"consol_date_{lang}", consol_date)
 
-        # Signets PDF s'ils existent
         pdf_toc = doc.get_toc(simple=False)
     finally:
         doc.close()
 
-    # --- Parcours des pages : liminaire, corps, annexes ---
     toc_pages = set(int(p) for p in (fcfg.get("toc_pages") or []))
     body_start = int(fcfg.get("body_start_page", 1))
     annexe_start = fcfg.get("annexe_start_page")
@@ -1360,7 +1287,7 @@ def parse_pdf(
     trailing_log_art: Article | None = None
     current_div: Division | None = None
     current_article: Article | None = None
-    last_opened_node: str | None = None  # "division" | "article"
+    last_opened_node: str | None = None
     last_opened_bucket: str | None = None
     article_title_active = False
     pending_bare_provision = False
@@ -1369,8 +1296,8 @@ def parse_pdf(
     pending_div_refs: list[int] = []
     pending_marginal_note: str | None = None
     pending_mn_refs: list[int] = []
-    last_prose_meta: tuple[int, float, bool] | None = None  # (page, y0, is_bold)
-    last_body_pos: tuple[int, float] | None = None  # (page, y0)
+    last_prose_meta: tuple[int, float, bool] | None = None
+    last_body_pos: tuple[int, float] | None = None
     ann_full_section_rep_arts: set[int] = set()
     tabular_pending_row: list[str] | None = None
 
@@ -1418,7 +1345,6 @@ def parse_pdf(
     div_intro_pre_num = fcfg.get("division_intro_preamble_number")
     allow_div_intro = bool(typo.get("allow_division_intro_prose", False))
 
-    # Pré-extraction des notes de fin de document si configurée (ex. CONST_TRD.pdf pp. 86–115)
     endnotes_cfg = fcfg.get("endnotes") or {}
     endnotes_map: dict[int, str] = {}
     endnotes_pages_list = [int(p) for p in (endnotes_cfg.get("pages") or [])]
@@ -1621,7 +1547,6 @@ def parse_pdf(
 
         page_lines = lines_by_page.get(p_num, [])
         page_tables = tables_by_page.get(p_num, [])
-        # Entrelacer lignes et tableaux par y0 croissant
         events: list[tuple[float, int, str, Any]] = []
         for idx_l, ln in enumerate(page_lines):
             events.append((ln.y0, 0, "line", (idx_l, ln)))
@@ -1714,7 +1639,6 @@ def parse_pdf(
             first_sp = non_ws[0]
             x0 = first_sp.x0
 
-            # Journal chronologique de modifications en queue de document (AMF)
             hist_x0_min = float(hist_cfg.get("x0_min", 0.0))
             hist_x0_max = float(hist_cfg.get("x0_max", 999.0))
             if not in_trailing_log and trailing_log_re is not None:
@@ -1751,7 +1675,6 @@ def parse_pdf(
                 last_opened_bucket = "history"
                 continue
 
-            # Transition vers les annexes
             if not in_annexes and (
                 p_num >= annexe_start_page
                 or (ann_start_heading and _toc_cmp_norm(ln.norm_text) == _toc_cmp_norm(ann_start_heading))
@@ -1762,7 +1685,6 @@ def parse_pdf(
             if in_annexes:
                 norm_ln = _toc_cmp_norm(ln.norm_text)
 
-                # Mode full_sections (AMF, Lois constitutionnelles) piloté par les signets TOC post-annexe
                 if ann_mode == "full_sections" and ann_toc_idx < len(annexe_toc_queue):
                     next_lvl, next_title, next_pg = annexe_toc_queue[ann_toc_idx]
                     if p_num >= next_pg and _is_any_bold(non_ws):
@@ -1867,7 +1789,6 @@ def parse_pdf(
                             ann_toc_idx += 1
                             continue
 
-                # Mode list_sections (ex. DAA)
                 if ann_ls_idx < len(ann_list_sections):
                     ls_cfg = ann_list_sections[ann_ls_idx]
                     if p_num >= int(ls_cfg["page"]) and _is_any_bold(non_ws):
@@ -2104,8 +2025,6 @@ def parse_pdf(
                 _bucket_line(bilan_obj, ln, "unclassified")
                 continue
 
-            # --- Pages de corps ---
-            # Priorité A : Note de bas de page
             foot_y0_min = float(foot_cfg.get("y0_min", 650.0))
             foot_lead_max = float(foot_cfg.get("lead_size_max_pt", 7.5))
             foot_body_max = float(foot_cfg.get("body_size_max_pt", 10.5))
@@ -2145,7 +2064,6 @@ def parse_pdf(
                     last_opened_bucket = "footnote"
                     continue
 
-            # Priorité B : Historique (préfixe + typographie, ou continuation 9pt multi-lignes)
             hist_cont_sz = hist_cfg.get("continue_while_max_size_pt")
             is_hist_cont = (
                 hist_cont_sz is not None
@@ -2170,7 +2088,6 @@ def parse_pdf(
                 last_opened_bucket = "history"
                 continue
 
-            # Priorité C : Intitulé de division
             cleaned_txt, line_refs = _extract_clean_line_text(
                 ln,
                 strip_note_refs=strip_sup_refs,
@@ -2259,7 +2176,6 @@ def parse_pdf(
                     last_opened_bucket = "heading_or_division"
                     continue
             else:
-                # Suite d'un pending_heading en cours (peut déborder sur x0 <= h_wrap_x0_max ou être BoldItalic pour ABROGÉE)
                 is_heading_wrap = (
                     pending_heading is not None
                     and pending_heading["page"] == p_num
@@ -2307,7 +2223,6 @@ def parse_pdf(
 
             _flush_pending_heading()
 
-            # Notes marginales en titre courant d'article (lois fédérales / art. 14 L.I.)
             if mn_cfg:
                 mn_x0_min = float(mn_cfg.get("x0_min", 0.0))
                 mn_x0_max = float(mn_cfg.get("x0_max", 999.0))
@@ -2331,7 +2246,6 @@ def parse_pdf(
                     last_opened_bucket = "marginal_note"
                     continue
 
-            # Priorité D : Disposition numérotée
             req_bold_lead = bool(prov_cfg.get("require_bold_lead", False))
             titled_mode = bool(prov_cfg.get("titled_heading_mode", False))
             if (
@@ -2383,7 +2297,6 @@ def parse_pdf(
                     last_opened_bucket = bkt
                     continue
 
-            # Priorité E : Division de prose non numérotée (ex. listes de jurisprudence, PRÉAMBULE)
             if current_div is not None and _toc_cmp_norm(current_div.heading) in unnumbered_by_norm:
                 u_cfg = unnumbered_by_norm[_toc_cmp_norm(current_div.heading)]
                 u_min_x0 = float(u_cfg.get("min_x0", 0.0))
@@ -2433,7 +2346,6 @@ def parse_pdf(
                     last_opened_bucket = "jurisprudence_list"
                     continue
 
-            # Priorité E2 : Préambule avant la 1re division (ex. encadré note-preliminaire AMF, préambule 1867)
             if preamble_number and current_div is None and x0 >= h_x0_min:
                 if current_article is None:
                     _check_vectorize_id_limit(law.id, preamble_number)
@@ -2472,7 +2384,6 @@ def parse_pdf(
                 last_opened_bucket = "body_text"
                 continue
 
-            # Priorité E3 : Prose introductive de division avant le 1er article numéroté
             if allow_div_intro and current_div is not None and x0 >= h_x0_min and (
                 current_article is None
                 or current_article.number.startswith("intro-")
@@ -2528,7 +2439,6 @@ def parse_pdf(
                 last_opened_bucket = "body_text"
                 continue
 
-            # Priorité F : Sous-éléments et continuations
             sub_x0_min = float(prov_cfg.get("subitem_x0_min", 115.0))
             if (
                 pending_bare_provision
@@ -2615,7 +2525,6 @@ def parse_pdf(
                 last_opened_bucket = bkt
                 continue
 
-            # Fallback : span non classé -> Porte 1 échouera
             _bucket_line(bilan_obj, ln, "unclassified")
 
     _flush_pending_heading()
@@ -2629,7 +2538,6 @@ def parse_pdf(
                 if notes_txt:
                     a.footnotes = f"{a.footnotes}\n{notes_txt}" if a.footnotes else notes_txt
 
-    # --- Rattachement des liens par intersection de bbox ---
     for p_num, page_links in links_by_page.items():
         page_arts = art_by_page.get(p_num, [])
         if not page_arts:
@@ -2652,7 +2560,6 @@ def parse_pdf(
                             best_area = area
                             best_art = a
             if best_art is None:
-                # Repli : article le plus proche verticalement au-dessus ou sur la ligne
                 ly = lbox[1]
                 best_dist = float("inf")
                 for a in page_arts:
@@ -2670,7 +2577,6 @@ def parse_pdf(
         if raw_art_links:
             a.links = deduplicate_article_links(raw_art_links)
 
-    # --- Porte 1 : Bilan de matière 100 % des spans ---
     if bilan_obj.unclassified > 0 or bilan_obj.accounted_spans != bilan_obj.total_spans or bilan_obj.total_spans == 0:
         raise SpanBilanError(
             f"Porte 1 (Bilan des spans) en échec pour {law.id}/{lang} : "
@@ -2678,7 +2584,6 @@ def parse_pdf(
             f"non_classés={bilan_obj.unclassified}"
         )
 
-    # --- Porte 2 : Parité TDM/signets <-> Divisions + unicité des clés ---
     if toc_source == "none":
         bilan_obj.toc_titles = []
     else:
@@ -2731,7 +2636,6 @@ def parse_pdf(
 
     return divisions, articles
 
-
 def apply_text_replacements(
     divisions: list[Division],
     articles: list[Article],
@@ -2741,7 +2645,6 @@ def apply_text_replacements(
     law_id: str,
     lang: str,
 ) -> None:
-    """Applique des corrections typographiques déclaratives (directives uniquement, fail-closed si 0 effet)."""
     if not replacements:
         return
     if fonction != "directive":
@@ -2774,7 +2677,6 @@ def apply_text_replacements(
         if hits == 0:
             raise PdfParseError(f"text_replacements sans effet dans {law_id}/{lang} : {src!r}")
 
-
 def write_preview_md(
     out_dir: Path,
     law: Law,
@@ -2783,7 +2685,6 @@ def write_preview_md(
     articles: list[Article],
     bilan: PdfBilan,
 ) -> Path:
-    """Écrit `pipeline/out/<law_id>-<lang>.preview.md` en UTF-8 LF sans BOM."""
     out_dir.mkdir(parents=True, exist_ok=True)
     preview_path = out_dir / f"{law.id}-{lang}.preview.md"
     consol = getattr(law, f"consol_date_{lang}", None) or "inconnue"
@@ -2791,7 +2692,7 @@ def write_preview_md(
         f"# Aperçu d'ingestion PDF — {law.id} ({lang})",
         "",
         f"- **Titre :** {law.name_fr if lang == 'fr' else law.name_en}",
-        f"- **Citation :** {law.rlrq_cite}",
+        f"- **Citation :** {law.official_cite}",
         f"- **Source :** `pdf` (`unit={law.unit}`)",
         f"- **Date de consolidation :** `{consol}`",
         f"- **SHA-256 :** `{bilan.source_sha256}`",
