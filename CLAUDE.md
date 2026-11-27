@@ -17,7 +17,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 | 3 | **Schéma** | `data/schema.sql`, `data/schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
 | 4 | **README.md** et manifestes | `README.md`, `SECURITY.md`, `LICENSE` (`Apache-2.0`), `NOTICE`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `CLAUDE.md`, `GEMINI.md`, `/mcp/server-card` | tout ce qui change ce que le dépôt annonce faire, sa licence, sa confidentialité ou sa connectivité |
 | 5 | **Page publique** (HTML `GET /`) | `data/catalogue.json` + `src/site.ts` (`test/page-client.test.mjs`, `test/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil |
-| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (manifestes, `skills/`, `verifier.py`, `verifier_tout.py`), `MCP-Socle` (`v0.8.7`), `MCP-Acces`, `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, quotas, page publique `GET /`, confidentialité ou licence |
+| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (`v3.4.0`, manifestes, `skills/`, `verifier.py`, `verifier_tout.py`), `MCP-Socle` (`v0.8.8`), `MCP-Acces`, `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, quotas, page publique `GET /`, confidentialité ou licence |
 
 **Procédure obligatoire :**
 1. Énoncer explicitement l'impact vérifié sur chacune des 6 surfaces (« non touchée » vérifié et motivé, jamais passé sous silence).
@@ -31,7 +31,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 ```
          ┌────────────────────────────────────────────────────────────────┐
-         │          droit-civil-quebecois (Plugin Cadre v3.3.2)           │
+         │          droit-civil-quebecois (Plugin Cadre v3.4.0)           │
          │  10 compétences · 60 feuilles · 6 personas · 4 scripts stdlib  │
          └──────────┬───────────────────────┬──────────────────┬──────────┘
                     │                       │                  │
@@ -40,11 +40,11 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
                     ▼                       ▼                  ▼
          ┌─────────────────────┐ ┌─────────────────────┐ ┌──────────────────────────┐
          │   MCP-Legislation   │ │  MCP-Jurisprudence  │ │        MCP-Outils        │
-         │  D1 `legislation` + │ │  D1 `canlii` + BYOK │ │   Worker public, D1 RO   │
-         │  `DB_IDENTITE` + AI │ │   `DB_IDENTITE`     │ │       zéro secret        │
-         └──────────┬──────────┘ └──────────┬──────────┘ └──────────────────────────┘
-                    └───────────┬───────────┘
-                                ▼ (`@poirierlavoie/mcp-socle` v0.8.7, zéro runtime dep)
+         │  D1 `legislation` + │ │  D1 `canlii` + BYOK │ │   4 D1 RO + `DB_IDENTITE` │
+         │  `DB_IDENTITE` + AI │ │   `DB_IDENTITE`     │ │  (sans clé API CanLII)   │
+         └──────────┬──────────┘ └──────────┬──────────┘ └────────────┬─────────────┘
+                    └───────────────────────┴─────────────────────────┘
+                                ▼ (`@poirierlavoie/mcp-socle` v0.8.8, zéro runtime dep)
                  ┌──────────────────────────────────────────┐
                  │  MCP-Socle + MCP-Acces (`mcp-identite`)  │
                  │  Jetons individuels, OAuth 2.1 PKCE S256 │
@@ -53,7 +53,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 ```
 
 ### Trois morceaux internes
-1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle` `0.8.7`) + 10 outils courts (`list_laws`, `list_subjects`, `related_laws`, `find_relevant`, `get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`), D1 `DB` (`legislation`) + D1 `DB_IDENTITE` (`mcp-identite`), Workers AI (`bge-m3`) + Vectorize (`legislation-articles`). Zéro `dependencies` d'exécution.
+1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle` `0.8.8`) + 10 outils courts (`list_laws`, `list_subjects`, `related_laws`, `find_relevant`, `get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`), D1 `DB` (`legislation`) + D1 `DB_IDENTITE` (`mcp-identite`), Workers AI (`bge-m3`) + Vectorize (`legislation-articles`). Zéro `dependencies` d'exécution.
 2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours `PYTHONUTF8=1`) — Ingère les EPUB LégisQuébec, les XML LIMS Justice Canada et les PDF déclaratifs (`pipeline/parser_pdf.py`, `pipeline/pdf_profiles/*.json`) par staging → validation → bascule (`pipeline/ingest.py`, `pipeline/refresh.py`).
 3. **Données versionnées** — `data/laws.config.json`, `pipeline/expected/served.json`, `data/catalogue.json`, `data/taxonomy.json`, `data/relations.json`, `data/tools-list.reference.json`, `data/schema.sql` + `data/schema-decouverte.sql` + `migrations/`. `data/tools-list.reference.json` (capturée le 2026-09-16) fige le contrat `tools/list` historique et alimente la génération de `src/schemas.ts` (`node scripts/engendrer-schemas.mjs`) et les tests (`test/schemas-engendres.test.ts`, `test/routeur.test.ts`). Aucun décompte vivant n'est recopié en prose (R10).
 
@@ -63,12 +63,12 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 
 1. **Double montage (`/mcp` et `/mcp/oauth`) et coupe-circuit (`MCP_ENABLED`) :**
    - `MCP_ENABLED !== "true"` coupe `/mcp*`, `/.well-known/oauth-protected-resource/mcp/oauth` et `/health` en `404`, tout en laissant `GET /` ouvert (`200`, `G22`).
-   - `/mcp` (`PORTE` dans `src/auth.ts`) accepte en parallèle les jetons individuels `DB_IDENTITE` (`portee` `'legislation'` ou `'les_deux'`, titulaire `actif` ou `limite`) et les secrets partagés transitoires de Phase 3a (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`), sous `Authorization: Bearer <jeton>`, `?key=<jeton>` ou `/mcp/<jeton>` (slash final toléré). Tout refus sur `/mcp` renvoie **uniformément `404` sans corps ni `WWW-Authenticate`** (`S8`, `G7`, `G23`). `/mcp/server-card` (`/.well-known/mcp/server-card.json`) et `/mcp/oauth` sont interceptés avant `/mcp/<jeton>`.
+   - `/mcp` (`PORTE` dans `src/auth.ts`) accepte en parallèle les jetons individuels `DB_IDENTITE` (`portee` `'tous'`, `'legislation'` ou `'les_deux'` héritée, titulaire `actif` ou `limite`) et les secrets partagés transitoires de Phase 3a (`MCP_TOKEN`, `MCP_TOKEN_VEILLE`), sous `Authorization: Bearer <jeton>`, `?key=<jeton>` ou `/mcp/<jeton>` (slash final toléré). Tout refus sur `/mcp` renvoie **uniformément `404` sans corps ni `WWW-Authenticate`** (`S8`, `G7`, `G23`). `/mcp/server-card` (`/.well-known/mcp/server-card.json`) et `/mcp/oauth` sont interceptés avant `/mcp/<jeton>`.
    - `/mcp/oauth` (`PORTE_OAUTH`) accepte **uniquement** `Authorization: Bearer <jeton>` (aucun `?key=`, aucun segment `/mcp/oauth/<x>`, aucun secret partagé de Worker). Tout refus renvoie `401` RFC 9728 pointant vers `GET /.well-known/oauth-protected-resource/mcp/oauth` (`authorization_servers: ["https://acces.poirierlavoie.ca"]`), tandis que la racine `GET /.well-known/oauth-protected-resource` reste en `404`.
    - Le contrôle de méthode `POST` (`405`) s'exécute **après** l'authentification sur `/mcp` comme sur `/mcp/oauth` (`G23`).
 2. **Débit à deux niveaux et quotas journaliers (`G32`, `G34`) :**
    - Pré-auth par IP (`RL_PRE_AUTH_IP` `1011` 600/min, `RL_ECHEC_IP` `1012` 20/min, `RL_ECHECS_GLOBAL` `1013` 300/min) + `QuarantaineIpEchecs` contournée par tout jeton valide déjà reconnu afin de protéger les IP partagées de cabinets ou de clients infonuagiques.
-   - Post-auth par `titulaire_id` (`RL_TITULAIRE` `1014` 300/min en état `actif`, `RL_TITULAIRE_LIMITE` `1015` 20/min en état `limite`), puis quotas journaliers UTC dans `DB_IDENTITE.compteur_jour` vérifiés sur le nom d'outil du corps JSON-RPC (`local`: 1 500/j `actif`, 150/j `limite` ; `semantique`: 150/j `actif`, 15/j `limite` -> HTTP `200` `isError: true` `[QUOTA_EPUISE]`).
+   - Post-auth par `titulaire_id` (`RL_TITULAIRE` `1014` 300/min en état `actif`, `RL_TITULAIRE_LIMITE` `1015` 20/min en état `limite`), puis quotas journaliers UTC dans `DB_IDENTITE.compteur_jour` vérifiés sur le nom d'outil du corps JSON-RPC (`local`: 3 000/j `actif`, 300/j `limite` ; `semantique`: 150/j `actif`, 15/j `limite` -> HTTP `200` `isError: true` `[QUOTA_EPUISE]`).
 3. **Opt-out `hybride_permis` (`S19`) :**
    - Si `principal.type === "titulaire"` et `!principal.hybridePermis`, `search_text` s'exécute uniquement en recherche lexicale FTS5 locale (sans jamais appeler `env.AI` ni `env.VECTORS`, facturé en classe `local`) et l'énonce explicitement dans la prose servie ainsi que via `hybride_desactive: true` dans `structuredContent`.
 4. **Zéro journalisation de contenu et observabilité désactivée (`S13`, `S14`, `G9`, `G37`) :**

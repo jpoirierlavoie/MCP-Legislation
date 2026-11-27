@@ -12,7 +12,7 @@ export const PACKAGE_NAME = "mcp-legislation";
 
 export const SERVER_INFO = {
   name: "Législation du Québec et du Canada",
-  version: "2.2.3",
+  version: "2.2.4",
 } as const;
 
 export const PUBLIC_DESCRIPTION =
@@ -23,7 +23,7 @@ export const PUBLIC_DESCRIPTION =
 const ORIGINE_PORTAIL_DEFAUT = "https://acces.poirierlavoie.ca";
 export const META_RESSOURCE_OAUTH_URL =
   "https://legislation.poirierlavoie.ca/.well-known/oauth-protected-resource/mcp/oauth";
-export const SCOPE_OAUTH = "legislation les_deux";
+export const SCOPE_OAUTH = "legislation tous";
 
 export function carteServeur() {
   return construireCarteServeur({

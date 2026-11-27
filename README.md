@@ -12,7 +12,7 @@ Source des données : les publications officielles de [LégisQuébec](https://ww
 
 ## Accès
 
-Ce serveur est réservé aux membres actifs en règle du Barreau du Québec. La gestion des demandes d'accès et des jetons individuels s'effectue sur <https://acces.poirierlavoie.ca/demande> et <https://acces.poirierlavoie.ca/moi> (ou par courriel à <jason@poirierlavoie.ca>) : chaque titulaire dispose de son propre accès révocable indépendamment. Aucun texte de requête n'est journalisé.
+Ce serveur est réservé aux membres actifs en règle du Barreau du Québec. La gestion des demandes d'accès et des jetons individuels s'effectue sur <https://acces.poirierlavoie.ca/demande> et <https://acces.poirierlavoie.ca/moi> (ou par courriel à <jason@poirierlavoie.ca>) : chaque titulaire dispose de son propre accès révocable indépendamment. Aucune clé API CanLII n'est requise pour consulter la législation ou les outils (la clé CanLII demeure facultative à l'inscription et n'est exigée que pour `juris`). Aucun texte de requête n'est journalisé.
 
 Le code source et les scripts d'ingestion sont publiés gratuitement sous licence `Apache-2.0`.
 
@@ -162,6 +162,17 @@ le comportement du JS de la page sans navigateur (`test/page-client.test.mjs`). 
 cette commande unique que lance `.github/workflows/ci.yml`.
 
 Trajectoire mesurée du repérage : recall@10 **40 % → 88 % → 98 %**.
+
+## Auto-hébergement d'une fourche autonome / Self-hosting a standalone fork
+
+Ce dépôt fonctionne de manière entièrement autonome sans l'infrastructure centrale de gestion d'accès (`MCP-Acces` / `DB_IDENTITE`) :
+
+1. **Base D1 et corpus :** Créez votre base Cloudflare D1 (`wrangler d1 create legislation`), renseignez son `database_id` dans `wrangler.jsonc`, appliquez `data/schema.sql`, `migrations/` et `data/schema-decouverte.sql`, puis alimentez la base avec le pipeline Python (`pipeline/ingest.py`). Les liaisons Vectorize (`VECTORS`) et Workers AI (`AI`) sont facultatives si vous fixez `HYBRID_SEARCH = "0"`.
+2. **Omettre `DB_IDENTITE` :** Supprimez ou omettez le bloc D1 `DB_IDENTITE` dans `wrangler.jsonc` (`env.DB_IDENTITE` devient `undefined` — le Worker bascule alors sur l'authentification par secret statique sans perte de fonctionnalité).
+3. **Activer le serveur et définir un secret :** Fixez `MCP_ENABLED = "true"` dans `wrangler.jsonc` et enregistrez votre secret d'accès avec `npx wrangler secret put MCP_TOKEN` (vous pouvez aussi définir `MCP_TOKEN_VEILLE` pour une rotation sans interruption).
+4. **Connexion cliente :** Déployez (`npx wrangler deploy`) puis connectez votre client MCP sur `https://<votre-worker>.workers.dev/mcp` avec l'en-tête `Authorization: Bearer <jeton>` (où `<jeton>` est votre `MCP_TOKEN`). Les requêtes sans jeton reçoivent `404`.
+
+> **English:** To self-host a standalone fork without cloning `droit-civil-quebecois` or `MCP-Acces`, create your D1 database (`legislation`), run `data/schema.sql`, `migrations/`, and `data/schema-decouverte.sql`, seed it via `pipeline/ingest.py` (Vectorize/`AI` are optional if `HYBRID_SEARCH = "0"`), omit the `DB_IDENTITE` D1 binding from `wrangler.jsonc`, set `MCP_ENABLED = "true"`, add `MCP_TOKEN` with `npx wrangler secret put MCP_TOKEN`, deploy, and point your MCP client to `https://<your-worker>.workers.dev/mcp` using `Authorization: Bearer <jeton>`.
 
 ## Sécurité, confidentialité et licence
 

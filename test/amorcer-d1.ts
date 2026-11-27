@@ -25,4 +25,6 @@ function enonces(sql: string): string {
 await e.DB.exec(enonces(e.TEST_SCHEMA));
 await e.DB.exec(enonces(e.TEST_DECOUVERTE));
 await applyD1Migrations(e.DB, e.TEST_MIGRATIONS);
-await e.DB_IDENTITE.exec(enonces(construireSchemaIdentiteD1(["legislation", "jurisprudence"])));
+await e.DB_IDENTITE.exec(
+  enonces(construireSchemaIdentiteD1(["legislation", "jurisprudence", "outils"])),
+);
