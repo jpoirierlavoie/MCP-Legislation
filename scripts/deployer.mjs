@@ -1,23 +1,6 @@
 #!/usr/bin/env node
-/**
- * Déploiement de production — migrations D1 D'ABORD, puis le Worker avec `--var COMMIT:<sha>`.
- *
- * Exécuté à la fois par `.github/workflows/deploy.yml` et en repli local via `npm run deploy`.
- *
- * Gardes stricts :
- *   1. Arbre de travail propre (`git status --porcelain`), afin que `/health` annonce exactement
- *      le commit du code en ligne.
- *   2. Présence de `CLOUDFLARE_API_TOKEN` dans l'environnement (aucun fichier de jeton n'est lu
- *      ni affiché par ce script).
- *   3. Migrations D1 (`legislation --remote`) appliquées AVANT `wrangler deploy` — arrêt net si
- *      elles échouent. Toute migration destructive reste soumise à une répétition préalable sur
- *      une D1 distante jetable et à un bookmark Time Travel (`CLAUDE.md`).
- *   4. L'ingestion du corpus (`pipeline/`) et le backfill des vecteurs demeurent strictement
- *      manuels : ce script ne touche ni aux articles ni aux embeddings.
- */
 import { execFileSync, spawnSync } from "node:child_process";
 
-/** Sortie d'une commande git, sans bruit. */
 function git(...args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
 }
@@ -60,7 +43,6 @@ if (!process.env.CLOUDFLARE_API_TOKEN) {
   );
 }
 
-/** Exécute une commande en héritant du terminal ; rend son code de sortie. */
 function lancer(etape, cmd, args) {
   console.log(`\n── ${etape}\n   ${cmd} ${args.join(" ")}\n`);
   const r = spawnSync(cmd, args, { stdio: "inherit", shell: process.platform === "win32" });

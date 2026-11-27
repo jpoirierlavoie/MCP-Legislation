@@ -28,8 +28,8 @@ Le code source et les scripts d'ingestion sont publiés gratuitement sous licenc
 | Formulaire web sans OAuth (`claude.ai` en mode jeton) | Paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
 
 - **Installation autonome de ce seul dépôt (sans le greffon `droit-civil-quebecois`) :**
-  - **Google Antigravity** (`plugin.json`, `mcp_config.json`) : `agy plugin install https://github.com/jpoirierlavoie/MCP-Legislation.git`, puis saisir la variable `MCP_LEGISLATION_SECRET` avec un jeton issu de `/moi`.
-  - **Gemini CLI** (`gemini-extension.json`) : `gemini extensions install https://github.com/jpoirierlavoie/MCP-Legislation` et saisir `MCP_LEGISLATION_SECRET`. (`"contextFileName": []` évite d'injecter `GEMINI.md` dans vos sessions.)
+  - **Google Antigravity** (`plugin.json`, `mcp_config.json`) : `agy plugin install https://github.com/jpoirierlavoie/MCP-Legislation.git`, puis se connecter en OAuth 2.1 dans le navigateur via `acces.poirierlavoie.ca` (sans variable secrète à configurer).
+  - **Gemini CLI** (`gemini-extension.json`) : `gemini extensions install https://github.com/jpoirierlavoie/MCP-Legislation`, puis se connecter en OAuth 2.1 dans le navigateur via `acces.poirierlavoie.ca`. (`"contextFileName": []` évite d'injecter `GEMINI.md` dans vos sessions.)
 - **Note technique sur `?key=` et le chemin URL :** lorsque la connexion se fait par jeton dans un outil en ligne de commande ou un backend, privilégier l'en-tête `Authorization: Bearer <jeton>` afin que le jeton n'apparaisse pas dans une URL. La forme `?key=<jeton>` est prise en charge pour les formulaires web de connecteurs à jeton ; la forme en segment de chemin `https://legislation.poirierlavoie.ca/mcp/<jeton>` est également acceptée mais déconseillée dans les formulaires web.
 - **Découverte HTTP (SEP-2127) :** `GET https://legislation.poirierlavoie.ca/mcp/server-card` et `GET https://legislation.poirierlavoie.ca/.well-known/mcp/server-card.json` (`application/mcp-server-card+json`).
 - **Transport :** HTTP streamable sans état (`POST /mcp` ; `GET` et `DELETE` refusés en `405`).
@@ -117,11 +117,11 @@ officielle du publieur (LégisQuébec, Justice Canada, tribunaux du Québec ou A
 ```
 src/            Worker Cloudflare (TypeScript) : outils MCP, recherche, D1/Vectorize
 pipeline/       Ingestion Python : EPUB LégisQuébec, XML LIMS Justice Canada et PDF (QCCS/QCCQ/AMF) -> D1 (staging -> validation -> bascule)
-laws.config.json, taxonomy.json, relations.json   Données versionnées (corpus, matières, graphe)
-migrations/     Migrations D1 — s'appliquent PAR-DESSUS schema.sql, qui décrit l'état
+data/           Données versionnées (laws.config.json, catalogue.json, taxonomy.json, relations.json, tools-list.reference.json, schema.sql, schema-decouverte.sql)
+migrations/     Migrations D1 — s'appliquent PAR-DESSUS data/schema.sql, qui décrit l'état
                 INITIAL et non l'état courant (procédure complète : CLAUDE.md)
-tests/, eval/   contrôles bout-en-bout + harnais d'évaluation (21 cas, recall@10/MRR)
-docs/           Notes d'architecture, rapports de phase, formats EPUB/LIMS/PDF ; archive des plans
+test/, eval/    contrôles bout-en-bout + harnais d'évaluation (21 cas, recall@10/MRR)
+docs/           Spécifications de phase 0 (formats EPUB, LIMS, PDF)
 ```
 
 Démarrage : `npm install`, puis `npx wrangler dev --var MCP_TOKEN:local-a --var
@@ -154,14 +154,14 @@ relais sans validation via la porte d'évaluation (`npm run eval:gate`).
 
 **Toute modification doit évaluer son impact sur CINQ surfaces** — outils MCP,
 descriptions, schéma, ce README et la [page publique](https://legislation.poirierlavoie.ca/)
-(`catalogue.json`) — et inclure les mises à jour requises dans le même commit. C'est une
+(`data/catalogue.json`) — et inclure les mises à jour requises dans le même commit. C'est une
 condition de fin de tâche, pas une recommandation : voir l'obligation préalable en tête de
 [CLAUDE.md](CLAUDE.md). Garde en CI : **`npm test`** — la suite vitest à deux
-projets, qui porte notamment la parité outils ↔ documentation (`tests/catalogue.test.mjs`) et
-le comportement du JS de la page sans navigateur (`tests/page-client.test.mjs`). C'est bien
+projets, qui porte notamment la parité outils ↔ documentation (`test/catalogue.test.mjs`) et
+le comportement du JS de la page sans navigateur (`test/page-client.test.mjs`). C'est bien
 cette commande unique que lance `.github/workflows/ci.yml`.
 
-Trajectoire mesurée du repérage : recall@10 **40 % → 88 % → 98 %** (`docs/reports/`).
+Trajectoire mesurée du repérage : recall@10 **40 % → 88 % → 98 %**.
 
 ## Sécurité, confidentialité et licence
 

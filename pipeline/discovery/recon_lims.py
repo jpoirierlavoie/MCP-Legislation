@@ -1,25 +1,3 @@
-"""Reconnaissance du corpus FÉDÉRAL (format LIMS de Justice Canada) — dry-run.
-
-Pendant de `pipeline/discovery/recon.py`, qui fait le même travail sur les EPUB de
-LégisQuébec. N'ÉCRIT RIEN EN BASE et ne parse rien « pour de vrai » : il RECENSE, pour que
-la stratégie de `parser_lims.py` soit écrite sur des mesures et non sur des suppositions.
-
-Le rapport va dans `docs/reconnaissance-lims-courante.md`, qui est GITIGNORÉ — c'est un
-vidage reproductible, et versionné il finirait par se lire comme un document de référence
-(même raison que `docs/reconnaissance-courante.md`). Le document VERSIONNÉ, lui, est
-`docs/phase0-structure-lims.md` : il est rédigé à la main à partir de ce vidage, et c'est
-LUI que `parser_lims.py` citera par `§N`, à l'image de `docs/phase0-structure-epub.md`.
-
-⚠️ RECENSEMENT SANS LISTE BLANCHE PRÉALABLE. On ne compte pas « les balises qu'on attend »,
-on compte TOUT ce qui est là, attributs et valeurs compris. C'est la seule façon de voir
-arriver ce que la spécification ne nomme pas : `@isNIF`, `@style='nifrp'`, `Provision`,
-`FormGroup`. Un recensement filtré par ce qu'on croit savoir confirme toujours ce qu'on
-croit savoir.
-
-Emploi :
-    PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.recon_lims
-    PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pipeline.discovery.recon_lims --ref a782c13
-"""
 from __future__ import annotations
 
 import argparse
@@ -36,9 +14,7 @@ LIMS_NS = "http://justice.gc.ca/lims"
 RAPPORT = config.REPO_ROOT / "docs" / "reconnaissance-lims-courante.md"
 ATTENDUS_DIR = config.REPO_ROOT / "pipeline" / "expected"
 
-# Les 25 textes XML du corpus arrêté (SPEC §9 + Vague 2 + Vague 3). L'ORDRE suit celui de laws.config.json (invariant 1).
 CORPUS: list[tuple[str, str, str, str]] = [
-    # (id, chapitre, chemin FR, chemin EN)
     ("ca-b-3", "B-3", "fra/lois/B-3.xml", "eng/acts/B-3.xml"),
     ("ca-c-36", "C-36", "fra/lois/C-36.xml", "eng/acts/C-36.xml"),
     ("ca-d-3.4", "D-3.4", "fra/lois/D-3.4.xml", "eng/acts/D-3.4.xml"),
@@ -69,17 +45,12 @@ CORPUS: list[tuple[str, str, str, str]] = [
     ("ca-y-1.5", "Y-1.5", "fra/lois/Y-1.5.xml", "eng/acts/Y-1.5.xml"),
 ]
 
-# Témoin de REFUS : édictée et NON EN VIGUEUR (SPEC §3.7). Recensée pour que la phase 1
-# puisse prouver que le pipeline la refuse, JAMAIS ingérée.
 TEMOIN_REFUS = ("ca-f-29.2", "F-29.2", "fra/lois/F-29.2.xml", "eng/acts/F-29.2.xml")
 
-# Un `Label` « simple » est un numéro d'article ordinaire. Tout le reste doit être VU.
 LABEL_SIMPLE = re.compile(r"^\d+(?:\.\d+)*$")
 LABEL_PLAGE = re.compile(r"^\d+(?:\.\d+)*\s*(?:à|to|et|and)\s*\d+(?:\.\d+)*$")
 
-
 def git_show(ref: str, chemin: str) -> bytes:
-    """Lit un fichier du dépôt LIMS sans checkout. Le clone partiel tire le blob ici."""
     r = subprocess.run(
         ["git", "-C", str(config.LIMS_REPO), "show", f"{ref}:{chemin}"],
         capture_output=True,
@@ -88,25 +59,19 @@ def git_show(ref: str, chemin: str) -> bytes:
         raise FileNotFoundError(f"{chemin} absent de {ref} : {r.stderr.decode('utf-8', 'replace')[:200]}")
     return r.stdout
 
-
 def sha_de(ref: str) -> str:
     r = subprocess.run(["git", "-C", str(config.LIMS_REPO), "rev-parse", ref],
                        capture_output=True, text=True)
     return r.stdout.strip()
 
-
 def sans_ns(tag: str) -> str:
     return tag.split("}", 1)[1] if "}" in tag else tag
 
-
 def texte_plat(el: ET.Element) -> str:
-    """Texte d'un élément, balisage interne APLATI (un Label peut contenir un FootnoteRef)."""
     return re.sub(r"\s+", " ", "".join(el.itertext())).strip()
-
 
 @dataclass
 class Releve:
-    """Ce qu'on a mesuré sur UN fichier."""
     law_id: str
     lang: str
     chemin: str
@@ -125,7 +90,6 @@ class Releve:
     composante_max: int = 0
     profondeur_numero_max: int = 0
 
-
 def releve_fichier(law_id: str, chapitre: str, lang: str, chemin: str, ref: str) -> Releve:
     r = Releve(law_id=law_id, lang=lang, chemin=chemin)
     racine = ET.fromstring(git_show(ref, chemin))
@@ -133,21 +97,17 @@ def releve_fichier(law_id: str, chapitre: str, lang: str, chemin: str, ref: str)
     r.attrs_racine = {sans_ns(k): v for k, v in racine.attrib.items()}
     r.enfants_racine = [sans_ns(e.tag) for e in list(racine)]
 
-    # Recensement EXHAUSTIF : chaque balise, chaque (balise, attribut, valeur).
     for el in racine.iter():
         t = sans_ns(el.tag)
         r.tags[t] += 1
         for k, v in el.attrib.items():
             nk = sans_ns(k)
-            # Les identifiants internes (lims:id, lims:fid) sont uniques par élément :
-            # les recenser par VALEUR noierait le rapport. On garde le nom seul.
             val = "<unique>" if nk in {"id", "fid"} else v
             r.attributs[f"{t}/@{nk}={val}"] += 1
             if nk in {"isNIF", "in-force"} or (nk in {"type", "style"} and v in
                                                {"amending", "transitional", "nifrp"}):
                 r.marqueurs_non_vigueur[f"{t}/@{nk}={v}"] += 1
 
-    # Chaîne d'ancêtres de CHAQUE Section : c'est ce qui fera la liste BLANCHE du §3.1.
     parents = {c: p for p in racine.iter() for c in p}
     for el in racine.iter():
         if sans_ns(el.tag) != "Section":
@@ -158,7 +118,6 @@ def releve_fichier(law_id: str, chapitre: str, lang: str, chemin: str, ref: str)
             chaine.append(sans_ns(cur.tag))
         r.chaines_section[" < ".join(reversed(chaine))] += 1
 
-    # Séquence plate du Body — ce dont le chemin positionnel dérive.
     body = racine.find("Body")
     if body is not None:
         for el in list(body):
@@ -187,7 +146,6 @@ def releve_fichier(law_id: str, chapitre: str, lang: str, chemin: str, ref: str)
             else:
                 r.body_sequence.append((t, None, None))
 
-    # Inventaire des Schedule, OÙ QU'ILS SOIENT (racine, Body, Section, DocumentInternal).
     for el in racine.iter():
         if sans_ns(el.tag) != "Schedule":
             continue
@@ -213,7 +171,6 @@ def releve_fichier(law_id: str, chapitre: str, lang: str, chemin: str, ref: str)
         })
     return r
 
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ref", default=config.LIMS_REF, help="ref git du dépôt LIMS (défaut : HEAD)")
@@ -235,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         for lang, chemin in (("fr", fr), ("en", en)):
             try:
                 releves.append(releve_fichier(law_id, chapitre, lang, chemin, a.ref))
-            except Exception as exc:  # on RAPPORTE l'anomalie, on ne devine pas
+            except Exception as exc:
                 echecs.append(f"{law_id}/{lang} ({chemin}) : {type(exc).__name__}: {exc}")
 
     RAPPORT.parent.mkdir(parents=True, exist_ok=True)
@@ -254,9 +211,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  ÉCHEC {e}")
     return 2 if echecs else 0
 
-
-# Les balises que le SPEC nomme explicitement (§3.1, §3.5, §3.8). Tout ce qui n'est pas
-# ici est « non nommé par le SPEC » — pas nécessairement inconnu, mais à classer.
 TAGS_NOMMES_PAR_LE_SPEC = {
     "Statute", "Regulation", "Identification", "Introduction", "Body", "Schedule",
     "RecentAmendments", "Preamble", "Provision", "Section", "Subsection", "Paragraph",
@@ -271,19 +225,16 @@ TAGS_NOMMES_PAR_LE_SPEC = {
     "Text", "YYYY",
 }
 
-
 def tous_les_tags(releves: list[Releve]) -> collections.Counter:
     total: collections.Counter = collections.Counter()
     for r in releves:
         total.update(r.tags)
     return total
 
-
 def tags_hors_spec(releves: list[Releve]) -> list[tuple[str, int]]:
     total = tous_les_tags(releves)
     return sorted(((t, n) for t, n in total.items() if t not in TAGS_NOMMES_PAR_LE_SPEC),
                   key=lambda x: -x[1])
-
 
 def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -> str:
     L: list[str] = []
@@ -306,7 +257,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
     if echecs:
         L.append("")
 
-    # 1. Balises
     total = tous_les_tags(releves)
     hors = tags_hors_spec(releves)
     L.append("## 1. Balises rencontrées")
@@ -329,7 +279,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
         L.append(f"| `{t}` | {n} |")
     L.append("")
 
-    # 2. Chaînes d'ancêtres des Section — la liste BLANCHE
     L.append("## 2. Chaînes d'ancêtres de chaque `Section`")
     L.append("")
     L.append("C'est la **liste blanche** du §3.1 : seule une chaîne figurant ici peut")
@@ -344,7 +293,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
         L.append(f"| `{c}` | {n} |")
     L.append("")
 
-    # 3. Marqueurs de non-vigueur
     L.append("## 3. Marqueurs de NON-VIGUEUR réellement présents")
     L.append("")
     L.append("Le SPEC propose `Heading/@type` et `@change` ; ce tableau dit ce qui EXISTE.")
@@ -361,7 +309,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
             L.append(f"| `{m}` | {n} |")
     L.append("")
 
-    # 4. Racines, in-force, dates
     L.append("## 4. Racine, entrée en vigueur et dates, par texte")
     L.append("")
     L.append("| texte | langue | racine | `in-force` | `lims:current-date` | `lims:lastAmendedDate` | enfants directs |")
@@ -374,7 +321,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
                      f"{a.get('lastAmendedDate', '—')} | {', '.join(r.enfants_racine)} |")
     L.append("")
 
-    # 5. Isomorphisme FR/EN
     L.append("## 5. Isomorphisme FR ↔ EN de la séquence plate du `Body`")
     L.append("")
     L.append("Le §3.3 en fait un ACQUIS À DÉFENDRE : si la longueur, la séquence de niveaux")
@@ -406,7 +352,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
                  f"{niv_fr == niv_en} | {num_fr == num_en} | {prem} |")
     L.append("")
 
-    # 6. Label non simples
     L.append("## 6. `Label` qui ne sont pas de simples numéros")
     L.append("")
     total_ns = sum(len(r.labels_non_simples) for r in releves)
@@ -422,7 +367,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
                      f"{x['balisage_interne']} | {x['vide']} |")
     L.append("")
 
-    # 7. Schedules
     L.append("## 7. Inventaire des `Schedule`")
     L.append("")
     L.append("Le §3.8 suppose « le même vocabulaire que le `Body` » : la colonne")
@@ -438,7 +382,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
                      f"{s['label'] or '—'} | {s['nb_sections']} |")
     L.append("")
 
-    # 8. Collisions de numéros annexe / corps
     L.append("## 8. Collisions de numéros entre annexes et corps")
     L.append("")
     L.append("Décide l'espace de noms des articles d'annexe (§4 invariant 4, et la clé")
@@ -459,7 +402,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
         L.append("| — | — | — | *aucune collision relevée* |")
     L.append("")
 
-    # 9. Bornes de l'échelle de tri
     L.append("## 9. Bornes de numérotation et de profondeur")
     L.append("")
     L.append("| texte | langue | profondeur `Heading` max | profondeur de numéro max | composante max |")
@@ -472,7 +414,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
     L.append("≥ 1000 ou une profondeur > 5 la déborderait (invariant 2).")
     L.append("")
 
-    # 10. Attributs
     L.append("## 10. Recensement des attributs (balise/@attribut=valeur)")
     L.append("")
     L.append("Sans présélection : c'est ainsi qu'apparaît ce que le SPEC ne nomme pas.")
@@ -486,7 +427,6 @@ def bati_rapport(releves: list[Releve], echecs: list[str], sha: str, ref: str) -
         L.append(f"| `{k}` | {n} |")
     L.append("")
     return "\n".join(L) + "\n"
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

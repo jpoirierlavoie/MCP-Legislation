@@ -1,4 +1,3 @@
-// Gestionnaires des outils MCP « Lois du Québec et du Canada ». Tous en lecture seule.
 import {
   type ArticleJoined,
   type ArticleLink,
@@ -10,7 +9,6 @@ import {
   breadcrumbChains,
   childDivisions,
   citationOf,
-  citeOf,
   consolOf,
   countExcludedDomainLaws,
   getArticle,
@@ -51,16 +49,11 @@ import {
   WEIGHTS,
 } from "./relevance";
 
-/**
- * Garde-fou imposé par le plan (§4.4) — repris TEL QUEL, à ne pas reformuler.
- * Il rappelle que la découverte est heuristique et ne décide pas du droit applicable.
- */
 const GARDE_FOU =
   "Aide heuristique au repérage de lois et de parties de lois candidates. " +
   "Ne détermine PAS le droit applicable : toujours vérifier en lisant le texte via " +
   "get_structure / get_division / get_article.";
 
-// Libellés de type de division, par langue (l'anglais dit « Division » pour la « Section »).
 const KIND_LABEL: Record<Lang, Record<string, string>> = {
   fr: {
     partie: "Partie",
@@ -90,9 +83,6 @@ const KIND_LABEL: Record<Lang, Record<string, string>> = {
   },
 };
 
-// Libellés de related_laws, par langue. Même motif que KIND_LABEL : l'outil
-// déclarait `lang` sans l'honorer — un client qui demandait l'anglais recevait du français
-// sans la moindre étiquette, ce qui est « faux, servi, silencieux ».
 const REL_LABEL: Record<
   Lang,
   {
@@ -164,7 +154,7 @@ function divisionLabel(
 }
 
 function frOnlyError(lawId: string, lawRow?: LawRow | null): ToolResult {
-  const cite = lawRow ? citeOf(lawRow) : "";
+  const cite = lawRow ? lawRow.official_cite : "";
   return err(
     `Law '${lawId}'${cite ? ` (${cite})` : ""} is published in French only (langs: ['fr']). Re-run with lang='fr'.`,
   );
@@ -240,13 +230,10 @@ function renderArticle(
   return `${head}${normBlock}\n\n${a.text}${hist}${linksFooter}`;
 }
 
-/** Un gestionnaire d'outil vu du registre : arguments déjà validés, résultat d'outil. */
 export type Gestionnaire = (args: never) => Promise<ToolResult>;
 
-/** Les gestionnaires par nom d'outil. Consommé par le routeur du socle. */
 export type Registre = Record<string, Gestionnaire>;
 
-/** Indique si le moteur vectoriel hybride est configuré et actif sur l'instance. */
 export function estHybrideConfigure(env: Env): boolean {
   const flags = env as unknown as { HYBRID_SEARCH?: string };
   const brut = (flags.HYBRID_SEARCH ?? "").trim().toLowerCase();
@@ -260,7 +247,6 @@ function normalizeArticleToken(raw: string): string {
   return t;
 }
 
-/** Construit les gestionnaires des dix outils publiés pour le routeur du socle. */
 export function construireOutils(
   env: Env,
   options?: { hybridePermis?: boolean; surExecutionSemantique?: () => void },
@@ -269,13 +255,6 @@ export function construireOutils(
   const hybridePermis = options?.hybridePermis ?? true;
   const outils: Registre = {};
 
-  // 1) list_laws ---------------------------------------------------------
-  //
-  // Écart au plan v2 (1.4), consigné au rapport : le critère « toute loi dont les
-  // divisions comportent le kind livre » rate sa cible — le parseur classe
-  // POSITIONNELLEMENT (ga: = livre) — mesuré à 38 lois : 36 en avaient — et le plan
-  // complet pèserait ~22 K tokens par appel. Le budget annoncé (+1,2–1,5 K) correspond
-  // exactement à ccq + cpc (93 nœuds) : c'est l'intention. Liste extensible au besoin.
   const OUTLINE_LAWS = ["ccq", "cpc"];
 
   const renderOutline = (nodes: import("./lib").OutlineNode[], lang: Lang): string =>
@@ -309,13 +288,11 @@ export function construireOutils(
     const titlePair =
       l.name_en && l.name_en !== l.name_fr ? `${l.name_fr} / ${l.name_en}` : l.name_fr;
     const head =
-      `• ${l.id} — ${titlePair} (${citeOf(l)}) ; ` +
+      `• ${l.id} — ${titlePair} (${l.official_cite}) ; ` +
       `langues: ${l.langs.join(", ") || "aucune"} ; ` +
       `à jour au ${l.consol_date_fr ?? "?"}${l.consol_date_en ? ` (en: ${l.consol_date_en})` : ""} ; ` +
       `${l.article_count} articles`;
-    // portée : repli sur name_fr tant que la passe éditoriale scope_fr n'est pas faite (§5)
     const scope = l.scope_fr ? `\n    portée: ${l.scope_fr}` : "";
-    // pour les grands codes : les divisions rattachées à une matière (les Livres du C.c.Q.)
     const divs = l.mapped_divisions.length
       ? "\n" +
         l.mapped_divisions
@@ -343,7 +320,6 @@ export function construireOutils(
     structure?: boolean;
     lang?: "fr" | "en";
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const structure = structureArg ?? true;
     const scope = resolveActiveDomains(domains, env);
@@ -356,8 +332,6 @@ export function construireOutils(
       ),
       countExcludedDomainLaws(db, scope.excluded, { jurisdiction, fonction, forum, subject }, env),
     ]);
-    // 1.4 : le signal de repérage est souvent au Titre, pas au Livre (post-mortem :
-    // Livre V C.p.c. muet, Titre IV parlant) — plan profondeur 2 des lois à Livres.
     const outlines =
       structure === false
         ? new Map<string, import("./lib").OutlineNode[]>()
@@ -408,11 +382,8 @@ export function construireOutils(
         id: l.id,
         name_fr: l.name_fr,
         name_en: l.name_en,
-        // Clé HISTORIQUE conservée le temps de la migration : la retirer ici serait
-        // une rupture de contrat pour tout consommateur du champ typé. Le passage à
-        // `official_cite` seul est un commit séparé, annoncé.
-        rlrq_cite: citeOf(l),
-        official_cite: citeOf(l),
+        rlrq_cite: l.official_cite,
+        official_cite: l.official_cite,
         domain: l.domain ?? "core",
         jurisdiction: l.jurisdiction ?? "qc",
         langs: l.langs,
@@ -421,11 +392,6 @@ export function construireOutils(
         article_count: l.article_count,
         fonction: l.fonction,
         forum: l.forum,
-        // PAS de repli sur name_fr : la portée éditoriale n'a jamais été rédigée (79 lois
-        // sur 79 à NULL), et substituer le titre servait au client un champ VIDE AYANT
-        // L'AIR PLEIN — sans rien qui dise que c'en était un repli. La sortie texte, elle,
-        // omettait honnêtement la ligne (voir renderLaw) : les deux surfaces du même outil
-        // se contredisaient. Corollaire structuré de R4, décision 001.
         scope: l.scope_fr,
         parent_law_id: l.parent_law_id,
         subjects: l.subjects,
@@ -436,9 +402,7 @@ export function construireOutils(
   };
   outils.list_laws = H_LIST_LAWS as Gestionnaire;
 
-  // 1b) list_subjects ----------------------------------------------------
   const H_LIST_SUBJECTS = async ({ lang: langArg }: { lang?: "fr" | "en" }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const en = lang === "en";
     const subs = await listSubjects(db, env);
@@ -489,7 +453,6 @@ export function construireOutils(
   };
   outils.list_subjects = H_LIST_SUBJECTS as Gestionnaire;
 
-  // 1c) related_laws -----------------------------------------------------
   const H_RELATED_LAWS = async ({
     law: rawLaw,
     rel_type,
@@ -504,7 +467,6 @@ export function construireOutils(
     lang?: "fr" | "en";
   }) => {
     const law = rawLaw.trim().toLowerCase();
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const direction = directionArg ?? "both";
     const L = REL_LABEL[lang as Lang] ?? REL_LABEL.fr;
@@ -526,9 +488,6 @@ export function construireOutils(
       const arrow = e.direction === "out" ? "→" : "←";
       const dispo = e.in_corpus ? (e.other_name ? ` — ${e.other_name}` : "") : ` — ${L.horsCorpus}`;
       const w = e.rel_type === "renvoie-a" ? ` ; ${e.weight} ${L.renvois}` : "";
-      // Les notes curées n'existent QU'EN FRANÇAIS (law_relations n'a pas de colonne
-      // note_en) : sous lang='en' on les rend marquées [fr] plutôt que de laisser croire
-      // à une traduction. Même motif que l'intitulé emprunté de get_division.
       const note = e.note ? `${e.note}${lang === "en" ? " [fr]" : ""}` : null;
       return (
         `  ${arrow} ${e.other_id} [${e.rel_type}, ${e.source}${w}]${dispo}` +
@@ -556,15 +515,12 @@ export function construireOutils(
         weight: e.weight,
         in_corpus: !!e.in_corpus,
         note: e.note,
-        // La langue de la note est DANS la charge utile (corollaire structuré de R4) :
-        // un client qui jette la prose garde l'information que la note n'est pas traduite.
         note_lang: e.note ? "fr" : null,
       })),
     });
   };
   outils.related_laws = H_RELATED_LAWS as Gestionnaire;
 
-  // 1d) find_relevant ----------------------------------------------------
   const H_FIND_RELEVANT = async ({
     query,
     domains,
@@ -580,7 +536,6 @@ export function construireOutils(
     limit?: number;
     lang?: "fr" | "en";
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const langWarn = detectLanguageMismatch(query, lang);
     const tokens = tokenize(query);
@@ -666,7 +621,6 @@ export function construireOutils(
   };
   outils.find_relevant = H_FIND_RELEVANT as Gestionnaire;
 
-  // 2) get_article -------------------------------------------------------
   const H_GET_ARTICLE = async ({
     law: rawLaw,
     article: rawArticle,
@@ -676,7 +630,6 @@ export function construireOutils(
     article: string;
     lang?: "fr" | "en";
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const law = rawLaw.trim().toLowerCase();
     const article = normalizeArticleToken(rawArticle);
@@ -726,7 +679,6 @@ export function construireOutils(
   };
   outils.get_article = H_GET_ARTICLE as Gestionnaire;
 
-  // 3) get_articles ------------------------------------------------------
   const H_GET_ARTICLES = async ({
     law: rawLaw,
     from,
@@ -744,7 +696,6 @@ export function construireOutils(
     limit?: number;
     offset?: number;
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const law = rawLaw.trim().toLowerCase();
     const lawRow = await getLaw(db, law, env);
@@ -756,11 +707,6 @@ export function construireOutils(
     if (!useRange && requestedNumbers.length === 0) {
       return err("Fournir soit (from ET to), soit numbers[].");
     }
-    // LES DEUX MODES ENSEMBLE : on REFUSE au lieu de servir la moitié de la demande.
-    // Mesuré en production le 2026-09-17 : { from:'1457', to:'1459', numbers:['1590'] }
-    // rendait 1457-1459 et jetait le 1590 SANS RIEN DIRE — le mode plage gagnait en
-    // silence. « Les art. 1457 à 1460, plus 1590 » est pourtant l'assemblage le plus
-    // naturel qu'un modèle produise, et la réponse avait l'air complète.
     if (useRange && numbers?.length) {
       return err(
         "Modes INCOMPATIBLES : (from, to) et numbers[] ont été fournis ensemble. Ce serveur " +
@@ -777,7 +723,6 @@ export function construireOutils(
     if (useRange) {
       const fromNorm = normalizeArticleToken(from!);
       const toNorm = normalizeArticleToken(to!);
-      // bornes LUES en base (insensible à l'échelle de sort_key) — cf. boundRef
       const [b1, b2] = await Promise.all([
         boundRef(db, law, lang as Lang, fromNorm),
         boundRef(db, law, lang as Lang, toNorm),
@@ -874,7 +819,7 @@ export function construireOutils(
     const rels = normRels.get(law) ?? [];
     const ul = unitLabel(lawRow.unit, lang);
     const lawTitle = lang === "en" ? lawRow.name_en || lawRow.name_fr : lawRow.name_fr;
-    const lawCite = (lang === "en" ? lawRow.official_cite_en : null) || citeOf(lawRow);
+    const lawCite = (lang === "en" ? lawRow.official_cite_en : null) || lawRow.official_cite;
     const lawLabel =
       lawTitle && lawCite && lawTitle !== lawCite
         ? `${lawTitle} (${lawCite})`
@@ -914,13 +859,6 @@ export function construireOutils(
       count: rows.length,
       total,
       pagination: useRange ? { limit: page.limit, offset: page.offset } : null,
-      // Comment la plage a été bornée. Champ TOUJOURS présent (null hors mode plage) :
-      // « absent » et « borné par le texte » ne doivent pas être confondus.
-      //   'document' — étendue exacte, de la première borne à la seconde, dans l'ordre
-      //                du texte officiel ;
-      //   'cle'      — au moins une borne est ouverte ou désigne un pseudo-article : la
-      //                plage est bornée par la clé de tri, qui n'est pas un ordre total
-      //                et peut donc sur-inclure.
       range_resolution: resolution,
       ...(useRange ? {} : { missing_numbers: missing }),
       articles: rows.map((a) => ({
@@ -935,7 +873,6 @@ export function construireOutils(
   };
   outils.get_articles = H_GET_ARTICLES as Gestionnaire;
 
-  // 4) get_structure -----------------------------------------------------
   const H_GET_STRUCTURE = async ({
     law: rawLaw,
     lang: langArg,
@@ -947,7 +884,6 @@ export function construireOutils(
     root_path?: string;
     depth?: number;
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const law = rawLaw.trim().toLowerCase();
     const lawRow = await getLaw(db, law, env);
@@ -955,8 +891,6 @@ export function construireOutils(
     const d = depth ?? 2;
     let tree = await getStructure(db, law, lang as Lang, root_path, d);
     if (tree.length === 0 && root_path) {
-      // 1.5 : les chemins Irosoft sont propres à la langue — un chemin venu de l'autre
-      // langue est traduit par le pont des numéros d'articles, au lieu d'échouer.
       const t = await translateDivisionPath(db, law, root_path, lang as Lang);
       if (t) tree = await getStructure(db, law, lang as Lang, t.path, d);
     }
@@ -994,7 +928,6 @@ export function construireOutils(
   };
   outils.get_structure = H_GET_STRUCTURE as Gestionnaire;
 
-  // 5) get_division ------------------------------------------------------
   const H_GET_DIVISION = async ({
     law: rawLaw,
     path,
@@ -1012,7 +945,6 @@ export function construireOutils(
     limit?: number;
     offset?: number;
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const law = rawLaw.trim().toLowerCase();
     const include_text = includeTextArg ?? true;
@@ -1021,7 +953,6 @@ export function construireOutils(
     if (path == null && division_id == null) return err("Fournir path ou division_id.");
     let div = await getDivision(db, law, lang as Lang, { path, id: division_id });
     if (!div && path) {
-      // 1.5 : chemin de l'autre langue -> pont par numéros d'articles.
       const t = await translateDivisionPath(db, law, path, lang as Lang);
       if (t) div = await getDivision(db, law, lang as Lang, { path: t.path });
     }
@@ -1034,8 +965,6 @@ export function construireOutils(
       }
       return err(`Division introuvable (${path ?? division_id}).`);
     }
-    // repli d'intitulé : si la division n'en a pas dans la langue demandée, montrer
-    // celui de l'autre langue, marqué (plan v2, 1.5).
     let headingShown = div.heading;
     if (!headingShown) {
       const other = await headingInOtherLang(db, law, div.path, lang as Lang);
@@ -1108,7 +1037,6 @@ export function construireOutils(
   };
   outils.get_division = H_GET_DIVISION as Gestionnaire;
 
-  // 6) search_text -------------------------------------------------------
   const H_SEARCH_TEXT = async ({
     query,
     law: rawLaw,
@@ -1128,21 +1056,16 @@ export function construireOutils(
     limit?: number;
     offset?: number;
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const law = rawLaw !== undefined ? rawLaw.trim().toLowerCase() : undefined;
     const langWarn = detectLanguageMismatch(query, lang);
     const lawRow = law ? await getLaw(db, law, env) : null;
     if (law && !lawRow) return err(`Loi '${law}' inconnue.`);
     const scope = resolveActiveDomains(domains, env);
-    // Recherche corpus : viser 12-15 résultats (1.3) ; restreinte : 10 comme avant.
     const page = paginate(limit, offset, law ? 10 : 14, 50);
     let res;
     try {
-      // Recherche corpus : sur-échantillonner (3×) pour pouvoir plafonner à 6 résultats
-      // par loi sans se retrouver avec la seule loi dominante au classement bm25.
       const fetchPage = law ? page : { limit: Math.min(45, page.limit * 3), offset: page.offset };
-      // RELAX_SEARCH / HYBRID_SEARCH (R8) + préférence du titulaire `hybride_permis` (S19)
       const flags = env as unknown as { RELAX_SEARCH?: string; HYBRID_SEARCH?: string };
       const vectorActif = hybridePermis && estHybrideConfigure(env);
       const aiObserve: Ai | undefined = vectorActif
@@ -1156,7 +1079,6 @@ export function construireOutils(
       res = await searchText(db, query, lang as Lang, law, fetchPage, {
         relax: flags.RELAX_SEARCH !== "0",
         vector: vectorActif && aiObserve ? { ai: aiObserve, index: env.VECTORS } : undefined,
-        // FEDERAL_CORPUS / DOMAIN_QUARANTINE
         env,
         domains: scope.active,
         explicitDomains: scope.explicit,
@@ -1219,10 +1141,6 @@ export function construireOutils(
         res = { ...res, hits: picked };
       }
     } catch {
-      // L'exception n'est PAS liée, et c'est le correctif : on renvoyait `e.message`, qui
-      // vient de SQLite/FTS5 et publiait au premier venu la syntaxe du moteur
-      // (« fts5: syntax error near … »). Sans intérêt pour l'appelant, et c'est de
-      // l'intérieur donné à voir une fois l'endpoint public.
       return err(
         "Recherche invalide : la requête contient des caractères que le moteur de recherche " +
           "réserve (guillemets, parenthèses, astérisque, NEAR/AND/OR). Réessayer avec des " +
@@ -1244,15 +1162,10 @@ export function construireOutils(
     if (law && lang === "en" && res.hits.every((h) => h.law_id !== law)) {
       const langs = await lawLangs(db, law, env);
       if (langs.length > 0 && !langs.includes("en") && langs.includes("fr")) {
-        const cite = lawRow ? citeOf(lawRow) : "";
+        const cite = lawRow ? lawRow.official_cite : "";
         frOnlyLawNotice = `Law '${law}'${cite ? ` (${cite})` : ""} is published in French only (langs: ['fr']). Re-run with lang='fr'.`;
       }
     }
-    // « Aucun résultat » DOIT dire dans quoi on a cherché. Sans ça, un modèle public lit
-    // l'absence comme « aucune règle n'existe » et la relaie comme une réponse — une absence
-    // présentée comme un fait. Deux causes dominent et se disent en une phrase : le corpus
-    // est une sélection fermée, et l'appariement est LEXICAL (aucun stemming français,
-    // mesuré : « congédiement » n'attrape pas « congédier »).
     const otherDomains = res.otherDomains ?? [];
     const radarLine =
       !law && otherDomains.length > 0
@@ -1284,7 +1197,6 @@ export function construireOutils(
       );
     }
 
-    // 1.3 : fils d'Ariane (résultats auto-explicatifs) + regroupement par loi.
     const semDivRefs = (res.divisions ?? []).map((d) => ({
       law_id: d.law_id,
       division_path: d.path,
@@ -1300,8 +1212,6 @@ export function construireOutils(
     const ABBREV: Record<string, string> = { ccq: "C.c.Q.", cpc: "C.p.c." };
     const crumbOf = (h: { law_id: string; division_path: string }): string => {
       const chain = chains.get(`${h.law_id}|${h.division_path}`) ?? [];
-      // seuls les nœuds AVEC ordinal portent un repère utile (« Livre V, Titre IV ») ;
-      // les autres produiraient des « Livre, Titre, » vides.
       const kinds = chain
         .filter((n) => n.number)
         .map((n) => `${(KIND_LABEL[lang as Lang] ?? KIND_LABEL.fr)[n.kind] ?? n.kind} ${n.number}`)
@@ -1342,7 +1252,6 @@ export function construireOutils(
         `   « ${h.snippet} »`
       );
     };
-    // corps : groupé par loi dès que les résultats en couvrent plusieurs (max 6 par loi)
     const lawsInHits = [...new Set(res.hits.map((h) => h.law_id))];
     let body: string;
     if (lawsInHits.length > 1) {
@@ -1369,7 +1278,6 @@ export function construireOutils(
       const normLine = lawsInHits[0] ? conciseNormLine(lawsInHits[0]) : null;
       body = `${normLine ? `${normLine}\n` : ""}${res.hits.map(line).join("\n")}`;
     }
-    // En-tête étiqueté selon le chemin qui a produit les résultats (R7 : fail open, dit)
     const nTerms = query.trim().split(/\s+/).length;
     const header =
       res.fallback === "widened"
@@ -1381,7 +1289,6 @@ export function construireOutils(
             : res.fallback === "semantic"
               ? "Aucune correspondance lexicale ; repérage sémantique :"
               : `${res.total} résultat(s) trouvé(s) :`;
-    // Recherche restreinte avec résultats : signaler ce que la restriction cache (post-mortem)
     const seenElsewhereNorm = new Set<string>();
     const elsewhere = res.elsewhere
       ? `\n\nAilleurs au corpus (${res.elsewhere.total} résultat(s) hors ${law}) — aperçu :\n` +
@@ -1424,15 +1331,6 @@ export function construireOutils(
           : {}),
       };
     };
-    // Trois décomptes, trois sens distincts — parce qu'UN seul était servi et qu'il était
-    // lu pour ce qu'il n'est pas. `total: 1` avec cinq résultats rendus n'est pas une
-    // incohérence : c'est un appariement lexical plus quatre voisins sémantiques. Corollaire
-    // structuré de R4 (décision 001) : ce qui BORNE un résultat voyage dans l'objet typé,
-    // pas seulement dans la prose — un client peut jeter la prose et garder l'objet.
-    //
-    // ⚠️ `sources.lexical` compte « présent dans la liste FTS », NON « non influencé par les
-    // vecteurs » : un article trouvé par les DEUX voies garde son SearchHit lexical et n'est
-    // jamais marqué `semantic`, bien que la fusion RRF ait déplacé son rang.
     const nSem = res.hits.filter((h) => h.semantic).length;
     const domainsActive = law ? [lawRow?.domain ?? "core"] : scope.active;
     const domainsExcluded = law ? [] : scope.excluded;
@@ -1459,9 +1357,7 @@ export function construireOutils(
         other_domains: otherDomains,
         ...(langWarn ? { avertissement_langue: langWarn } : {}),
         ...(frOnlyLawNotice ? { fr_only_law: true } : {}),
-        /** Appariements LEXICAUX au corpus, non paginés. Vaut 0 sur un repli sémantique seul. */
         total: res.total,
-        /** Taille de la page réellement rendue, toutes sources confondues. */
         returned: res.hits.length,
         sources: { lexical: res.hits.length - nSem, semantique: nSem },
         ...(hybridePermis ? {} : { hybride_desactive: true }),
@@ -1477,7 +1373,6 @@ export function construireOutils(
   };
   outils.search_text = H_SEARCH_TEXT as Gestionnaire;
 
-  // 7) resolve_reference -------------------------------------------------
   const H_RESOLVE_REFERENCE = async ({
     citation,
     lang: langArg,
@@ -1485,7 +1380,6 @@ export function construireOutils(
     citation: string;
     lang?: "fr" | "en";
   }) => {
-    // Défauts RELOCALISÉS depuis le schéma (le validateur cible ne les applique pas).
     const lang: Lang = (langArg ?? "fr") as Lang;
     const all = await listLaws(db, {}, "fr", env);
     const parsed = parseCitation(citation, all);
@@ -1501,9 +1395,6 @@ export function construireOutils(
     }
     if (!parsed.article) return err(`Aucun numéro d'article détecté dans « ${citation} ».`);
     if (!parsed.law) {
-      // Refus NOMMÉ de l'ancien C.p.c. Il passe AVANT le refus générique parce qu'il dit la
-      // seule chose qui compte pour un juriste : la numérotation a changé, donc l'article
-      // du même numéro dans le code en vigueur n'est PAS l'équivalent.
       if (parsed.hors_corpus === "C-25") {
         return err(
           "L'ANCIEN Code de procédure civile (RLRQ, c. C-25) n'est pas au corpus : il a été " +
@@ -1534,8 +1425,6 @@ export function construireOutils(
       getLaw(db, law, env),
       normativeRelations(db, [law], lang as Lang, env),
     ]);
-    // `parseCitation` n'a reconnu `law` que parmi les lois LUES en base, donc lawRow
-    // existe ; le garde est là pour le type, pas pour un cas réel.
     if (!lawRow) return err(`Loi '${law}' inconnue.`);
     const rels = normRels.get(law) ?? [];
     if (!row) {

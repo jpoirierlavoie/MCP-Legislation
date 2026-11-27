@@ -1,25 +1,8 @@
 name: rafraichir-corpus
 
-# Rafraîchissement incrémental et supervisé du corpus en DEUX temps :
-#
-#   1. `preparer` (lecture seule — aucun secret Cloudflare) :
-#      Télécharge les EPUB LégisQuébec et synchronise `justicecanada/laws-lois-xml`,
-#      capture le SHA exact, valide tous les invariants structurels sur une D1 de
-#      recette isolée (`schema.sql` + migrations + découverte + relations), compare à la
-#      production via `MCP_TOKEN_VEILLE`, publie le diff en artefact et commente l'issue
-#      `veille-consolidation` ouverte.
-#
-#   2. `appliquer` (déclenchement manuel explicite `mode=appliquer` + `confirmer=APPLIQUER`
-#      dans l'environnement `production`) :
-#      Exécute les 4 pré-vols Cloudflare, applique les migrations D1 (dont `0005_vector_state`),
-#      exécute `pipeline.refresh --mode apply --target cloud` sur le SHA exact validé par
-#      `preparer` (pré-vol ping, bookmark Time Travel, amorçage `vector_state`, bascule D1
-#      incrémentale, découverte, backfill incrémental Vectorize + purge des orphelins),
-#      puis valide la production via `npm run evals` et `node eval/run.mjs --gate` avant de
-#      clore l'issue de veille.
 on:
   schedule:
-    - cron: "30 12 1 * *" # 1er du mois à 12:30 UTC (après veille-consolidation) : Stage 1 seul
+    - cron: "30 12 1 * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -201,7 +184,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # ── PRÉ-VOLS CLOUDFLARE (lecture seule, alignés sur deploy.yml) ──────────
       - name: Contrôle 1/4 — CLOUDFLARE_API_TOKEN présent et propre
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

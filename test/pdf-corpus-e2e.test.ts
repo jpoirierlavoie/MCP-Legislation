@@ -349,7 +349,6 @@ const LAWS: LawSeed[] = [
 
 function buildDivisions(): DivisionSeed[] {
   const rows: DivisionSeed[] = [
-    // cpc
     {
       id: 10001,
       law_id: "cpc",
@@ -394,7 +393,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: 15001,
       sort_order: 2,
     },
-    // ccq
     {
       id: 20001,
       law_id: "ccq",
@@ -461,7 +459,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: 25002,
       sort_order: 3,
     },
-    // v-1.1
     {
       id: 30001,
       law_id: "v-1.1",
@@ -484,7 +481,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: null,
       sort_order: 1,
     },
-    // v-1.1-r.21
     {
       id: 40001,
       law_id: "v-1.1-r.21",
@@ -507,7 +503,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: null,
       sort_order: 1,
     },
-    // qccs-mtl-directives (FR & EN, including 9-segment deep path, ph1:10 sibling, ps:1 annexe)
     {
       id: 50001,
       law_id: "qccs-mtl-directives",
@@ -673,7 +668,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: null,
       sort_order: 11,
     },
-    // qccs-qc-directives (fr-only)
     {
       id: 60001,
       law_id: "qccs-qc-directives",
@@ -685,7 +679,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: null,
       sort_order: 1,
     },
-    // qccq-civil (fr-only)
     {
       id: 70001,
       law_id: "qccq-civil",
@@ -697,7 +690,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: null,
       sort_order: 1,
     },
-    // qcca-avis (fr-only)
     {
       id: 80001,
       law_id: "qcca-avis",
@@ -720,7 +712,6 @@ function buildDivisions(): DivisionSeed[] {
       parent_id: null,
       sort_order: 2,
     },
-    // amf-ig-45-106 (FR & EN)
     {
       id: 90001,
       law_id: "amf-ig-45-106",
@@ -793,7 +784,6 @@ function buildDivisions(): DivisionSeed[] {
 
 function buildArticles(): ArticleSeed[] {
   return [
-    // cpc
     {
       id: 10001,
       law_id: "cpc",
@@ -846,7 +836,6 @@ function buildArticles(): ArticleSeed[] {
       repealed: 0,
       links: null,
     },
-    // ccq
     {
       id: 20001,
       law_id: "ccq",
@@ -899,7 +888,6 @@ function buildArticles(): ArticleSeed[] {
       repealed: 0,
       links: null,
     },
-    // v-1.1
     {
       id: 30001,
       law_id: "v-1.1",
@@ -952,7 +940,6 @@ function buildArticles(): ArticleSeed[] {
       repealed: 0,
       links: null,
     },
-    // v-1.1-r.21 (includes 15.01 / 15.1 leading-zero tie-break pair)
     {
       id: 40001,
       law_id: "v-1.1-r.21",
@@ -1031,7 +1018,6 @@ function buildArticles(): ArticleSeed[] {
       repealed: 0,
       links: null,
     },
-    // qccs-mtl-directives (FR & EN)
     {
       id: 50001,
       law_id: "qccs-mtl-directives",
@@ -1185,7 +1171,6 @@ function buildArticles(): ArticleSeed[] {
         },
       ]),
     },
-    // qccs-qc-directives (fr-only)
     {
       id: 60001,
       law_id: "qccs-qc-directives",
@@ -1199,7 +1184,6 @@ function buildArticles(): ArticleSeed[] {
       repealed: 0,
       links: "[]",
     },
-    // qccq-civil (fr-only)
     {
       id: 70001,
       law_id: "qccq-civil",
@@ -1226,7 +1210,6 @@ function buildArticles(): ArticleSeed[] {
       repealed: 1,
       links: null,
     },
-    // qcca-avis (fr-only)
     {
       id: 80001,
       law_id: "qcca-avis",
@@ -1275,7 +1258,6 @@ function buildArticles(): ArticleSeed[] {
         },
       ]),
     },
-    // amf-ig-45-106 (FR & EN, alphanumeric 2A.1, 4B.2)
     {
       id: 90001,
       law_id: "amf-ig-45-106",
@@ -1713,10 +1695,6 @@ beforeEach(() => {
 function proseOf(res: McpToolResult): string {
   return res.content.map((c) => c.text).join("\n");
 }
-
-// =============================================================================
-// TIER 1 — Feature Coverage (>= 5 tests per feature F1-F9)
-// =============================================================================
 
 describe("Tier 1 — F1: Schema 0007_pdf_corpus.sql & PDF_CORPUS Gate", () => {
   it("T1-F1.1: migrations add laws.source and articles.links while keeping articles_fts text at cid=0", () => {
@@ -2575,12 +2553,7 @@ describe("Tier 1 — F9: Public Site GET / Counts, FONCTION & Provenance", () =>
   });
 });
 
-// =============================================================================
-// TIER 2 — Boundary & Corner Cases (>= 5 tests per feature F1-F9)
-// =============================================================================
-
 describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
-  // F1 Boundaries
   it("T2-F1.1: PDF_CORPUS unset, '0', 'false', and 'true' all stay closed; only '1' opens", async () => {
     for (const val of [undefined, "", "0", "false", "true"]) {
       const r = await callMcp(makeTestEnv({ pdfCorpus: val }), "list_laws", {});
@@ -2665,7 +2638,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(ig.result.isError).toBe(true);
   });
 
-  // F2 Boundaries
   it("T2-F2.1: list_laws with fonction='directive' and forum='Cour du Québec' narrows strictly to qccq-civil", async () => {
     const r = await callMcp(makeTestEnv({ pdfCorpus: "1" }), "list_laws", {
       fonction: "directive",
@@ -2722,7 +2694,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(text).not.toMatch(/\bpar\.\s*12\b/);
   });
 
-  // F3 Boundaries
   it("T2-F3.1: empty JSON array articles.links ('[]') emits no empty links footer", async () => {
     const r = await callMcp(makeTestEnv({ pdfCorpus: "1" }), "get_article", {
       law: "qccs-qc-directives",
@@ -2787,7 +2758,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(sc.articles[0]?.text).toBeUndefined();
   });
 
-  // F4 Boundaries
   it("T2-F4.1: related_laws(law='cpc', rel_type='preseance-sur', direction='in') returns all 4 PDF directives", async () => {
     const r = await callMcp(makeTestEnv({ pdfCorpus: "1" }), "related_laws", {
       law: "cpc",
@@ -2850,7 +2820,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(r.result.isError).toBe(true);
   });
 
-  // F5 Boundaries
   it("T2-F5.1: bilingual PDF directive qccs-mtl-directives succeeds in lang='en'", async () => {
     const r = await callMcp(makeTestEnv({ pdfCorpus: "1" }), "get_article", {
       law: "qccs-mtl-directives",
@@ -2920,7 +2889,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(proseOf(r.result)).toMatch(/published in French only/i);
   });
 
-  // F6 Boundaries
   it("T2-F6.1: resolve_reference handles full 'Instruction générale 45-106, art. 4B.2'", async () => {
     const r = await callMcp(makeTestEnv({ pdfCorpus: "1" }), "resolve_reference", {
       citation: "Instruction générale 45-106, art. 4B.2",
@@ -2969,7 +2937,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(r.result.isError).toBe(true);
   });
 
-  // F7 Boundaries
   it("T2-F7.1: SEG_SPLIT handles 9-segment ph paths and ps:1 while preserving annexe-a", () => {
     expect(depthOf(DEEP_PATH)).toBe(9);
     expect(segmentsOf("ps:1-ph1:1")).toEqual(["ps:1", "ph1:1"]);
@@ -3046,7 +3013,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
   });
 
   it("T2-F7.5: search_text sanitizes malformed FTS syntax without leaking sqlite internals", async () => {
-    // Note: toFtsQuery sanitizes quotes/parens; verify empty/punctuation query fails cleanly without fts5 leak
     const r = await callMcp(makeTestEnv({ pdfCorpus: "1" }), "search_text", {
       query: '"" (( *** ))',
       law: "qccs-mtl-directives",
@@ -3055,7 +3021,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(proseOf(r.result)).not.toMatch(/fts5: syntax error/i);
   });
 
-  // F8 Boundaries
   it("T2-F8.1: search_text retrieves qccs-mtl-directives par. 12 on directive-specific vocabulary", async () => {
     const r = await callMcp(makeTestEnv({ pdfCorpus: "1" }), "search_text", {
       query: "montage cahier onglets greffe",
@@ -3109,7 +3074,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     expect(proseOf(r.result)).toContain("sélection fermée");
   });
 
-  // F9 Boundaries (additional to Tier 1 + tests/pdf-corpus-e2e.test.mjs)
   it("T2-F9.1: GET / with HEAD method returns empty body and 200 status", async () => {
     await caches.default.delete(CACHE_KEY);
     const ctx = createExecutionContext();
@@ -3137,7 +3101,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     const p1 = await getHomePage(makeTestEnv({ pdfCorpus: "1" }));
     expect(p1.html).toContain('data-law-id="qccs-mtl-directives"');
 
-    // Without cache delete, stale page stays cached
     const ctxCached = createExecutionContext();
     const resCached = await worker.fetch(
       new Request("https://legislation.test/"),
@@ -3147,7 +3110,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
     await waitOnExecutionContext(ctxCached);
     expect(await resCached.text()).toContain('data-law-id="qccs-mtl-directives"');
 
-    // After cache delete, PDF_CORPUS='0' takes effect immediately
     const p0 = await getHomePage(makeTestEnv({ pdfCorpus: "0" }));
     expect(p0.html).not.toContain('data-law-id="qccs-mtl-directives"');
   });
@@ -3197,10 +3159,6 @@ describe("Tier 2 — Boundary & Corner Cases (F1–F9)", () => {
 function resIsOk(r: McpToolResult): boolean {
   return !r.isError;
 }
-
-// =============================================================================
-// TIER 3 — Cross-Feature Pairwise Combinations (>= 9 tests)
-// =============================================================================
 
 describe("Tier 3 — Cross-Feature Pairwise Combinations", () => {
   it("T3.1: PDF_CORPUS='1' + FEDERAL_CORPUS='0' vs '1' compose independently via SQL AND", async () => {
@@ -3475,10 +3433,6 @@ describe("Tier 3 — Cross-Feature Pairwise Combinations", () => {
     }
   });
 });
-
-// =============================================================================
-// TIER 4 — Real-World Application Scenarios (6 Multi-Step Workflows)
-// =============================================================================
 
 describe("Tier 4 — Real-World Legal Application Scenarios", () => {
   it("T4.1: Québec civil motion procedure — C.p.c. art. 490 + QCCS Montréal directive + preseance-sur", async () => {

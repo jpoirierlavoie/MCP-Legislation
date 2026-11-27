@@ -1,40 +1,13 @@
-// Rattrapage des vecteurs (plan v2, 2.2) — route d'administration HORS MCP.
-//
-// POST /admin/backfill-vectors, active SEULEMENT si le secret BACKFILL_TOKEN est posé et
-// que l'Authorization Bearer concorde (comparaison à temps constant sur empreintes SHA-256).
-// Utilise les BINDINGS (AI + VECTORS) : mêmes chemins de code que la requête de production,
-// aucun scope de jeton supplémentaire.
-//
-// Modes :
-//   - "full"        (défaut) : embedde/upsert toute la page et met à jour `vector_state` ;
-//   - "incremental" : n'embedde que les éléments absents de `vector_state` ou dont le SHA-256
-//                     du texte canonique (fil d'Ariane compris) a changé ;
-//   - "seed"        : enregistre les empreintes actuelles dans `vector_state` SANS appeler AI/VECTORS ;
-//   - "prune"       : supprime de Vectorize et de `vector_state` les vecteurs orphelins de la loi ;
-//   - "ping"        : vérifie les liaisons AI + VECTORS et retourne le nombre suivi dans `vector_state`.
-
 import { breadcrumbChains, EMBED_MODEL } from "./lib";
 
-/** Fenêtre bge-m3 : 60 K tokens PAR REQUÊTE, consommés comme lot × (texte le plus
- * long) — le moteur REMBOURRE tous les textes à la longueur du plus long (constaté :
- * « Max context reached 60850 » pour 50 textes de 1 217 tokens max). Contrainte réelle :
- * n × tokens(max) <= 60 000. */
 const EMBED_BATCH = 50;
 const EMBED_TOKEN_BUDGET = 55_000;
-/** Estimation d'empaquetage seulement : la VÉRITÉ vient du modèle (scission sur l'erreur
- * 3030), jamais de ce chiffre — invariant 8. Mesuré le 2026-07-21 : les textes les plus
- * denses du corpus (énumérations d'i-16) descendent à ~2,4 car./token ; on empaquette à
- * 2,0 pour rester SOUS la mesure. Ne pas y substituer une moyenne du corpus : c'est le
- * pire cas qui décide si le lot passe. */
 const estTokens = (chars: number) => Math.ceil(chars / 2.0);
-/** Plafond du texte embeddé (~1 500 tokens — plan 2.2) ; dépassements comptés. */
 const MAX_CHARS = 6000;
-/** Plafond d'éléments par invocation de la route (borne le temps par requête). */
 const MAX_COUNT = 250;
-/** Taille de lot SQL pour IN (...) et db.batch (D1 plafonne à 100 liaisons par énoncé). */
 const SQL_CHUNK = 90;
 
-export type BackfillMode = "full" | "incremental" | "seed" | "prune" | "ping";
+type BackfillMode = "full" | "incremental" | "seed" | "prune" | "ping";
 const MODES_VALIDES = new Set<string>(["full", "incremental", "seed", "prune", "ping"]);
 
 interface BackfillBody {
@@ -69,7 +42,6 @@ async function sha256Hex(input: string): Promise<string> {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Comparaison à temps constant sur empreintes SHA-256 du jeton Bearer. */
 async function verifieJetonBackfill(authHeader: string, secret: string): Promise<boolean> {
   if (!authHeader.startsWith("Bearer ")) return false;
   const [a, b] = await Promise.all([sha256Bytes(authHeader), sha256Bytes(`Bearer ${secret}`)]);
@@ -78,24 +50,12 @@ async function verifieJetonBackfill(authHeader: string, secret: string): Promise
   return diff === 0;
 }
 
-/**
- * Id Vectorize d'une division : les ids sont plafonnés à 64 OCTETS, or un chemin Irosoft
- * profond dépasse largement (div:ccq:ga:l_cinquieme-gb:…). On hache le chemin (SHA-256,
- * 24 hex = 96 bits — collision impensable sur ~2,7 K divisions) ; le chemin complet vit
- * dans metadata.path. Stable -> upserts idempotents.
- */
 async function divVectorId(law: string, path: string): Promise<string> {
   const hex = await sha256Hex(`${law}|${path}`);
   return `div:${law}:${hex.slice(0, 24)}`;
 }
 
-/**
- * Id Vectorize d'un article : les ids sont plafonnés à 64 OCTETS UTF-8. Les numéros
- * courts restent verbatim (`art:${law}:${number}`) pour préserver les vecteurs existants ;
- * au-delà de 64 octets UTF-8, on hache (`art:${law}:${hex.slice(0, 24)}`) à l'instar de
- * `divVectorId` (le numéro complet vit dans `metadata.article`).
- */
-export async function artVectorId(law: string, number: string): Promise<string> {
+async function artVectorId(law: string, number: string): Promise<string> {
   const raw = `art:${law}:${number}`;
   if (new TextEncoder().encode(raw).byteLength <= 64) return raw;
   const hex = await sha256Hex(`${law}|${number}`);
@@ -147,10 +107,6 @@ async function readTrackedHashes(
   return out;
 }
 
-/**
- * Construit les textes canoniques FR d'une page, avec le fil d'Ariane cuit dans le texte
- * embeddé et son SHA-256 pour le suivi incrémental.
- */
 async function chargerPageBackfill(
   db: D1Database,
   law: string,
@@ -165,9 +121,6 @@ async function chargerPageBackfill(
   let overruns = 0;
 
   if (kind === "articles") {
-    // Départage par `id` : le rattrapage pagine par LIMIT/OFFSET, or deux articles peuvent
-    // partager une clé de tri (cf. `boundRef` dans src/lib.ts). Sans ordre total, un lot
-    // pouvait sauter un article ou en embarquer deux fois — invisible depuis l'API.
     const rows = (
       await db
         .prepare(
@@ -215,8 +168,6 @@ async function chargerPageBackfill(
       });
     }
   } else {
-    // Départage par `id`, même raison que pour les articles : `sort_order` n'est pas garanti
-    // unique sur toute l'histoire d'une base. Sans ordre total, LIMIT/OFFSET devient ambigu.
     const rows = (
       await db
         .prepare(
@@ -255,7 +206,6 @@ async function chargerPageBackfill(
   return { items, overruns };
 }
 
-/** Supprime de Vectorize et de `vector_state` les vecteurs devenus orphelins pour une loi. */
 async function pruneVectors(
   db: D1Database,
   vectors: VectorizeIndex,
@@ -311,7 +261,7 @@ export async function handleBackfill(request: Request, env: Env): Promise<Respon
 
 async function handleBackfillInner(request: Request, env: Env): Promise<Response> {
   const secret = (env as EnvWithSecrets).BACKFILL_TOKEN;
-  if (!secret) return new Response("Not found", { status: 404 }); // route inerte sans secret
+  if (!secret) return new Response("Not found", { status: 404 });
   if (!(await verifieJetonBackfill(request.headers.get("Authorization") ?? "", secret))) {
     return new Response("Non autorisé.", { status: 401 });
   }
@@ -419,13 +369,12 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
     return json({ error: "liaisons AI/VECTORS absentes" }, 503);
   }
 
-  // --- embed (lots bornés en items ET en caractères) puis upsert ---------------
   const batches: BackfillItem[][] = [];
   let cur: BackfillItem[] = [];
   let curMaxChars = 0;
   for (const it of toEmbed) {
     const nextMax = Math.max(curMaxChars, it.text.length);
-    const cost = (cur.length + 1) * estTokens(nextMax); // rembourrage au plus long
+    const cost = (cur.length + 1) * estTokens(nextMax);
     if (cur.length && (cur.length >= EMBED_BATCH || cost > EMBED_TOKEN_BUDGET)) {
       batches.push(cur);
       cur = [];
@@ -436,9 +385,6 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
   }
   if (cur.length) batches.push(cur);
 
-  // Embed AUTO-ADAPTATIF : l'estimation ne fait que pré-empaqueter ; si le modèle
-  // répond « Max context reached » (3030), on scinde le lot en deux et on recommence —
-  // jusqu'au texte seul, qui tient toujours (6 000 car. ÷ 2 car./token = 3 000 tokens).
   async function embedSplit(texts: string[]): Promise<number[][]> {
     try {
       const res = (await env.AI.run(EMBED_MODEL as Parameters<Ai["run"]>[0], {
@@ -468,7 +414,6 @@ async function handleBackfillInner(request: Request, env: Env): Promise<Response
     try {
       data = await embedSplit(batch.map((b) => b.text));
     } catch (e) {
-      // JAMAIS de page HTML : le pilote a besoin d'un JSON actionnable.
       return json(
         {
           error: `AI.run a échoué (${(e as Error).message?.slice(0, 200)})`,

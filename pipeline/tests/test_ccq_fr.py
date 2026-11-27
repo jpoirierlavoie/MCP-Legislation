@@ -1,9 +1,3 @@
-"""Tests de non-régression du parseur sur le C.c.Q. FR (invariants phase 0 + témoins verbatim).
-
-Lancer :  python -m unittest pipeline.tests.test_ccq_fr   (ou pytest)
-
-L'EPUB échantillon (pipeline/samples/, non versionné) est téléchargé si absent.
-"""
 from __future__ import annotations
 
 import unittest
@@ -14,7 +8,6 @@ from pipeline.model import sort_key
 from pipeline.parser import parse_epub
 
 LAW_ID, LANG = "ccq", "fr"
-
 
 class CcqFrTest(unittest.TestCase):
     @classmethod
@@ -31,7 +24,6 @@ class CcqFrTest(unittest.TestCase):
         load.prepare(cls.law, cls.divisions, cls.articles)
         cls.by_num = {a.number: a for a in cls.articles}
 
-    # --- invariants globaux ---
     def test_invariants(self):
         rep = validate.validate(LAW_ID, LANG, self.divisions, self.articles)
         self.assertTrue(rep.ok, "\n".join(rep.lines))
@@ -41,7 +33,6 @@ class CcqFrTest(unittest.TestCase):
         self.assertEqual((ints[0], ints[-1]), (1, 3168))
         self.assertEqual(len(ints), 3168, "lacune ou doublon dans les entiers")
 
-    # --- témoins verbatim ---
     def test_article_1(self):
         a = self.by_num["1"]
         self.assertEqual(
@@ -67,11 +58,9 @@ class CcqFrTest(unittest.TestCase):
     def test_decimals_present(self):
         for num in ("2926.1", "132.0.1", "521.1", "898.1"):
             self.assertIn(num, self.by_num, f"article décimal {num} manquant")
-        # l'exemple faux du PLAN d'origine ne doit PAS exister
         self.assertNotIn("1615.1", self.by_num)
 
     def test_no_hidden_leak_in_history(self):
-        # historique exact = aucune date dupliquée (fuite de span caché exclue)
         a = self.by_num["2926.1"]
         self.assertEqual(a.history, "2013, c. 8, a. 7; 2020, c. 13, a. 2; 2020, c. 28, a. 6; "
                                     "2021, c. 13, a. 175; 2022, c. 22, a. 120.")
@@ -85,7 +74,6 @@ class CcqFrTest(unittest.TestCase):
         finales = self.by_num["finales"]
         self.assertTrue(finales.text.startswith("Le présent code remplace"))
 
-    # --- clés de tri ---
     def test_sort_key_ordering(self):
         self.assertLess(sort_key("898"), sort_key("898.1"))
         self.assertLess(sort_key("898.1"), sort_key("899"))
@@ -96,7 +84,6 @@ class CcqFrTest(unittest.TestCase):
         self.assertEqual(sort_key("préliminaire"), 0)
         self.assertLess(sort_key("3168"), sort_key("finales"))
 
-    # --- divisions ---
     def test_division_of_1457(self):
         a = self.by_num["1457"]
         d = next(d for d in self.divisions if d.id == a.division_id)
@@ -106,7 +93,6 @@ class CcqFrTest(unittest.TestCase):
     def test_repealed_divisions(self):
         rep = [d for d in self.divisions if d.repealed]
         self.assertEqual(len(rep), 4)
-
 
 if __name__ == "__main__":
     unittest.main()

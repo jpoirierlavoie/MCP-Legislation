@@ -458,12 +458,10 @@ describe("Quarantaine par domaine (Phase 0)", () => {
   it("search_text isole core, émet le radar sur 0 ou >0 résultats, et préserve law= + élargissement borné", async () => {
     const outils = construireOutils(testEnv());
 
-    // Requête uniquement présente dans pénal (0 hit dans core, radar mentionné dans l'erreur)
     const rZeroCore = await callTool(outils, "search_text", { query: "constat infraction pénale" });
     expect(rZeroCore.isError).toBe(true);
     expect(rZeroCore.content[0].text).toContain("penal");
 
-    // Requête présente dans core (ccq) ET travail (n-1.1)
     const rBoth = await callTool(outils, "search_text", { query: "congédiement" });
     const scBoth = rBoth.structuredContent as {
       results: Array<{ law_id: string }>;
@@ -474,7 +472,6 @@ describe("Quarantaine par domaine (Phase 0)", () => {
       expect.arrayContaining([expect.objectContaining({ domain: "travail", lexical_hits: 1 })]),
     );
 
-    // Coffre isolé
     const rPenal = await callTool(outils, "search_text", {
       query: "constat infraction pénale",
       domains: ["penal"],
@@ -485,7 +482,6 @@ describe("Quarantaine par domaine (Phase 0)", () => {
       ),
     ).toEqual(["c-25.1"]);
 
-    // Recherche ciblée sur une loi hors core reste ouverte sans préciser domains, et l'auto-élargissement reste dans son domaine
     const rLawOpen = await callTool(outils, "search_text", {
       law: "n-1.1",
       query: "congédiement introuvable_xyz",
@@ -496,7 +492,6 @@ describe("Quarantaine par domaine (Phase 0)", () => {
     expect(scOpen.results.length).toBeGreaterThan(0);
     expect(scOpen.results.every((r) => r.law_id === "n-1.1")).toBe(true);
 
-    // Filtre forum exclut un autre tribunal tout en gardant le corpus transversal (NULL)
     const rForum = await callTool(outils, "search_text", {
       query: "demande audience",
       forum: "Cour supérieure",
@@ -507,7 +502,6 @@ describe("Quarantaine par domaine (Phase 0)", () => {
     expect(lawsForum).toContain("c-25.01-r.2");
     expect(lawsForum).not.toContain("c-25.01-r.0.2.01");
 
-    // Filtre jurisdiction
     const rCa = await callTool(outils, "search_text", {
       query: "contrôle judiciaire",
       domains: ["all"],

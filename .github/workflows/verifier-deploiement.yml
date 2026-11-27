@@ -1,10 +1,5 @@
 name: verifier-deploiement
 
-# CONTRÔLE DE DÉRIVE — il REGARDE, il ne déploie rien et ne le peut pas.
-#
-# Filet de sécurité indépendant sans secret (`permissions: contents: read`, aucun jeton
-# Cloudflare) : compare chaque jour le `commit` annoncé sur `/health` au dernier commit
-# de `main` pour repérer un déploiement CD manqué ou un jeton expiré.
 on:
   schedule:
     - cron: "37 11 * * *"

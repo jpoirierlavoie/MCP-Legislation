@@ -34,20 +34,12 @@ import { estCheminDecouvertePublique, renderSite, repondreDecouvertePublique } f
 
 export { carteServeur };
 
-/**
- * Quarantaine IP en mémoire d'isolat pour échecs d'authentification répétés (G32).
- * Les jetons déjà reconnus valides contournent la quarantaine afin de ne jamais couper
- * les autres usagers partageant la même passerelle NAT ou infonuagique.
- */
 let quarantaine = creerQuarantaineIpEchecs();
 
 export function reinitialiserQuarantaineIpPourTests(): void {
   quarantaine = creerQuarantaineIpEchecs();
 }
 
-/**
- * Sert la page publique, avec cache d'arête à clé synthétique fixe.
- */
 const CACHE_KEY = "https://legislation.poirierlavoie.ca/__page";
 
 async function servePage(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -82,7 +74,6 @@ export default {
     const admises = originesAdmises((env as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS);
     const origin = origineAutorisee(request, admises);
 
-    // La page publique et ses fichiers de découverte passent AVANT le coupe-circuit, et hors du bloc /mcp (G22).
     if (url.pathname === "/") {
       if (request.method !== "GET" && request.method !== "HEAD") {
         return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
@@ -111,7 +102,6 @@ export default {
       estMcpOAuth ||
       estMcpDirect
     ) {
-      // 1. COUPE-CIRCUIT (`!== "true"` ⇒ 404). Fermé par défaut.
       if (!drapeau((env as { MCP_ENABLED?: string }).MCP_ENABLED, false)) {
         return refuser("404", origin);
       }
@@ -120,8 +110,6 @@ export default {
         return reponseSante({ commit: (env as { COMMIT?: string }).COMMIT });
       }
 
-      // Métadonnées RFC 9728 propres au sous-chemin `/mcp/oauth` (la racine
-      // `/.well-known/oauth-protected-resource` reste en 404 pour préserver `/mcp`).
       if (estMetaOAuth) {
         return repondreRessourceProtegee(
           request.method,
@@ -129,15 +117,12 @@ export default {
         );
       }
 
-      // Fiche de découverte SEP-2127 interceptée AVANT `/mcp/<jeton>`.
       if (estCarteServeur) {
         return repondreCarteServeur(request.method, carteServeur());
       }
 
-      // 2. ORIGINE, avant toute authentification (défense contre le ré-attachement DNS, G6).
       if (origineRefusee(request, admises)) return origineInterdite();
 
-      // 3. PRÉ-VOL, avant l'authentification et JAMAIS limité en débit (G6).
       if (request.method === "OPTIONS" && origin) return preflight(origin);
 
       const porte = estMcpOAuth ? PORTE_OAUTH : PORTE;
@@ -149,7 +134,6 @@ export default {
             })
           : refuser("404", origin);
 
-      // 4. DÉBIT PRÉ-AUTH par IP + quarantaine d'échecs (contournée par un jeton déjà connu).
       const ip = request.headers.get("CF-Connecting-IP") ?? "sans-ip";
       const candidatsJetons = porteursPresentes(request, url, porte);
       const preAuthOk = await verifierDebitPreAuth({
@@ -162,7 +146,6 @@ export default {
         return estMcpOAuth ? tropDeRequetes(60, origin) : refuser("404", origin);
       }
 
-      // 5. IDENTITÉ (`DB_IDENTITE` jetons individuels + secrets partagés transitoires sur `/mcp`).
       const depot = env.DB_IDENTITE ? creerDepotJetonsD1(env.DB_IDENTITE) : undefined;
       const autorise = await ouvrirPrincipal(
         request,
@@ -187,10 +170,8 @@ export default {
         return refuserAcces();
       }
 
-      // 6. MÉTHODE — APRÈS l'identité, sur `/mcp` comme sur `/mcp/oauth` (G23).
       if (request.method !== "POST") return methodeNonPermise(origin);
 
-      // 7. DÉBIT PAR TITULAIRE (`300/min` en régime `actif`, `20/min` en régime `limite`).
       if (autorise.principal.type === "titulaire") {
         const refusDebit = await verifierDebitTitulaire({
           titulaireId: autorise.principal.titulaireId,
@@ -202,7 +183,6 @@ export default {
         if (refusDebit) return refusDebit;
       }
 
-      // 8–12. Compteurs journaliers, enveloppe MCP 64 Kio, quotas par classe et exécution.
       return servirMcp(autorise.requete, env, origin, {
         principal: autorise.principal,
         ctx,

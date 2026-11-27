@@ -1,6 +1,6 @@
 {
   "name": "mcp-legislation",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "private": true,
   "description": "Texte officiel en lecture seule de lois, règlements, directives de pratique et orientations AMF du Québec et du Canada (français et anglais, certains PDF en français seulement), hiérarchie complète des divisions et recherche hybride lexicale et sémantique.",
   "license": "Apache-2.0",
@@ -10,10 +10,10 @@
     "deploy": "node scripts/deployer.mjs",
     "cf-typegen": "wrangler types",
     "type-check": "tsc --noEmit",
-    "db:schema:local": "wrangler d1 execute legislation --local --file=./schema.sql",
+    "db:schema:local": "wrangler d1 execute legislation --local --file=./data/schema.sql",
     "db:migrate:local": "wrangler d1 migrations apply legislation --local",
     "db:migrate:remote": "wrangler d1 migrations apply legislation --remote",
-    "evals": "node tests/evals.mjs",
+    "evals": "node eval/evals.mjs",
     "eval": "node eval/run.mjs",
     "eval:gate": "node eval/run.mjs --gate",
     "backfill:incremental": "node scripts/backfill-vectors.mjs --mode incremental --prune",
@@ -27,7 +27,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@cloudflare/vitest-pool-workers": "^0.23.0",
-    "@poirierlavoie/mcp-socle": "github:jpoirierlavoie/MCP-Socle#v0.8.6",
+    "@poirierlavoie/mcp-socle": "github:jpoirierlavoie/MCP-Socle#v0.8.7",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12",
     "wrangler": "^4.162.0"

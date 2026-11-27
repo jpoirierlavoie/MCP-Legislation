@@ -1,15 +1,3 @@
-"""Tests unitaires pour `pipeline.discovery.recon_pdf`.
-
-Comporte deux jeux :
-1. Logique pure Python (toujours exécutée, même en CI sans `pymupdf`) : normalisation Unicode `Zs`,
-   motifs numériques et alphanumériques CSA/AMF (`2A.1`, `4B.2`, `1.1.1A`) sans faux positifs sur
-   `45-106` ou `2026-02-23`, reconstruction de lignes par tolérance `y0` (exposants `1er`),
-   clustering `x0`, détection de bandeaux `y0` et formatage Markdown/JSON.
-2. Tests synthétiques `pymupdf` (`@unittest.skipIf(pymupdf is None, ...)`) : PDF multi-pages riche
-   (polices/styles, clusters `x0`, bandeaux `y0`, liens `LINK_URI`/`LINK_GOTO`, signets TOC, espaces
-   `U+00A0`/`U+2009`/`U+202F`, sections `2A.1`/`4B.2`, `Abrogé.`), refus strict des PDF numérisés
-   (zéro OCR), refus des PDF vides/corrompus/chiffrés, et déterminisme CLI UTF-8 LF.
-"""
 from __future__ import annotations
 
 import hashlib
@@ -42,9 +30,7 @@ from pipeline.discovery.recon_pdf import (
     strip_font_subset,
 )
 
-
 def _make_png_1x1() -> bytes:
-    """Construit un PNG RVB 1×1 valide en stdlib pure (aucun fichier externe)."""
 
     def _chunk(tag: bytes, data: bytes) -> bytes:
         crc = zlib.crc32(tag + data) & 0xFFFFFFFF
@@ -53,7 +39,6 @@ def _make_png_1x1() -> bytes:
     ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
     idat = zlib.compress(b"\x00\xff\xff\xff")
     return b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
-
 
 class TestReconPdfPurePython(unittest.TestCase):
     def test_norm_and_unicode_zs_audit_preserve_typographic_apostrophe(self):
@@ -79,8 +64,6 @@ class TestReconPdfPurePython(unittest.TestCase):
         self.assertEqual(classify_line_pattern("1. Ces directives")["kind"], "numeric")
         self.assertEqual(classify_line_pattern("115.1 L’adresse")["token"], "115.1")
 
-        # Ne doit pas classer les numéros d'instruments, dates ISO, ordinaux, devises,
-        # pourcentages, années nues, renvois de salle ni alphanumériques sans point comme sections
         self.assertEqual(classify_line_pattern("45-106 Règlement sur les dispenses")["kind"], "prose")
         self.assertEqual(classify_line_pattern("45 - 106 Règlement")["kind"], "prose")
         self.assertEqual(classify_line_pattern("2026-02-23 date d'effet")["kind"], "prose")
@@ -96,13 +79,11 @@ class TestReconPdfPurePython(unittest.TestCase):
         self.assertEqual(classify_line_pattern("2.13 doit d’abord payer les frais")["kind"], "prose")
         self.assertEqual(classify_line_pattern("2.17.")["kind"], "prose")
 
-        # Alphanumérique sans point mais avec délimiteur explicite (`.`, `)`, `:`) et majuscule après N.
         self.assertEqual(classify_line_pattern("2A. Champ avec point")["kind"], "alphanumeric")
         self.assertEqual(classify_line_pattern("2A) Sous-section")["token"], "2A")
         self.assertEqual(classify_line_pattern("2A: Titre")["token"], "2A")
         self.assertEqual(classify_line_pattern("14. Si le dossier est en état")["kind"], "numeric")
 
-        # Historique vs abrogation (Modification/Abrogation : avant abrogation et numérique)
         self.assertEqual(classify_line_pattern("Modification : 1er janvier 2025")["kind"], "history")
         self.assertEqual(classify_line_pattern("Modifications : 1er février 2024; 23 février 2026")["kind"], "history")
         self.assertEqual(classify_line_pattern("Abrogation : 1er février 2024")["kind"], "history")
@@ -125,11 +106,8 @@ class TestReconPdfPurePython(unittest.TestCase):
     def test_reconstruct_lines_merges_superscript_within_y_tolerance(self):
         spans = [
             SpanRecord(1, 92.0, 100.0, 145.0, 112.0, "ArialMT", "ArialMT", 12.0, 0, "À jour au 1", "À jour au 1"),
-            # Exposant décalé + espace géométrique de 1.6 pt : ne doit ni décaler anchor_y ni insérer d'espace avant `er`
             SpanRecord(1, 146.6, 98.2, 154.0, 105.0, "ArialMT", "ArialMT", 6.5, 1, "er", "er"),
-            # Gap 1.0 pt après `er` : doit préserver l'espace devant `janvier`
             SpanRecord(1, 155.0, 100.0, 210.0, 112.0, "ArialMT", "ArialMT", 12.0, 0, "janvier 2026", "janvier 2026"),
-            # Appel de note `(1)` 1.0 pt sous la ligne de base (2.8 pt sous l'exposant) : reste sur la même ligne
             SpanRecord(1, 213.0, 101.0, 224.0, 107.5, "ArialMT", "ArialMT", 6.5, 0, "(1)", "(1)"),
             SpanRecord(1, 92.0, 120.0, 102.0, 132.0, "ArialMT", "ArialMT", 12.0, 0, "1.", "1."),
             SpanRecord(1, 120.5, 120.0, 220.0, 132.0, "ArialMT", "ArialMT", 12.0, 0, "Premier alinéa", "Premier alinéa"),
@@ -250,25 +228,21 @@ class TestReconPdfPurePython(unittest.TestCase):
         self.assertIsNone(normalize_target_page(None))
         self.assertEqual(normalize_target_page(0), 1)
 
-
 @unittest.skipIf(pymupdf is None, "pymupdf absent dans cet environnement")
 class TestReconPdfWithPyMuPdf(unittest.TestCase):
     def _build_rich_pdf(self, path: Path) -> None:
         doc = pymupdf.open()
         doc.set_metadata({"title": "Directives & IG — Test", "producer": "TestSuite"})
 
-        # Page 1
         p1 = doc.new_page(width=612, height=792)
         p1.insert_text((54, 42), "Directives - Page 1", fontname="helv", fontsize=9, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p1.insert_text((54, 100), "PARTIE I - DISPOSITIONS", fontname="hebo", fontsize=14, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p1.insert_text((54, 130), "1. Premier\xa0paragraphe de l'instance.", fontname="helv", fontsize=11, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p1.insert_text((72, 150), "a) sous-item indenté", fontname="helv", fontsize=11, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p1.insert_text((54, 175), "2. Abrogé.", fontname="heit", fontsize=11, encoding=pymupdf.TEXT_ENCODING_LATIN)
-        # Exposant décalé verticalement dans la plage <= 2.5 pt
         p1.insert_text((54, 200), "À jour au 1", fontname="helv", fontsize=11, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p1.insert_text((112, 198.2), "er", fontname="helv", fontsize=6.5, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p1.insert_text((120, 200), "janvier 2026", fontname="helv", fontsize=11, encoding=pymupdf.TEXT_ENCODING_LATIN)
-        # Espaces Unicode U+2009 et U+202F + apostrophe typographique via insert_htmlbox
         p1.insert_htmlbox(
             pymupdf.Rect(54, 220, 500, 250),
             "<p style='font-size:11pt'>2A.1\u2009Disposition\xa0alphanumérique\u202fspéciale — l’ordre.</p>",
@@ -282,7 +256,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
         p1.insert_text((54, 313), "Aller à l'Annexe A", fontname="helv", fontsize=11, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p1.insert_text((54, 760), "À jour au 23 février 2026 - Page 1", fontname="helv", fontsize=9, encoding=pymupdf.TEXT_ENCODING_LATIN)
 
-        # Page 2
         p2 = doc.new_page(width=612, height=792)
         p2.insert_text((54, 42), "Directives - Page 2", fontname="helv", fontsize=9, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p2.insert_text((54, 100), "ANNEXE A - MODÈLES", fontname="hebo", fontsize=13, encoding=pymupdf.TEXT_ENCODING_LATIN)
@@ -290,7 +263,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
         p2.insert_text((54, 155), "1.1.1A Sous-règle", fontname="helv", fontsize=11, encoding=pymupdf.TEXT_ENCODING_LATIN)
         p2.insert_text((54, 760), "À jour au 23 février 2026 - Page 2", fontname="helv", fontsize=9, encoding=pymupdf.TEXT_ENCODING_LATIN)
 
-        # Recharger doc[0] après création de p2 pour insérer LINK_GOTO vers page index 1
         doc[0].insert_link({"kind": pymupdf.LINK_GOTO, "from": goto_rect, "page": 1, "to": pymupdf.Point(54, 100)})
 
         doc.set_toc([[1, "PARTIE I — DISPOSITIONS", 1], [1, "ANNEXE A — MODÈLES", 2]])
@@ -322,7 +294,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
             self.assertGreaterEqual(len(res["repeal_hits"]), 1)
             self.assertGreaterEqual(len(res["consolidation_dates"]), 1)
 
-            # Vérifie les sorties CLI JSON et Markdown + zéro mutation du PDF source
             md_out = tmp_dir / "out.md"
             json_out = tmp_dir / "out.json"
             buf = io.StringIO()
@@ -338,7 +309,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
             self.assertEqual(parsed["files_inspected"], 1)
             self.assertEqual(hashlib.sha256(pdf_path.read_bytes()).hexdigest(), before_sha)
 
-            # Second passage identique -> sortie octet pour octet déterministe
             with redirect_stdout(io.StringIO()):
                 rc2 = recon_pdf.main([str(pdf_path), "--out", str(md_out), "--json-out", str(json_out)])
             self.assertEqual(rc2, 0)
@@ -359,7 +329,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
             with self.assertRaises(ScannedPdfError):
                 recon_pdf.inspect_pdf(scan_pdf)
 
-            # Variante avec artefact de 2 caractères sur page scannée
             art_pdf = tmp_dir / "scanned_artifact.pdf"
             doc2 = pymupdf.open()
             page2 = doc2.new_page(width=612, height=792)
@@ -412,7 +381,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
         png_bytes = _make_png_1x1()
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
-            # 10-page raster scan with "Page N" (51 non-ws chars >= 20, avg 5.1 < 10) -> must refuse!
             scan10 = tmp_dir / "scan10.pdf"
             doc10 = pymupdf.open()
             for idx in range(1, 11):
@@ -426,7 +394,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(recon_pdf.main([str(scan10), "--out", str(tmp_dir / "s10.md")]), 2)
 
-            # Majority-scan partial PDF (1 rich text page + 2 image-only pages) -> must refuse!
             maj_pdf = tmp_dir / "majority_scan.pdf"
             doc_maj = pymupdf.open()
             p_txt = doc_maj.new_page(width=612, height=792)
@@ -439,7 +406,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
             with self.assertRaises(ScannedPdfError):
                 recon_pdf.inspect_pdf(maj_pdf)
 
-            # Minority-scan partial PDF (3 text pages + 1 image-only page) -> accepted with warning!
             min_pdf = tmp_dir / "minority_scan.pdf"
             doc_min = pymupdf.open()
             for idx in range(1, 4):
@@ -528,7 +494,6 @@ class TestReconPdfWithPyMuPdf(unittest.TestCase):
             md = recon_pdf.build_markdown_report([res], [])
             self.assertIn("juge.cabinet.cs.mtl@judex.qc.ca", md)
             self.assertNotIn("p.-1", md)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -246,7 +246,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
     expect(ig.law).toBeNull();
     expect(ig.ambigu).toBeNull();
 
-    // Sans v-1.1-r.21 (ex. PDF_CORPUS="0"), V-1.1 ne doit PAS avaler ", r. 21"
     const noPdfLaws: LawRow[] = [
       ...PROD_LAWS.filter(
         (l) => l.id !== "v-1.1-r.21" && !l.id.startsWith("qcc") && !l.id.startsWith("amf-ig-"),
@@ -276,7 +275,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       chapitre_inconnu: null,
     });
 
-    // QCCQ narrow() inconditionnel et sans collision avec qccq-daa-jurisprudence
     expect(
       parseCitation("Directive C.Q. pratique administrative, par. 1", PROD_LAWS),
     ).toMatchObject({
@@ -361,7 +359,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       expect(p.ambigu, cit).toBeNull();
     }
 
-    // Titres verbatim QCCQ + variantes C.Q. / CSA / ACVM
     expect(
       parseCitation(
         "Mode de fonctionnement — Division de pratique civile — District de Montréal (Salles 2.06 et 2.02), par. 5",
@@ -394,7 +391,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ambigu: null,
     });
 
-    // Step 4 : sans marqueur d'article, les identifiants de règlement, salles, dates et annexes ne polluent pas
     expect(parseCitation("Règlement 45-106 (RLRQ, c. V-1.1, r. 21) 2.1", PROD_LAWS)).toMatchObject({
       law: "v-1.1-r.21",
       article: "2.1",
@@ -426,7 +422,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
   });
 
   it("Round 2 Tier 5 : 4A.1/5A.1 sans art., IG parenthésée, Annexe 45-106A1, C.S./C.Q. du Québec, DAA, Salles virgule", () => {
-    // 1) Alphanumérique CSA/AMF sans préfixe art. : a./s. lookbehind inclut 0-9
     expect(parseCitation("RLRQ, c. V-1.1, r. 21, 5A.1", PROD_LAWS)).toMatchObject({
       law: "v-1.1-r.21",
       article: "5A.1",
@@ -448,7 +443,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ambigu: null,
     });
 
-    // 2a) IG / Policy Statement avec (RLRQ, c. V-1.1, r. 21) entre parenthèses vs Règlement nu
     expect(
       parseCitation(
         "Instruction générale relative au Règlement 45-106 (RLRQ, c. V-1.1, r. 21), art. 2.1",
@@ -476,7 +470,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ).law,
     ).toBeNull();
 
-    // 2b) Annexe 45-106A1 / 31-103A1 / 51-102A6E non tronquée par extraStrip/STRIP_DATES_ET_SALLES
     expect(parseCitation("Règlement 45-106, Annexe 45-106A1", PROD_LAWS)).toMatchObject({
       law: "v-1.1-r.21",
       article: "annexe-45-106a1",
@@ -493,7 +486,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ambigu: null,
     });
 
-    // 3) C.S. du Québec / C.Q. du Québec / DAA
     expect(
       parseCitation("Directives C.S. du Québec — Division de Montréal, par. 12", PROD_LAWS),
     ).toMatchObject({ law: "qccs-div-mtl", article: "12", ambigu: null });
@@ -525,7 +517,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       parseCitation("Directives C.Q. — Division administrative et d'appel, par. 1", PROD_LAWS),
     ).toMatchObject({ law: "qccq-daa-jurisprudence", article: "1", ambigu: null });
 
-    // 4) Salles avec virgule sans espace avant virgule + Salle singulière
     expect(
       parseCitation(
         "Mode de fonctionnement — Division de pratique civile — District de Montréal (Salles 2.06, 2.02), 5",
@@ -545,7 +536,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ),
     ).toMatchObject({ law: "qccq-mtl-prat-admin", article: "2.1", ambigu: null });
 
-    // 5) note-preliminaire citationOf
     const reg21 = PROD_LAWS.find((l) => l.id === "v-1.1-r.21")!;
     expect(citationOf(reg21, "note-preliminaire", "fr")).toBe(
       "RLRQ, c. V-1.1, r. 21, note préliminaire",
@@ -556,7 +546,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
   });
 
   it("Round 3 Tier 5 : C.1 (IG + c. V-1.1, r. 21 / RLRQ c. V-1.1, r. 21), C.2 (3+ Salles virgule), C.3 (juge en chef associée)", () => {
-    // C.1 — IG avec citation RLRQ/c. sans virgule ou entre parenthèses -> jamais "1" de V-1.1
     expect(
       parseCitation("Instruction générale relative à c. V-1.1, r. 21, 2.1", PROD_LAWS),
     ).toMatchObject({ law: "amf-ig-45-106", article: "2.1", ambigu: null });
@@ -575,7 +564,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
     expect(
       parseCitation("Policy Statement 45-106, CQLR c. V-1.1, r. 21, 2.1", PROD_LAWS),
     ).toMatchObject({ law: "amf-ig-45-106", article: "2.1", ambigu: null });
-    // Non-régression citations législatives classiques
     expect(parseCitation("c. C-25.01, art. 1", PROD_LAWS)).toMatchObject({
       law: "cpc",
       article: "1",
@@ -592,7 +580,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       chapitre_inconnu: "C-36",
     });
 
-    // C.2 — 3+ salles séparées par des virgules sans « et » ni « par. »
     expect(
       parseCitation(
         "Mode de fonctionnement C.Q. Montréal (Pratique civile) Salles 2.06, 2.02, 2.03, 5",
@@ -630,7 +617,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ),
     ).toMatchObject({ law: "qccq-mtl-prat-civile", article: "5", ambigu: null });
 
-    // C.3 — Directives de la juge en chef associée -> qccs-div-qc sauf district/ville explicite
     expect(
       parseCitation("Directives de la juge en chef associée, par. 1", PROD_LAWS),
     ).toMatchObject({
@@ -668,7 +654,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       } as unknown as LawRow,
     ];
 
-    // Bug 1 : annexe-division-1..8 sur qccs-dist-mtl vs qccs-div-mtl
     expect(
       parseCitation("Directives C.S. District de Montréal, annexe-division-1", prodAvecV11),
     ).toMatchObject({ law: "qccs-dist-mtl", article: "annexe-division-1", ambigu: null });
@@ -689,7 +674,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
     expect(ambDiv.article).toBe("annexe-division-1");
     expect(ambDiv.ambigu?.map((a) => a.id).sort()).toEqual(["qccs-dist-mtl", "qccs-div-mtl"]);
 
-    // Bug 2 : Règlement ou IG mentionnant la loi habilitante (RLRQ, c. V-1.1) ne rabat jamais sur v-1.1
     expect(parseCitation("Règlement 45-106 (RLRQ, c. V-1.1), art. 1", prodAvecV11)).toMatchObject({
       law: "v-1.1-r.21",
       article: "1",
@@ -717,11 +701,9 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       article: "2.1",
       ambigu: null,
     });
-    // Non-régression : la Loi sur les valeurs mobilières seule reste résolue sur v-1.1
     expect(
       parseCitation("Loi sur les valeurs mobilières (RLRQ, c. V-1.1), art. 1", prodAvecV11),
     ).toMatchObject({ law: "v-1.1", article: "1", ambigu: null });
-    // Avec PDF_CORPUS="0" (ni Règlement ni IG PDF), ne rabat jamais silencieusement sur v-1.1
     const sansPdfAvecV11 = prodAvecV11.filter(
       (l) => !l.id.startsWith("qcc") && !l.id.startsWith("amf-ig-") && !l.id.startsWith("v-1.1-r."),
     );
@@ -730,7 +712,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
     ).toBeNull();
     expect(parseCitation("IG 45-106 (RLRQ, c. V-1.1), 1", sansPdfAvecV11).law).toBeNull();
 
-    // Bug 3 : ch. / chapitre / chapter + lookbehind '.' empêchant d'extraire "1" de V-1.1
     expect(
       parseCitation("Instruction générale 45-106 (RLRQ, ch. V-1.1, r. 21), 2.1", prodAvecV11),
     ).toMatchObject({ law: "amf-ig-45-106", article: "2.1", ambigu: null });
@@ -773,7 +754,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       } as unknown as LawRow,
     ];
 
-    // Bug 1 : L.R.Q. / R.S.Q. -> Règlement ; (c. V-1.1) / (V-1.1) sans marqueur -> ambigu (jamais v-1.1)
     expect(parseCitation("45-106 (L.R.Q., c. V-1.1), art. 1", prodAvecV11)).toMatchObject({
       law: "v-1.1-r.21",
       article: "1",
@@ -807,7 +787,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       expect(p.ambigu?.map((a) => a.id).sort(), cit).toEqual([...expIds]);
     }
 
-    // Sous PDF_CORPUS="0", (c. V-1.1) avec 45-106 ne rabat pas sur v-1.1
     const sansPdfAvecV11 = prodAvecV11.filter(
       (l) => !l.id.startsWith("qcc") && !l.id.startsWith("amf-ig-") && !l.id.startsWith("v-1.1-r."),
     );
@@ -821,12 +800,10 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       article: "1",
       ambigu: null,
     });
-    // Non-régression : Loi sur les valeurs mobilières explicite reste sur v-1.1
     expect(
       parseCitation("Loi sur les valeurs mobilières (L.R.Q., c. V-1.1), art. 1", prodAvecV11),
     ).toMatchObject({ law: "v-1.1", article: "1", ambigu: null });
 
-    // Bug 2 : districts judiciaires non ingérés refusés (jamais rabattus sur qccs-dist-mtl)
     for (const district of [
       "Mont-Laurier",
       "Cowansville",
@@ -860,7 +837,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
     expect(
       parseCitation("Directives de la Cour supérieure — District d'Iberville, par. 1", prodAvecV11),
     ).toMatchObject({ law: null, ambigu: null, article: "1" });
-    // Non-régression des 3 textes QCCS ingérés (FR et EN)
     expect(
       parseCitation("Directives de la Cour supérieure — District de Montréal, par. 1", prodAvecV11),
     ).toMatchObject({ law: "qccs-dist-mtl", article: "1", ambigu: null });
@@ -877,7 +853,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       parseCitation("Directives de la Cour supérieure — Division de Québec, par. 1", prodAvecV11),
     ).toMatchObject({ law: "qccs-div-qc", article: "1", ambigu: null });
 
-    // Bug 3a : exposants Unicode 1ᵉʳ / 1ʳᵉ / 2ᵉ dans les dates françaises
     expect(
       parseCitation(
         "Directives de la Cour supérieure — District de Montréal (1\u1d49\u02b3 janvier 2026), 12",
@@ -891,7 +866,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ),
     ).toMatchObject({ law: "qccs-div-mtl", article: "10", ambigu: null });
 
-    // Bug 3b : séparateurs ; — – - après listes de Salles
     for (const sep of ["—", "–", "-", ";"]) {
       const cit = `Mode de fonctionnement C.Q. Montréal (Pratique civile) Salles 2.06, 2.02 ${sep} 5`;
       expect(parseCitation(cit, prodAvecV11), cit).toMatchObject({
@@ -901,7 +875,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       });
     }
 
-    // Bug 4 : Annexe division <n> et Annexe district <n> séparés par des espaces
     expect(
       parseCitation("Directives C.S. District de Montréal, Annexe division 1", prodAvecV11),
     ).toMatchObject({ law: "qccs-dist-mtl", article: "annexe-division-1", ambigu: null });
@@ -937,7 +910,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       } as unknown as LawRow,
     ];
 
-    // 1) Règlement / IG AMF nommant la Loi sur les valeurs mobilières (RLRQ, c. V-1.1)
     expect(
       parseCitation(
         "Règlement 45-106 pris en vertu de la Loi sur les valeurs mobilières (RLRQ, c. V-1.1), art. 1",
@@ -962,11 +934,9 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
         prodAvecV11,
       ),
     ).toMatchObject({ law: "amf-ig-45-106", article: "1.1", ambigu: null });
-    // Non-régression : la Loi sur les valeurs mobilières seule résout toujours vers v-1.1
     expect(
       parseCitation("Loi sur les valeurs mobilières (RLRQ, c. V-1.1), art. 1", prodAvecV11),
     ).toMatchObject({ law: "v-1.1", article: "1", ambigu: null });
-    // Sous PDF_CORPUS="0" (sans règlements/IG PDF) : ni rabat sur v-1.1 ni faux chapitre_inconnu V-1.1
     const sansPdfAvecV11 = prodAvecV11.filter(
       (l) => !l.id.startsWith("qcc") && !l.id.startsWith("amf-ig-") && !l.id.startsWith("v-1.1-r."),
     );
@@ -983,7 +953,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ),
     ).toMatchObject({ law: null, article: "1.1", chapitre_inconnu: null, ambigu: null });
 
-    // 2) Formulations anglaises Superior Court Directives / Quebec Division
     expect(
       parseCitation("Superior Court Directives — District of Montreal, para. 1", prodAvecV11),
     ).toMatchObject({ law: "qccs-dist-mtl", article: "1", ambigu: null });
@@ -1005,7 +974,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
     expect(
       parseCitation("Superior Court of Quebec — District of Montreal, para. 1", prodAvecV11),
     ).toMatchObject({ law: "qccs-dist-mtl", article: "1", ambigu: null });
-    // Quebec District (non ingéré) vs Quebec Division
     expect(
       parseCitation("Superior Court Directives — Quebec District, para. 1", prodAvecV11),
     ).toMatchObject({ law: null, article: "1", ambigu: null });
@@ -1021,7 +989,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       "qccs-div-qc",
     ]);
 
-    // 3) Annexe accentuée multi-mots & subdivisions séparées par virgule (Partie/Rubrique/Appendice)
     expect(
       parseCitation("Directive C.Q. (DAA), Annexe déontologie policière", prodAvecV11),
     ).toMatchObject({
@@ -1078,14 +1045,12 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       article: "annexe-51-102a1-partie-1-rubrique-2",
       ambigu: null,
     });
-    // Non-régression : Annexe A1, art. 1 -> art. 1 prime ; Annexe division 1 reste intact
     expect(parseCitation("Règlement 45-106, Annexe 45-106A1, art. 1", prodAvecV11)).toMatchObject({
       law: "v-1.1-r.21",
       article: "1",
       ambigu: null,
     });
 
-    // 4) CHAPITRE_EXPLICITE avec ch.
     expect(parseCitation("L.R.C. 1985, ch. B-3, art. 67", prodAvecV11)).toMatchObject({
       law: null,
       article: "67",
@@ -1113,7 +1078,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       } as unknown as LawRow,
     ];
 
-    // 1) Bug 1 [HIGH] : Instructions générales dans un titre d'annexe de Règlement 45-106 / V-1.1, r. 21 -> v-1.1-r.21 (jamais amf-ig-45-106)
     for (const cit of [
       "RLRQ, c. V-1.1, r. 21, Annexe 45-106A2, A. Instructions générales",
       "Règlement 45-106, Annexe 45-106A2, A. Instructions générales",
@@ -1144,7 +1108,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ambigu: null,
     });
 
-    // Non-régression IG explicite (avec ou sans Annexe)
     expect(parseCitation("Annexe A de l'Instruction générale 45-106", prodAvecV11)).toMatchObject({
       law: "amf-ig-45-106",
       article: "annexe-a",
@@ -1171,7 +1134,6 @@ describe("parseCitation — désambiguïsation PDF / AMF et marqueurs", () => {
       ambigu: null,
     });
 
-    // 2) Bug 2 [MEDIUM] : ANNEXE_STOP_MOTS resserré (Instructions, pour, l', a, de, la, sur)
     for (const [cit, expArt] of [
       ["Règlement 45-106, Annexe 45-106A19 Instructions", "annexe-45-106a19-instructions"],
       ["Règlement 45-106, Annexe 45-106A19, Instructions", "annexe-45-106a19-instructions"],

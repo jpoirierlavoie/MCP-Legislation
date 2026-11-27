@@ -1,9 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-// Éprouve l'AMORÇAGE, non le domaine : que la base de test porte bien le schéma de
-// production. Jusqu'au 2026-09-17 elle était vide, et tout ce qui touchait D1 échouait sur
-// « no such table: laws » — donc rien de ce qui lit la base n'était éprouvable ici.
 describe("la base de test porte le schéma de production", () => {
   const db = () => (env as unknown as { DB: D1Database }).DB;
 
@@ -28,9 +25,9 @@ describe("la base de test porte le schéma de production", () => {
     const t = await tables();
     for (const n of ["search_log", "division_links", "concept_gazetteer", "article_headnotes"])
       expect(t, n).toContain(n);
-    expect(t).toContain("article_numbers"); // migration 0004
-    expect(t).toContain("vector_state"); // migration 0005
-    expect(t).toContain("refresh_state"); // migration 0005
+    expect(t).toContain("article_numbers");
+    expect(t).toContain("vector_state");
+    expect(t).toContain("refresh_state");
   });
 
   it("porte les index de clés étrangères de la migration 0006", async () => {
@@ -43,8 +40,6 @@ describe("la base de test porte le schéma de production", () => {
   });
 
   it("la migration 0004 a bien renommé rlrq_cite en official_cite", async () => {
-    // L'assertion NÉGATIVE est celle qui compte, dit la CI : un schema.sql déclarant déjà
-    // `official_cite` ferait passer un bootstrap naïf sans que la migration ait joué.
     const { results } = await db()
       .prepare("SELECT name FROM pragma_table_info('laws')")
       .all<{ name: string }>();
@@ -54,8 +49,6 @@ describe("la base de test porte le schéma de production", () => {
   });
 
   it("articles_fts a `text` en position 0 — un snippet() y est codé en dur", async () => {
-    // `src/lib.ts` appelle `snippet(articles_fts, 0, …)` : une inversion servirait une note
-    // marginale comme s'il s'agissait du texte officiel.
     const { results } = await db()
       .prepare("SELECT name, cid FROM pragma_table_info('articles_fts')")
       .all<{ name: string; cid: number }>();
@@ -93,8 +86,6 @@ describe("la base de test porte le schéma de production", () => {
   });
 
   it("chaque fichier de test repart d'une base NEUVE", async () => {
-    // Le setup s'exécute par fichier : la ligne écrite par le test précédent ne doit pas
-    // fuir ici. Sans cela, l'ordre des tests deviendrait significatif.
     const n = await db().prepare("SELECT COUNT(*) AS n FROM divisions").first<{ n: number }>();
     expect(n?.n).toBe(0);
   });

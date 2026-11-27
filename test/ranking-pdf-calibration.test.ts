@@ -116,7 +116,6 @@ describe("rank() — pondération normative et plafond de diversité par fonctio
     const cpcIdx = cands.findIndex((c) => c.law_id === "cpc");
     expect(cpcIdx).toBe(0);
     expect(MAX_PER_FONCTION_SOUPLE).toBe(2);
-    // Les 3 directives restent toutes accessibles en file d'attente si limit le permet
     const dirs = cands.filter((c) => c.law_id.startsWith("qccs-"));
     expect(dirs).toHaveLength(3);
   });
@@ -238,11 +237,9 @@ describe("rank() — portée par texte (law_id) et mot vide « clause »", () =>
     const c38Idx = cands6.findIndex((c) => c.law_id === "c-38" && c.division_path === "ga:l_ii");
 
     expect(ccqIdx).toBeGreaterThanOrEqual(0);
-    // « clause » étant mot vide, v-1.1-r.10›ps:5 et c-38›ga:l_ii ne reçoivent aucun signal
     expect(r10Idx).toBe(-1);
     expect(c38Idx).toBe(-1);
 
-    // La portée de « emploi » compte les textes (law_id) distincts et non le nombre d'annexes dans v-1.1-r.21
     const ccq6 = cands6[ccqIdx];
     const ccq1 = cands1.find(
       (c) => c.law_id === "ccq" && c.division_path === "ga:l_cinquieme-gb:l_deuxieme-gc:l_septieme",
@@ -429,7 +426,6 @@ describe("fuseHybrid / searchText — calibration RRF des directives et orientat
   });
 
   it("à rang RRF égal, loi et règlement priment toujours sur directive et orientation", async () => {
-    // Rangs symétriques : v-1.1-r.21 (FTS #1, Vec #2) vs amf-ig-45-106 (FTS #2, Vec #1)
     const matches = [
       { id: "ig-2.1", score: 0.9, law: "amf-ig-45-106", article: "2.1" },
       { id: "reg-2.1", score: 0.89, law: "v-1.1-r.21", article: "2.1" },

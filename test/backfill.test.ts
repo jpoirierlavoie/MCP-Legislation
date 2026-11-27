@@ -143,7 +143,6 @@ describe("/admin/backfill-vectors", () => {
       VECTORS: mocks.VECTORS,
     } as unknown as Env;
 
-    // 1. Seed initial (0 appel AI/VECTORS)
     const rSeed = await post(testEnv, { kind: "articles", law: "loi-test", mode: "seed" });
     expect(rSeed.status).toBe(200);
     const jSeed = (await rSeed.json()) as Record<string, unknown>;
@@ -151,7 +150,6 @@ describe("/admin/backfill-vectors", () => {
     expect(mocks.embeddedTexts.length).toBe(0);
     expect(mocks.upserted.length).toBe(0);
 
-    // 2. Incremental sans changement -> 0 embedding
     const rInc0 = await post(testEnv, { kind: "articles", law: "loi-test", mode: "incremental" });
     expect(rInc0.status).toBe(200);
     expect(await rInc0.json()).toMatchObject({
@@ -163,7 +161,6 @@ describe("/admin/backfill-vectors", () => {
     });
     expect(mocks.upserted.length).toBe(0);
 
-    // 3. Modification d'un seul article -> 1 seul embedding
     await db()
       .prepare("UPDATE articles SET text = ? WHERE id = 1002")
       .bind("Deuxième article modifié.")
@@ -178,7 +175,6 @@ describe("/admin/backfill-vectors", () => {
     });
     expect(mocks.upserted.map((v) => v.id)).toEqual(["art:loi-test:2"]);
 
-    // 4. Modification d'un intitulé de division -> fil d'Ariane change donc tous ses articles sont ré-embeddés
     await db().prepare("UPDATE divisions SET heading = ? WHERE id = 101").bind("TITRE NEUF").run();
     const rInc2 = await post(testEnv, { kind: "articles", law: "loi-test", mode: "incremental" });
     expect(await rInc2.json()).toMatchObject({
@@ -188,7 +184,6 @@ describe("/admin/backfill-vectors", () => {
       skipped: 0,
       done: true,
     });
-    // 5. Deuxième passage immédiat -> 0 embedding
     const rInc3 = await post(testEnv, { kind: "articles", law: "loi-test", mode: "incremental" });
     expect(await rInc3.json()).toMatchObject({
       mode: "incremental",
@@ -208,7 +203,6 @@ describe("/admin/backfill-vectors", () => {
       VECTORS: mocks.VECTORS,
     } as unknown as Env;
 
-    // Indexation complète initiale (articles + divisions)
     const rArt = await post(testEnv, { kind: "articles", law: "loi-test" });
     expect(await rArt.json()).toMatchObject({ mode: "full", embedded: 2, done: true });
     const rDiv = await post(testEnv, { kind: "divisions", law: "loi-test" });
@@ -220,7 +214,6 @@ describe("/admin/backfill-vectors", () => {
     expect(artVec.metadata).toMatchObject({ domain: "core", jurisdiction: "qc" });
     expect(divVec.metadata).toMatchObject({ domain: "core", jurisdiction: "qc" });
 
-    // Suppression de l'art. 2 et remplacement de ga:l_i par ga:l_i__2
     await db().prepare("DELETE FROM articles WHERE id = 1002").run();
     await db().prepare("UPDATE divisions SET path = 'ga:l_i__2' WHERE id = 101").run();
     await db().prepare("UPDATE articles SET division_path = 'ga:l_i__2' WHERE id = 1001").run();
@@ -324,11 +317,9 @@ describe("/admin/backfill-vectors", () => {
     expect(new TextEncoder().encode(longVec!.id).byteLength).toBeLessThanOrEqual(64);
     expect(longVec!.id).toMatch(/^art:loi-test:[0-9a-f]{24}$/);
 
-    // Deuxième passage en incremental -> 0 ré-embedding (hash d'id stable dans vector_state)
     const rInc = await post(testEnv, { kind: "articles", law: "loi-test", mode: "incremental" });
     expect(await rInc.json()).toMatchObject({ mode: "incremental", embedded: 0, skipped: 3 });
 
-    // Suppression de l'article long -> prune supprime exactement le même id haché
     await db().prepare("DELETE FROM articles WHERE id = 1003").run();
     const rPrune = await post(testEnv, { kind: "articles", law: "loi-test", mode: "prune" });
     expect(await rPrune.json()).toMatchObject({

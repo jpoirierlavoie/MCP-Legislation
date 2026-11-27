@@ -186,7 +186,6 @@ describe("parseCitation — Lois constitutionnelles de 1867 et 1982 et Chartes",
     expect(ambEn.article).toBe("1");
     expect(ambEn.ambigu?.map((c) => c.id)).toEqual(["c-12", "ca-const-1982"]);
 
-    // Lorsque PDF_CORPUS='0', ca-const-1982 est absent de `laws` : repli déterministe sur c-12 seul
     const sansPdf = LAWS.filter((l) => !l.id.startsWith("ca-const-"));
     expect(parseCitation("art. 7 de la Charte", sansPdf)).toMatchObject({
       law: "c-12",

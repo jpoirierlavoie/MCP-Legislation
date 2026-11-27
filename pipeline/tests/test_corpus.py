@@ -1,8 +1,3 @@
-"""Tests de non-régression bilingues / multi-lois (C.c.Q. + C.p.c., FR + EN).
-
-Lance parse + validation sur les 4 combinaisons et vérifie quelques témoins verbatim.
-L'EPUB échantillon (pipeline/samples/, non versionné) est téléchargé si absent.
-"""
 from __future__ import annotations
 
 import unittest
@@ -21,7 +16,6 @@ COMBOS = [
 ]
 _cache: dict[tuple[str, str], tuple] = {}
 
-
 def corpus(law_id: str, lang: str):
     if (law_id, lang) not in _cache:
         cfg = config.get_law(law_id)
@@ -37,7 +31,6 @@ def corpus(law_id: str, lang: str):
         _cache[(law_id, lang)] = (law, divs, arts, {a.number: a for a in arts})
     return _cache[(law_id, lang)]
 
-
 class CorpusTest(unittest.TestCase):
     def test_invariants_all_combos(self):
         for law_id, lang in COMBOS:
@@ -47,8 +40,6 @@ class CorpusTest(unittest.TestCase):
                 self.assertTrue(rep.ok, f"{law_id}/{lang}\n" + "\n".join(rep.lines))
 
     def test_fr_en_symmetry(self):
-        # FR et EN d'une même loi ont les mêmes numéros d'articles RÉELS (même loi, traduite).
-        # Les pseudo-articles de disposition peuvent différer (intitulés propres à la langue).
         from pipeline.validate import is_disposition
         for law_id in ("ccq", "cpc", "c-73.2-r.6"):
             *_, fr = corpus(law_id, "fr")
@@ -67,7 +58,7 @@ class CorpusTest(unittest.TestCase):
     def test_cpc_fr_witnesses(self):
         _, _, _, by = corpus("cpc", "fr")
         self.assertTrue(by["1"].text.startswith("Les modes privés de prévention"))
-        self.assertIn("836", by)          # dernier article
+        self.assertIn("836", by)
         self.assertNotIn("837", by)
 
     def test_cpc_en_witnesses(self):
@@ -75,19 +66,15 @@ class CorpusTest(unittest.TestCase):
         self.assertTrue(by["1"].text.startswith("To prevent a potential dispute"))
 
     def test_cpc_annexe(self):
-        # l'annexe (convention de La Haye) est un pseudo-article 'annexe-i' dans les 2 langues
-        # (label canonique : SCHEDULE I -> annexe-i comme ANNEXE I).
         for lang, marker in (("fr", "annexe"), ("en", "Schedule")):
             _, _, _, by = corpus("cpc", lang)
             self.assertIn("annexe-i", by)
             self.assertIn(marker, by["annexe-i"].history or "")
-        # le C.c.Q. a des dispositions finales (pas d'annexe)
         _, _, _, ccq = corpus("ccq", "fr")
         self.assertIn("finales", ccq)
         self.assertNotIn("annexe-i", ccq)
 
     def test_globally_unique_ids(self):
-        # les id de divisions/articles ne doivent pas entrer en collision entre combos
         div_ids: set[int] = set()
         art_ids: set[int] = set()
         for law_id, lang in COMBOS:
@@ -114,7 +101,6 @@ class CorpusTest(unittest.TestCase):
                 self.assertEqual(by_path["ga:l_ii-gb:l_i"].parent_id, by_path["ga:l_ii"].id)
                 self.assertEqual(by_num["6"].division_path, "ga:l_ii-gb:l_i")
                 self.assertEqual(by_num["8"].division_path, "ga:l_ii__2")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,19 +1,20 @@
 ## Résumé / Summary
 
-<!-- Décrire brièvement l'objet de la PR / Briefly describe the purpose of this PR -->
 
 ## Vérifications locales / Local Verification
 
-- [ ] `type-check` / `tsc --noEmit` / `verifier.py`
-- [ ] `lint` (`biome check .`)
-- [ ] Suite de tests / `executer_evals.py` / `verifier_tout.py`
+- [ ] `npx.cmd wrangler types` & `npx.cmd tsc --noEmit`
+- [ ] `npx.cmd biome check .` & `npm.cmd run audit`
+- [ ] `npm.cmd test` & `PYTHONUTF8=1 .\.venv\Scripts\python.exe -B -m unittest discover -s pipeline/tests -q`
 
-## Évaluation d'impact obligatoire (4 axes — `CLAUDE.md` / `GEMINI.md`)
+## Évaluation d'impact obligatoire (6 surfaces — `CLAUDE.md` / `GEMINI.md`)
 
-1. **Code / schémas / tests du dépôt :**
-2. **`README.md`, `SECURITY.md`, `LICENSE` et manifestes :**
-3. **Page publique HTML (`GET /`) et `/mcp/server-card` (ce dépôt ou serveurs aval) :**
-4. **Impacts inter-dépôts (`droit-civil-quebecois`, `MCP-Socle`, `MCP-Legislation`, `MCP-Jurisprudence`, `MCP-Outils`) :**
+1. **Outils MCP (`src/tools.ts`, `src/schemas.ts`, `src/routeur.ts`) :**
+2. **Descriptions (`src/tools.ts`, `src/serveur.ts`, `data/catalogue.json`) :**
+3. **Schéma (`data/schema*.sql`, `migrations/`, `inputSchema`, `structuredContent`) :**
+4. **`README.md`, `SECURITY.md`, `LICENSE` et manifestes :**
+5. **Page publique HTML (`GET /`) et `/mcp/server-card` :**
+6. **Impacts inter-dépôts (`droit-civil-quebecois`, `MCP-Socle`, `MCP-Acces`, `MCP-Legislation`, `MCP-Jurisprudence`, `MCP-Outils`) :**
 
 ## Confidentialité et sécurité
 

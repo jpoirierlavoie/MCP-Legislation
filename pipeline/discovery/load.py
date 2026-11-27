@@ -1,16 +1,3 @@
-"""Chargeur des données de découverte (plan §3), validation stricte §3.4 (échec bruyant).
-
-Étapes :
-  1. Enregistre les métadonnées des lois additionnelles (id, noms, citation, fonction, forum,
-     name_norm) pour que les références résolvent. Leur CONTENU (articles) vient en phase C ;
-     name_en est un repli temporaire (= name_fr) écrasé au chargement EN de la phase C.
-  2. Valide taxonomy.json / relations.json : loi référencée présente, sujet déclaré,
-     division_path résolvant, aucun doublon, from_law_id de relation présent. Toute violation
-     est listée et interrompt le chargement.
-  3. Charge subjects / subject_map / law_relations (source='cure').
-
-    python -m pipeline.discovery.load --target {local|cloud}
-"""
 from __future__ import annotations
 
 import argparse
@@ -20,14 +7,11 @@ from .. import config
 from ..d1_api import make_client, q
 from ..norm import normalize
 
-
 class ValidationError(Exception):
     pass
 
-
 def _read(name: str) -> dict:
-    return json.loads((config.REPO_ROOT / name).read_text(encoding="utf-8"))
-
+    return json.loads((config.REPO_ROOT / "data" / name).read_text(encoding="utf-8"))
 
 def _insert_rows(db, table: str, cols: list[str], rows: list[list], or_ignore: bool = False):
     if not rows:
@@ -36,11 +20,7 @@ def _insert_rows(db, table: str, cols: list[str], rows: list[list], or_ignore: b
     values = ", ".join("(" + ", ".join(q(v) for v in r) + ")" for r in rows)
     db.run(f"{verb} {table} ({', '.join(cols)}) VALUES {values}")
 
-
 def seed_laws(db, only_laws: set[str] | None = None) -> int:
-    """Enregistre les lois de la configuration (métadonnées) et pose les attributs de
-    découverte sur TOUTES (ou sur `only_laws` si précisé) — sans quoi ccq/cpc restaient
-    sans `fonction` et échappaient au filtre correspondant."""
     laws = config.load_all_laws()
     if only_laws is not None:
         laws = [l for l in laws if l["id"] in only_laws]
@@ -50,9 +30,6 @@ def seed_laws(db, only_laws: set[str] | None = None) -> int:
     for l in laws:
         forum = " ; ".join(l.get("forum") or []) or None
         consol = l.get("consolidation") or {}
-        # Les métadonnées de loi issues de la CONFIG sont synchronisées ici : c'est bien
-        # moins coûteux que de réingérer tous les couples (loi, langue) pour deux dates.
-        # (name_en n'y figure PAS : il vient de l'OPF anglais, pas de la config — §5.)
         sets = [f"fonction = {q(l.get('fonction'))}", f"forum = {q(forum)}",
                 f"name_fr = {q(l['name_fr'])}", f"name_norm = {q(normalize(l['name_fr']))}",
                 f"source = {q(l.get('source', 'epub'))}",
@@ -60,30 +37,6 @@ def seed_laws(db, only_laws: set[str] | None = None) -> int:
                 f"jurisdiction = {q(l.get('jurisdiction', 'qc'))}",
                 f"domain = {q(l.get('domain', 'core'))}"]
 
-        # ⚠️ LES DATES DE CONSOLIDATION NE SONT ÉCRASÉES QUE SI LA CONFIG LES DÉCLARE.
-        #
-        # Défaut mesuré le 2026-09-14, silencieux et RÉCURRENT. Ce `UPDATE` posait
-        # inconditionnellement `consol_date_fr = consol.get('fr')`. Or les 18 entrées
-        # FÉDÉRALES de `laws.config.json` ne portent aucune clé `consolidation` : leur date
-        # est LUE SUR LA PAGE OFFICIELLE de Justice Canada par `pipeline/ingest.py`
-        # (`fetch_consolidation_federale`, le bloc `<p id="assentedDate">`). L'UPDATE la
-        # remettait donc à NULL — À CHAQUE CHARGEMENT de la couche de découverte.
-        #
-        # (Cette date venait du XML — `lims:current-date` — jusqu'au 2026-09-14. Elle en a
-        # été retirée parce qu'elle sous-déclarait la fraîcheur de près d'un an sur certains
-        # textes et qu'elle n'était pas celle que la veille compare. Le défaut d'écrasement
-        # décrit ici, lui, est INCHANGÉ : la config ne porte toujours aucune date fédérale,
-        # donc l'UPDATE inconditionnel détruirait toujours ce que l'ingestion a écrit.)
-        #
-        # Conséquence servie : `list_laws` et la page publique annonçaient 18 textes
-        # SANS date « à jour au ». Sur un outil juridique, servir du droit sans dire de
-        # quand il date est le genre de faux silencieux que ce dépôt refuse. Et le défaut
-        # se rejouait à chaque passe éditoriale sur `taxonomy.json`, donc une réingestion
-        # « corrective » était effacée au chargement suivant.
-        #
-        # Le raisonnement du commentaire ci-dessus reste juste POUR LE QUÉBEC, où la config
-        # porte les dates. Il est exactement faux pour le fédéral et les PDF, où la date
-        # provient de l'ingestion et non de la config.
         if (l.get("source") or "epub") not in ("lims", "pdf"):
             if consol.get("fr"):
                 d_fr = q(consol["fr"])
@@ -101,7 +54,6 @@ def seed_laws(db, only_laws: set[str] | None = None) -> int:
         db.run(f"UPDATE laws SET {', '.join(sets)} WHERE id = {q(l['id'])}")
     return len(laws)
 
-
 def validate(
     db,
     taxonomy: dict,
@@ -112,10 +64,6 @@ def validate(
     v: list[str] = []
     law_ids = {r["id"] for r in db.run("SELECT id FROM laws")}
     subject_ids = {s["id"] for s in taxonomy["subjects"]}
-    # lang='fr' EXPLICITEMENT : les chemins de `subject_map` sont français par construction
-    # (les identifiants Irosoft sont propres à la langue — invariant 4), et c'est la moitié
-    # française que `src/lib.ts` interroge directement. Sans ce filtre, un chemin qui
-    # n'existe QU'EN ANGLAIS passait la validation, puis ne résolvait jamais côté serveur.
     div_paths = {
         (r["law_id"], r["path"])
         for r in db.run("SELECT DISTINCT law_id, path FROM divisions WHERE lang = 'fr'")
@@ -165,7 +113,6 @@ def validate(
             v.append(f"relation 'from' absente de `laws` : '{rel['from']}' -> '{rel['to']}'")
     return v
 
-
 def load(db, taxonomy: dict, relations: dict) -> dict:
     law_ids = {r["id"] for r in db.run("SELECT id FROM laws")}
 
@@ -191,7 +138,6 @@ def load(db, taxonomy: dict, relations: dict) -> dict:
         "subject_map": db.run("SELECT COUNT(*) AS n FROM subject_map")[0]["n"],
         "law_relations": db.run("SELECT COUNT(*) AS n FROM law_relations")[0]["n"],
     }
-
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Chargeur des données de découverte.")
@@ -230,7 +176,6 @@ def main(argv: list[str] | None = None) -> int:
           f"{counts['subjects']} sujets, {counts['subject_map']} mappages, "
           f"{counts['law_relations']} relations.")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

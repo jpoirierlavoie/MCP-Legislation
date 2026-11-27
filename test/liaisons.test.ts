@@ -1,8 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-// Éprouve le HARNAIS, non le domaine : que les liaisons du wrangler.test.jsonc montent
-// bien sous miniflare, hors ligne, sans jeton Cloudflare.
 describe("harnais workerd", () => {
   it("expose les deux bases D1 locales (`DB` et `DB_IDENTITE`), et elles répondent", async () => {
     const { DB, DB_IDENTITE } = env as unknown as {

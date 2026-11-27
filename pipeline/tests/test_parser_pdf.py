@@ -1,10 +1,3 @@
-"""Tests du parseur PDF déterministe (`pipeline/parser_pdf.py`) et de l'intégration M3.
-
-Deux classes :
-- `TestParserPdfPurePython` : s'exécute même sans `pymupdf` (CI GitHub Actions).
-- `TestParserPdfWithPyMuPdf` : synthétiques (orientation AMF, directive + 3 abrogations,
-  historique division/article, liens/annexes, /Rotate 90, Portes 0/1/2) + PDF réels locaux.
-"""
 from __future__ import annotations
 
 import json
@@ -23,7 +16,6 @@ except ImportError:
 from pipeline import config, ingest, load, parser_pdf, validate
 from pipeline.discovery.recon_pdf import LineRecord, SpanRecord
 from pipeline.model import DISPOSITION_SORT_BASE, Article, Division, Law, sort_key
-
 
 def _span(
     text: str,
@@ -50,7 +42,6 @@ def _span(
         text=text,
         norm_text=text.strip(),
     )
-
 
 def _base_profile(law_id: str = "test-pdf", *, fonction: str = "directive", number_mode: str = "numeric") -> dict:
     return {
@@ -138,7 +129,6 @@ def _base_profile(law_id: str = "test-pdf", *, fonction: str = "directive", numb
         },
     }
 
-
 class TestParserPdfPurePython(unittest.TestCase):
     def test_sort_key_alphanumerique_et_dispositions(self):
         ordered = ["préliminaire", "1", "1.1", "1.1.1", "1.1.1A", "1.2", "2", "2.1", "2A", "2A.1", "2B", "3", "4B.2", "10.1"]
@@ -174,7 +164,6 @@ class TestParserPdfPurePython(unittest.TestCase):
         self.assertTrue(rep.ok, "\n".join(rep.lines))
         self.assertIn("lacunes (orientation : informatif)", "\n".join(rep.lines))
 
-        # Porte 1 échoue si unclassified > 0
         rep_p1 = validate.validate(
             "amf-x", "fr", divs, arts,
             fonction="orientation",
@@ -182,7 +171,6 @@ class TestParserPdfPurePython(unittest.TestCase):
         )
         self.assertFalse(rep_p1.ok)
 
-        # Porte 2 échoue si toc_titles diverge
         rep_p2 = validate.validate(
             "amf-x", "fr", divs, arts,
             fonction="orientation",
@@ -190,14 +178,13 @@ class TestParserPdfPurePython(unittest.TestCase):
         )
         self.assertFalse(rep_p2.ok)
 
-        # Doublon (law, lang, number) échoue
         arts_dup = [*arts, Article(law_id="amf-x", lang="fr", number="2A.1", text="Dup.", division_path="ph1:1")]
         rep_dup = validate.validate("amf-x", "fr", divs, arts_dup, fonction="orientation")
         self.assertFalse(rep_dup.ok)
 
     def test_load_to_sql_pdf_source_et_links(self):
         law = Law(id="qccs-dist-mtl", name_fr="Directives", name_en="Directives",
-                  rlrq_cite="Directives C.S.", source="pdf", unit="paragraphe")
+                  official_cite="Directives C.S.", source="pdf", unit="paragraphe")
         divs = [Division(law_id="qccs-dist-mtl", lang="fr", kind="partie", path="ph1:1", heading="DIRECTIVES")]
         arts = [
             Article(
@@ -241,7 +228,6 @@ class TestParserPdfPurePython(unittest.TestCase):
             [{"label": "Longer label", "url": "https://x.ca"}],
         )
 
-        # Ordre visuel sur gigue italique/romain (0.5 pt), seuil de chevauchement (1.3 pt) et fusion multi-lignes
         sp_jitter = [
             _span("Audet ", page=1, x0=90.0, y0=100.5, x1=120.0, y1=114.0, base_font="Arial-ItalicMT", flags=2),
             _span("c.", page=1, x0=120.5, y0=100.0, x1=130.0, y1=114.0, base_font="ArialMT", flags=0),
@@ -265,7 +251,6 @@ class TestParserPdfPurePython(unittest.TestCase):
             ],
         )
 
-        # text_replacements : R4 (directives uniquement) et fail-closed si 0 effet
         divs_tr = [Division(law_id="d", lang="fr", kind="annexe", path="ps:1", heading="MATIERE")]
         arts_tr = [
             Article(
@@ -300,7 +285,6 @@ class TestParserPdfPurePython(unittest.TestCase):
             [{"label": "Stinchcombe", "url": "https://example.org/Stinchombe"}],
         )
 
-        # Pied de page relatif (y_ratio_min) sur page paysage 612pt et portrait 792pt
         ftr_cfg = {"y_ratio_min": 0.89, "regex": r"^au Règlement 51-102\s+Le\s+.*PAGE\s+\d+$"}
         ln_land = LineRecord(44, 36.0, 564.0, 400.0, 574.0, "au Règlement 51-102 Le 22 septembre 2026 PAGE 44",
                              "au Règlement 51-102 Le 22 septembre 2026 PAGE 44",
@@ -308,7 +292,6 @@ class TestParserPdfPurePython(unittest.TestCase):
         self.assertTrue(parser_pdf._match_band(ln_land, 44, ftr_cfg, is_header=False, page_height=612.0))
         self.assertFalse(parser_pdf._match_band(ln_land, 44, ftr_cfg, is_header=False, page_height=792.0))
 
-        # Parenthèses TDM (qccs-div-qc) et require_dot_in_number
         self.assertEqual(
             parser_pdf._toc_cmp_norm("9. Les demandes en rejet (art. 51 et suiv. C.p.c.) et en irrecevabilité", strip_parentheticals=True),
             parser_pdf._toc_cmp_norm("9. Les demandes en rejet et en irrecevabilité", strip_parentheticals=True),
@@ -340,7 +323,6 @@ class TestParserPdfPurePython(unittest.TestCase):
             mod = importlib.reload(ingest)
             self.assertTrue(hasattr(mod, "_acquiert_pdf"))
 
-
 @unittest.skipIf(pymupdf is None, "pymupdf non installé (skip CI)")
 class TestParserPdfWithPyMuPdf(unittest.TestCase):
     def _build_pdf(self, pages_fn, *, toc=None, rotate_pages: dict[int, int] | None = None) -> Path:
@@ -357,7 +339,6 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         return Path(tmp.name)
 
     def test_synthetic_amf_orientation_et_porte_0(self):
-        # 1. PDF synthétique AMF orientation avec signets, sections alphanumériques et lacunes
         def make_amf(doc):
             p = doc.new_page(width=612, height=792)
             p.insert_text((200, 90), "À jour au 1er janvier 2026", fontname="hebo", fontsize=12)
@@ -373,7 +354,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         pdf_p = self._build_pdf(make_amf, toc=[[1, "CHAPITRE 2A", 1]])
         try:
             prof = _base_profile("amf-synth", fonction="orientation", number_mode="alphanumeric")
-            law = Law(id="amf-synth", name_fr="IG", name_en="IG", rlrq_cite="IG 45-106", source="pdf", unit="article")
+            law = Law(id="amf-synth", name_fr="IG", name_en="IG", official_cite="IG 45-106", source="pdf", unit="article")
             bilan = parser_pdf.PdfBilan()
             divs, arts = parser_pdf.parse_pdf(pdf_p, law, "fr", profile=prof, verify_sha256=False, bilan=bilan)
             self.assertEqual(law.consol_date_fr, "2026-01-01")
@@ -389,13 +370,11 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             )
             self.assertTrue(rep.ok, "\n".join(rep.lines))
 
-            # fr-only saute en proprement dans ingest.run
             with unittest.mock.patch("pipeline.config.get_law_any", return_value={"id": "amf-synth", "source": "pdf", "langs": ["fr"], "name_fr": "IG", "official_cite": "IG"}):
                 self.assertEqual(ingest.run("amf-synth", "en", False, False, False, [], True), 0)
         finally:
             pdf_p.unlink(missing_ok=True)
 
-        # 2. Porte 0 : PDF vide/numérisé et corrompu
         def make_blank(doc):
             doc.new_page(width=612, height=792)
 
@@ -404,7 +383,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             with self.assertRaises(parser_pdf.ScannedPdfError):
                 parser_pdf.parse_pdf(
                     blank_p,
-                    Law(id="x", name_fr="x", name_en="x", rlrq_cite="x"),
+                    Law(id="x", name_fr="x", name_en="x", official_cite="x"),
                     "fr",
                     profile=_base_profile("x"),
                     verify_sha256=False,
@@ -418,7 +397,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             with self.assertRaises(parser_pdf.CorruptPdfError):
                 parser_pdf.parse_pdf(
                     corrupt_p,
-                    Law(id="x", name_fr="x", name_en="x", rlrq_cite="x"),
+                    Law(id="x", name_fr="x", name_en="x", official_cite="x"),
                     "fr",
                     profile=_base_profile("x"),
                     verify_sha256=False,
@@ -449,7 +428,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             prof = _base_profile("dir-synth")
             prof["files"]["fr"]["page_count"] = 2
             prof["files"]["fr"]["annexe_start_page"] = 2
-            law = Law(id="dir-synth", name_fr="Dir", name_en="Dir", rlrq_cite="Dir", source="pdf", unit="paragraphe")
+            law = Law(id="dir-synth", name_fr="Dir", name_en="Dir", official_cite="Dir", source="pdf", unit="paragraphe")
             bilan = parser_pdf.PdfBilan()
             divs, arts = parser_pdf.parse_pdf(pdf_p, law, "fr", profile=prof, verify_sha256=False, bilan=bilan)
             self.assertEqual(divs[0].history, "Modification : 1er janvier 2026")
@@ -471,7 +450,6 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
                 self.assertNotIn(b"\r\n", raw)
                 self.assertIn("https://example.org/form.docx", raw.decode("utf-8"))
 
-            # Porte 1 : span hors bande x0 non classé -> SpanBilanError
             prof_bad_p1 = json.loads(json.dumps(prof))
             prof_bad_p1["files"]["fr"]["provisions"]["x0_min"] = 95.0
             with self.assertRaises(parser_pdf.SpanBilanError):
@@ -479,7 +457,6 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         finally:
             pdf_p.unlink(missing_ok=True)
 
-        # Porte 2 : divergence TOC -> TocParityError
         pdf_bad_toc = self._build_pdf(make_dir, toc=[[1, "SECTION FANTOME", 1], [1, "LISTE DES ANNEXES", 2]])
         try:
             prof2 = _base_profile("dir-synth")
@@ -488,7 +465,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             with self.assertRaises(parser_pdf.TocParityError):
                 parser_pdf.parse_pdf(
                     pdf_bad_toc,
-                    Law(id="dir-synth", name_fr="Dir", name_en="Dir", rlrq_cite="Dir"),
+                    Law(id="dir-synth", name_fr="Dir", name_en="Dir", official_cite="Dir"),
                     "fr",
                     profile=prof2,
                     verify_sha256=False,
@@ -496,7 +473,6 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         finally:
             pdf_bad_toc.unlink(missing_ok=True)
 
-        # Page pivotée /Rotate 90 avec lien
         def make_rot(doc):
             p = doc.new_page(width=612, height=792)
             p.insert_text((200, 80), "À jour au 1er janvier 2026", fontname="hebo", fontsize=12)
@@ -509,7 +485,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             prof_r = _base_profile("rot-synth")
             divs_r, arts_r = parser_pdf.parse_pdf(
                 rot_p,
-                Law(id="rot-synth", name_fr="Rot", name_en="Rot", rlrq_cite="Rot"),
+                Law(id="rot-synth", name_fr="Rot", name_en="Rot", official_cite="Rot"),
                 "fr",
                 profile=prof_r,
                 verify_sha256=False,
@@ -519,7 +495,6 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             rot_p.unlink(missing_ok=True)
 
     def test_rotated_tables_derotation_visual_order_and_full_sections_repeal(self):
-        # 1. _apply_derotation : conversion tuple/list -> Rect et TypeError non avalé
         with self.assertRaises(TypeError):
             parser_pdf._apply_derotation("not-a-rect", pymupdf.Identity)
 
@@ -555,7 +530,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
                 bilan_rt = parser_pdf.PdfBilan()
                 _divs_rt, arts_rt = parser_pdf.parse_pdf(
                     rot_tbl_p,
-                    Law(id="rot-tbl", name_fr="Rot", name_en="Rot", rlrq_cite="Rot"),
+                    Law(id="rot-tbl", name_fr="Rot", name_en="Rot", official_cite="Rot"),
                     "fr",
                     profile=prof_rt,
                     verify_sha256=False,
@@ -569,7 +544,6 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             finally:
                 rot_tbl_p.unlink(missing_ok=True)
 
-        # 2. full_sections (Abrogée) : abrogée quand seul l'historique suit, active si texte suit
         def make_ann_rep(doc):
             p = doc.new_page(width=612, height=792)
             p.insert_text((200, 80), "À jour au 1er janvier 2026", fontname="hebo", fontsize=12)
@@ -593,7 +567,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             prof_a["files"]["fr"]["toc_parser"] = {"source": "outline"}
             divs_a, arts_a = parser_pdf.parse_pdf(
                 ann_p,
-                Law(id="ann-rep", name_fr="Ann", name_en="Ann", rlrq_cite="Ann"),
+                Law(id="ann-rep", name_fr="Ann", name_en="Ann", official_cite="Ann"),
                 "fr",
                 profile=prof_a,
                 verify_sha256=False,
@@ -616,7 +590,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             id="qccs-dist-mtl",
             name_fr="Directives de la Cour supérieure — District de Montréal",
             name_en="Directives de la Cour supérieure — District de Montréal",
-            rlrq_cite="Directives C.S. (District de Montréal)",
+            official_cite="Directives C.S. (District de Montréal)",
             source="pdf",
             unit="paragraphe",
         )
@@ -672,7 +646,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             id="qccs-div-mtl",
             name_fr="Directives de la Cour supérieure — Division de Montréal",
             name_en="Directives de la Cour supérieure — Division de Montréal",
-            rlrq_cite="Directives C.S. (Division de Montréal)",
+            official_cite="Directives C.S. (Division de Montréal)",
             source="pdf",
             unit="paragraphe",
         )
@@ -697,7 +671,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         self.assertEqual((rep.stats["int_min"], rep.stats["int_max"]), (1, 190))
         self.assertEqual(rep.stats["decimals"], 27)
         self.assertEqual(rep.stats["repealed_articles"], 6)
-        self.assertEqual(rep.stats["dispositions"], 12)  # 4 listes jurisprudence + 8 annexes
+        self.assertEqual(rep.stats["dispositions"], 12)
 
         ch_comm = next(d for d in divs if d.heading == "CHAMBRE COMMERCIALE")
         self.assertIn("ajout de cette section", ch_comm.history or "")
@@ -750,7 +724,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         min_divs: int = 1,
     ) -> tuple[list[Division], list[Article], parser_pdf.PdfBilan]:
         law = Law(
-            id=law_id, name_fr=law_id, name_en=law_id, rlrq_cite=law_id,
+            id=law_id, name_fr=law_id, name_en=law_id, official_cite=law_id,
             source="pdf", unit=unit, jurisdiction="qc",
         )
         bilan = parser_pdf.PdfBilan()
@@ -1016,7 +990,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
             bilan = parser_pdf.PdfBilan()
             _divs, arts = parser_pdf.parse_pdf(
                 pdf_p,
-                Law(id="bare-rep", name_fr="Bare", name_en="Bare", rlrq_cite="Bare"),
+                Law(id="bare-rep", name_fr="Bare", name_en="Bare", official_cite="Bare"),
                 "fr",
                 profile=prof,
                 verify_sha256=False,
@@ -1032,9 +1006,7 @@ class TestParserPdfWithPyMuPdf(unittest.TestCase):
         finally:
             pdf_p.unlink(missing_ok=True)
 
-
 class ConstitutionDualColumnPdfTest(unittest.TestCase):
-    """Couvre le mode bilingue double-colonne (scope_slice, notes marginales, notes de fin, Prose '41 An')."""
 
     def test_synthetique_double_colonne_bilingue_et_notes_fin(self):
         import hashlib
@@ -1050,7 +1022,6 @@ class ConstitutionDualColumnPdfTest(unittest.TestCase):
             p1.insert_text((48, 82), "SYNTHETIC ACT", fontname="hebo", fontsize=11.0)
             p1.insert_text((318, 82), "LOI SYNTHETIQUE", fontname="hebo", fontsize=11.0)
 
-            # Colonne EN (x <= 300)
             p1.insert_text((48, 130), "PART I", fontname="hebo", fontsize=10.2)
             p1.insert_text((48, 152), "CHARTER", fontname="helv", fontsize=17.0)
             p1.insert_text((48, 175), "Whereas Canada is founded.", fontname="helv", fontsize=9.7)
@@ -1064,7 +1035,6 @@ class ConstitutionDualColumnPdfTest(unittest.TestCase):
             p1.insert_text((62, 307), "(2)", fontname="helv", fontsize=6.0)
             p1.insert_text((48, 768), "Current to January 1, 2024", fontname="helv", fontsize=7.5)
 
-            # Colonne FR (x >= 306)
             p1.insert_text((318, 130), "PARTIE I", fontname="hebo", fontsize=10.2)
             p1.insert_text((318, 152), "CHARTE", fontname="helv", fontsize=17.0)
             p1.insert_text((318, 175), "Attendu que le Canada est fondé au Bas-", fontname="helv", fontsize=9.7)
@@ -1194,7 +1164,7 @@ class ConstitutionDualColumnPdfTest(unittest.TestCase):
                 "files": {"fr": _side("fr"), "en": _side("en")},
             }), encoding="utf-8")
 
-            law_fr = Law(id="const-synth", name_fr="Loi synth", name_en="Synth Act", rlrq_cite="x", official_cite_en="x", source="pdf", jurisdiction="ca")
+            law_fr = Law(id="const-synth", name_fr="Loi synth", name_en="Synth Act", official_cite="x", official_cite_en="x", source="pdf", jurisdiction="ca")
             bilan_fr = parser_pdf.PdfBilan()
             divs_fr, arts_fr = parser_pdf.parse_pdf(pdf_path, law_fr, "fr", profile_path=prof_path, bilan=bilan_fr)
             self.assertEqual(bilan_fr.unclassified, 0)
@@ -1210,7 +1180,7 @@ class ConstitutionDualColumnPdfTest(unittest.TestCase):
             self.assertEqual(by_fr["50"].text, "Note de fin de page (2)")
             self.assertIn("article 92A", by_fr["50"].footnotes or "")
 
-            law_en = Law(id="const-synth", name_fr="Loi synth", name_en="Synth Act", rlrq_cite="x", official_cite_en="x", source="pdf", jurisdiction="ca")
+            law_en = Law(id="const-synth", name_fr="Loi synth", name_en="Synth Act", official_cite="x", official_cite_en="x", source="pdf", jurisdiction="ca")
             bilan_en = parser_pdf.PdfBilan()
             divs_en, arts_en = parser_pdf.parse_pdf(pdf_path, law_en, "en", profile_path=prof_path, bilan=bilan_en)
             self.assertEqual(bilan_en.unclassified, 0)
@@ -1232,7 +1202,7 @@ class ConstitutionDualColumnPdfTest(unittest.TestCase):
         ]:
             paths_by_lang: dict[str, list[str]] = {}
             for lang in ("fr", "en"):
-                law = Law(id=lid, name_fr=lid, name_en=lid, rlrq_cite=lid, official_cite_en=lid, source="pdf", jurisdiction="ca")
+                law = Law(id=lid, name_fr=lid, name_en=lid, official_cite=lid, official_cite_en=lid, source="pdf", jurisdiction="ca")
                 bilan = parser_pdf.PdfBilan()
                 divs, arts = parser_pdf.parse_pdf(pdf_path, law, lang, bilan=bilan)
                 rep = validate.validate(
@@ -1255,7 +1225,6 @@ class ConstitutionDualColumnPdfTest(unittest.TestCase):
                     self.assertIn(req_num, by_n, f"{lid}/{lang} manquant {req_num}")
                 self.assertFalse(any(a.number.startswith("intro-") for a in arts), f"{lid}/{lang} faux intro-")
             self.assertEqual(paths_by_lang["fr"], paths_by_lang["en"], f"{lid} symétrie FR/EN")
-
 
 if __name__ == "__main__":
     unittest.main()

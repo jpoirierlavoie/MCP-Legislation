@@ -1,7 +1,3 @@
-"""Validation des invariants du corpus (garde-fou avant bascule ; tests de non-régression).
-
-Les valeurs témoins du C.c.Q. FR viennent de la phase 0 (docs/phase0-structure-epub.md, PLAN §11).
-"""
 from __future__ import annotations
 
 import collections
@@ -11,48 +7,24 @@ from dataclasses import dataclass, field
 from .model import Article, Division
 from .norm import normalize
 
-# Un article « réel » a un numéro numérique (1457, 2926.1) ou alphanumérique CSA/AMF
-# (2A, 2A.1, 4B.2, 1.1.1A). Les pseudo-articles de disposition (préliminaire, finales,
-# annexe-1, formulaire-vi, formules…) ne le sont pas.
 _NUMERIC = re.compile(r"\d+[A-Za-z]?(?:\.\d+[A-Za-z]?)*$")
-
 
 def is_disposition(number: str) -> bool:
     return _NUMERIC.fullmatch(number) is None
 
-
 def numeros_effectifs(a: Article) -> list[str]:
-    """Les numéros qu'un article OCCUPE réellement.
-
-    Un label de PLAGE (« 7 et 8 », « 29 à 35 », « 257 à 264 ») est un seul article qui
-    occupe plusieurs numéros. `Article.alias_numbers` les porte — c'est le parseur qui les
-    calcule, parce que la forme est propre à la langue (`à`/`to`, `et`/`and`).
-
-    ⚠️ SANS CETTE EXPANSION, LES CONTRÔLES DE LACUNES REFUSENT L'INGESTION. Mesuré le
-    2026-09-11 : 16 des 36 combinaisons fédérales échouaient sur « lacunes dans la plage
-    entière » — [7, 8] pour la L.F.I., [29..35] pour la Loi sur les Cours fédérales,
-    [9, 10, 11] pour les Règles des Cours fédérales. Ce ne sont PAS des lacunes : ces
-    numéros existent, portés par un article dont le label est une plage.
-
-    Et sans elle, `is_disposition` classe « 7 et 8 » comme pseudo-article, donc le décompte
-    d'articles réels sous-estime, et le contrôle de doublons ne l'inspecte même pas.
-    """
     return a.alias_numbers or [a.number]
 
-# Invariants attendus, par (law_id, lang). FR et EN d'une même loi partagent les mêmes
-# décomptes (même loi, traduite) — seul le texte diffère.
 _CCQ = {
-    "articles_real": 3524,          # articles se: (hors dispositions)
-    "int_min": 1, "int_max": 3168,  # entiers complets 1..3168
-    "decimals": 356,                # 352 à un niveau + 4 à deux niveaux (dont 1603.1, 2023, c. 23, a. 3)
+    "articles_real": 3524,
+    "int_min": 1, "int_max": 3168,
+    "decimals": 356,
     "divisions": 801,
     "div_by_kind": {"livre": 10, "titre": 45, "chapitre": 160, "section": 270,
                      "sous-section": 214, "niveau6": 86, "niveau7": 13, "niveau8": 3},
     "repealed_articles": 68,
-    # 4 divisions abrogées : 2 sections + 1 chapitre (phase 0, niveaux ga-gd) + 1 sous-section
-    # « § 8 » (ge:l_8, Livre 5) que le scan ga-gd de la phase 0 n'avait pas comptée.
     "repealed_divisions": 4,
-    "dispositions": 2,              # préliminaire + finales
+    "dispositions": 2,
 }
 _CPC = {
     "articles_real": 876,
@@ -62,13 +34,12 @@ _CPC = {
     "div_by_kind": {"livre": 8, "titre": 30, "chapitre": 129, "section": 123, "sous-section": 17},
     "repealed_articles": 1,
     "repealed_divisions": 0,
-    "dispositions": 2,             # préliminaire + annexe (les « finales » sont des articles réels du Livre VIII)
+    "dispositions": 2,
 }
 EXPECTED = {
     ("ccq", "fr"): _CCQ, ("ccq", "en"): _CCQ,
     ("cpc", "fr"): _CPC, ("cpc", "en"): _CPC,
 }
-
 
 @dataclass
 class Report:
@@ -85,7 +56,6 @@ class Report:
             self.ok &= ok
             self.lines.append(f"  {'✓' if ok else '✗'} {label}: {got}" + ("" if ok else f"  (attendu {expected})"))
 
-
 def _toc_norm(s: str | None, *, strip_parentheticals: bool = False) -> str:
     raw = s or ""
     if strip_parentheticals:
@@ -95,7 +65,6 @@ def _toc_norm(s: str | None, *, strip_parentheticals: bool = False) -> str:
     n = re.sub(r"\s+", " ", n)
     return n.rstrip(".").strip()
 
-
 def validate(law_id: str, lang: str, divisions: list[Division], articles: list[Article],
              jurisdiction: str = "qc", numeros_refuses: list[str] | None = None,
              allow_witness_drift: bool = False,
@@ -104,20 +73,11 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
              toc_titles: list[str] | None = None,
              toc_exempt_headings: list[str] | set[str] | None = None,
              toc_strip_parentheticals: bool = False) -> Report:
-    """Invariants du corpus. `jurisdiction` est PASSÉE, jamais devinée du préfixe d'id.
-
-    Renifler « ca- » au début d'un identifiant serait exactement la chirurgie de chaîne
-    qui a déjà produit le défaut `B-1` ⊂ `B-1.1` de `parseCitation`.
-    """
     r = Report()
-    # Un article de PLAGE est réel : il occupe plusieurs numéros, tous numériques. On juge
-    # donc sur les numéros EFFECTIFS, pas sur le label brut.
     real = [a for a in articles
             if not all(is_disposition(n) for n in numeros_effectifs(a))]
     disp = [a for a in articles
             if all(is_disposition(n) for n in numeros_effectifs(a))]
-    # Tous les numéros occupés, plages expansées. C'est CE jeu que les contrôles de lacunes
-    # et de doublons doivent voir.
     occupes = [n for a in real for n in numeros_effectifs(a)]
     ints = sorted({int(n) for n in occupes if "." not in n and n.isdigit()})
     decimals = [n for n in occupes if "." in n]
@@ -133,7 +93,6 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
         "repealed_articles": sum(a.repealed for a in real), "repealed_divisions": sum(d.repealed for d in div_no_disp),
     }
 
-    # lacunes / doublons dans la plage entière
     gaps, dups = [], []
     if ints:
         full = set(range(ints[0], ints[-1] + 1))
@@ -156,8 +115,6 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
                 r.lines.append(f"  ⚠ {label}: {got}  (témoin figé {expected})")
 
         if allow_witness_drift:
-            # Planchers anti-rétrécissement catastrophique : même en mode dérive de témoin,
-            # une chute anormale d'articles ou de divisions arrête l'ingestion.
             if r.stats["int_min"] != exp["int_min"]:
                 r.check("plancher entier min", r.stats["int_min"], exp["int_min"])
             if (r.stats["int_max"] or 0) < exp["int_max"] - 5:
@@ -182,25 +139,6 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
         r.check("divisions", len(div_no_disp))
         r.check("divisions par type", by_kind)
 
-    # invariants structurels (toutes lois)
-    #
-    # LES LACUNES NE SONT PAS UN INVARIANT DU CORPUS FÉDÉRAL, et c'est mesuré.
-    #
-    # Le RLRQ laisse un jalon « (Abrogé) » à la place d'une disposition abrogée : la plage
-    # entière reste donc dense, et une lacune y signale un défaut d'extraction. La
-    # codification fédérale, elle, RETIRE la disposition. Exemple mesuré sur la Loi sur la
-    # concurrence : les art. 37, 41, 42, 43 et 44 n'existent dans AUCUNE Section du fichier,
-    # et les art. 38, 39 et 40 n'y existent qu'en position REFUSÉE (non en vigueur).
-    #
-    # Garder le contrôle bloquant aurait un effet pervers exact : pour « combler » la
-    # lacune, il faudrait ingérer les art. 38 à 40, c'est-à-dire du droit NON EN VIGUEUR.
-    # Le contrôle pousserait donc à la faute qu'il est censé prévenir.
-    #
-    # Pour le fédéral, la lacune devient donc INFORMATIVE — mais EXPLIQUÉE : chaque numéro
-    # manquant est classé « refusé » (non en vigueur, donc légitimement absent) ou « retiré »
-    # (absent du fichier). La vraie garantie d'exhaustivité est ailleurs, dans le bilan de
-    # matière par provenance de `parser_lims`, qui refuse de rendre un résultat si une seule
-    # `Section` du fichier n'a été ni ingérée ni refusée.
     if jurisdiction == "ca":
         refuses = {n for n in (numeros_refuses or []) if n.isdigit()}
         manquants = [int(n) for n in map(str, gaps)]
@@ -250,23 +188,6 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
             "aucune",
         )
 
-    # ── UNICITÉ RÉELLE DES CLÉS ────────────────────────────────────────────────────────
-    # LE CONTRÔLE CI-DESSUS EST STRUCTURELLEMENT AVEUGLE À UNE FAMILLE ENTIÈRE, et ça a
-    # coûté cher. Il ne lit que `occupes`, bâti sur `real` — donc les pseudo-articles de
-    # disposition (annexes, formulaires) en sont EXCLUS PAR CONSTRUCTION — et, même chez
-    # `real`, il exige `isdigit()` sans point, donc les décimaux n'y entrent pas non plus.
-    #
-    # CE QUE ÇA A LAISSÉ PASSER (mesuré en production le 2026-09-16, corrigé le même jour) :
-    # les 24 annexes françaises du Code municipal portaient TOUTES le numéro
-    # `formulaire-ule`, parce que le motif du parseur avalait le radical de « FORMULE » à
-    # la place du numéro. `get_article(law='c-27.1', article='formulaire-ule')` rendait la
-    # FORMULE 23 — une sur 24, arbitrairement, SANS LE DIRE. Trois lois touchées, et la
-    # même cause cassait aussi le pont FR/EN de c-19.
-    #
-    # Les deux contrôles ci-dessous jugent donc les clés TELLES QU'ELLES SERVIRONT :
-    # `(law, lang, number)` est ce que résout `get_article`, et `(law, lang, path)` est ce
-    # que résolvent `get_division` et le fil d'Ariane. Un doublon ici n'est jamais bénin —
-    # c'est une réponse juste en apparence, tirée au sort entre plusieurs.
     tous_numeros = [n for a in articles for n in numeros_effectifs(a)]
     vus: set[str] = set()
     num_doubles: dict[str, int] = {}
@@ -292,11 +213,10 @@ def validate(law_id: str, lang: str, divisions: list[Division], articles: list[A
         ", ".join(f"{k} ×{v}" for k, v in sorted(path_doubles.items())) if path_doubles else "oui",
         "oui",
     )
-    # ───────────────────────────────────────────────────────────────────────────────────
     no_div = [a.number for a in real if not a.division_path]
     if not div_no_disp:
         r.check("articles sans division", "n/a (texte plat, 0 division)")
-    elif no_div:  # quelques articles avant la 1re division : signalé, non bloquant
+    elif no_div:
         r.lines.append(f"  · {len(no_div)} article(s) hors division (avant la 1re division) : {no_div[:8]}")
     else:
         r.check("articles sans division", "aucun", "aucun")

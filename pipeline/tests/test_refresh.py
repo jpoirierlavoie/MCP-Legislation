@@ -1,4 +1,3 @@
-"""Tests hors réseau du pipeline de rafraîchissement incrémental (pipeline/refresh.py)."""
 from __future__ import annotations
 
 import json
@@ -24,14 +23,13 @@ from pipeline.refresh import (
     verify_expected_plan,
 )
 
-
 def _sample_combo(law_id: str = "loi-x", lang: str = "fr", date: str = "2026-10-15",
                   art_text: str = "Texte un.", repealed: int = 0) -> ParsedCombo:
     law = Law(
         id=law_id,
         name_fr="Loi test",
         name_en="Test Act",
-        rlrq_cite="RLRQ, c. X-1",
+        official_cite="RLRQ, c. X-1",
         consol_date_fr=date if lang == "fr" else None,
         consol_date_en=date if lang == "en" else None,
     )
@@ -52,7 +50,6 @@ def _sample_combo(law_id: str = "loi-x", lang: str = "fr", date: str = "2026-10-
     rep = validate.validate(law_id, lang, divs, arts)
     return ParsedCombo(law_id=law_id, lang=lang, cfg_law={"id": law_id},
                        law=law, divisions=divs, articles=arts, report=rep)
-
 
 class _FakeD1:
     name = "fake"
@@ -77,7 +74,6 @@ class _FakeD1:
     def run_file(self, sql_path: Path):
         self.executed_files.append((sql_path.name, sql_path.read_text(encoding="utf-8")))
 
-
 class TestExtractionQuebec(TestCase):
     def test_extrait_consolidation_quebec(self):
         html_ok = (
@@ -88,7 +84,6 @@ class TestExtractionQuebec(TestCase):
         html_oct = '<div class="text-end"> À jour au 15 octobre 2026 </div>'
         self.assertEqual(extrait_consolidation_quebec(html_oct), "2026-10-15")
         self.assertIsNone(extrait_consolidation_quebec("<div>sans bannière</div>"))
-
 
 class TestValidateWitnessDrift(TestCase):
     def _ccq_like(self, *, n_int: int, extra_decimals: int, n_ss: int):
@@ -123,7 +118,6 @@ class TestValidateWitnessDrift(TestCase):
 
     def test_tolere_hausse_mineure_et_refuse_chute_ou_rupture_structurelle(self):
         exp = validate.EXPECTED[("ccq", "fr")]
-        # +1 article décimal et +1 sous-section par rapport au témoin figé
         divs, arts = self._ccq_like(
             n_int=exp["int_max"],
             extra_decimals=exp["decimals"] + 1,
@@ -136,7 +130,6 @@ class TestValidateWitnessDrift(TestCase):
         self.assertTrue(rep_drift.ok, "\n".join(rep_drift.lines))
         self.assertGreater(len(rep_drift.witness_deltas), 0)
 
-        # Chute catastrophique (-25 articles) : refusée même avec allow_witness_drift=True
         divs_sh, arts_sh = self._ccq_like(
             n_int=exp["int_max"] - 25,
             extra_decimals=exp["decimals"],
@@ -145,16 +138,13 @@ class TestValidateWitnessDrift(TestCase):
         rep_shrink = validate.validate("ccq", "fr", divs_sh, arts_sh, allow_witness_drift=True)
         self.assertFalse(rep_shrink.ok)
 
-        # Rupture structurelle (chemin de division dupliqué) : toujours fatale
         divs[1].path = divs[0].path
         rep_dup = validate.validate("ccq", "fr", divs, arts, allow_witness_drift=True)
         self.assertFalse(rep_dup.ok)
 
-        # Extraction vide (0 article réel) : refusée même hors ccq/cpc
         rep_empty = validate.validate("loi-x", "fr", divs[:1], [arts_sh[-1]], allow_witness_drift=False)
         self.assertFalse(rep_empty.ok)
         self.assertIn("extraction vide", "\n".join(rep_empty.lines))
-
 
 class TestLoadIncrementalSql(TestCase):
     def test_to_sql_sans_fts_et_metadata_only_invariant_3(self):
@@ -177,7 +167,6 @@ class TestLoadIncrementalSql(TestCase):
         )
 
     def test_to_sql_fts_incremental_et_index_fk_sqlite(self):
-        """Vérifie en SQLite réel la suppression/réindexation FTS5 incrémentale et les index FK 0006."""
         conn = sqlite3.connect(":memory:")
         try:
             conn.execute("PRAGMA foreign_keys = ON;")
@@ -234,7 +223,6 @@ class TestLoadIncrementalSql(TestCase):
             conn.executescript(load.to_sql(c_cpc.law, c_cpc.divisions, c_cpc.articles, "fr", rebuild_fts=True))
             conn.executescript(load.fts_integrity_check_sql())
 
-            # Bascule modifiée sur ccq/fr uniquement
             c_ccq_2 = _sample_combo("ccq", "fr", date="2026-10-15", art_text="Nouvelle rédaction.")
             c_ccq_2.articles[0].alias_numbers = ["1"]
             load.prepare(c_ccq_2.law, c_ccq_2.divisions, c_ccq_2.articles, id_base=10)
@@ -265,7 +253,6 @@ class TestLoadIncrementalSql(TestCase):
         finally:
             conn.close()
 
-
 class TestDiffEtApply(TestCase):
     def _stored_from(self, combo: ParsedCombo):
         law = combo.law
@@ -273,7 +260,7 @@ class TestDiffEtApply(TestCase):
             "id": law.id,
             "name_fr": law.name_fr,
             "name_en": law.name_en,
-            "official_cite": law.rlrq_cite,
+            "official_cite": law.official_cite,
             "consol_date_fr": law.consol_date_fr,
             "consol_date_en": law.consol_date_en,
             "name_norm": law.name_norm,
@@ -699,10 +686,9 @@ class TestDiffEtApply(TestCase):
         from pipeline.model import DISPOSITION_SORT_BASE, sort_key
         from pipeline import refresh as R
 
-        # Cas 1 : annexe à sort_key == DISPOSITION_SORT_BASE, retournée par get_articles(to="annexe")
         law_a = Law(
             id="qccs-dist-mtl", name_fr="Directives", name_en="Directives",
-            rlrq_cite="Directives C.S. (District de Montréal)",
+            official_cite="Directives C.S. (District de Montréal)",
             consol_date_fr="2026-02-23", source="pdf", unit="paragraphe",
         )
         divs_a = [
@@ -721,10 +707,9 @@ class TestDiffEtApply(TestCase):
             report=validate.validate("qccs-dist-mtl", "fr", divs_a, arts_a),
         )
 
-        # Cas 2 : annexe à sort_key == DISPOSITION_SORT_BASE + 1_000_000 (complétion via get_division)
         law_b = Law(
             id="qccs-div-mtl", name_fr="Div Mtl", name_en="Div Mtl",
-            rlrq_cite="Directives C.S. (Division de Montréal)",
+            official_cite="Directives C.S. (Division de Montréal)",
             consol_date_fr="2026-01-01", source="pdf", unit="paragraphe",
         )
         divs_b = [
@@ -765,7 +750,6 @@ class TestDiffEtApply(TestCase):
                         for d in ds
                     ]}}
                 if name == "get_articles":
-                    # Simule boundRef/articlesByRange sur sort_key <= sortKeyOf(to)
                     hi = sort_key(args["to"])
                     src = arts_a if lid == "qccs-dist-mtl" else arts_b
                     rows = [
@@ -826,7 +810,7 @@ class TestDiffEtApply(TestCase):
         self.assertGreater(len(huge_links.encode("utf-8")), 100_000)
         self.assertGreater(len(huge_hist.encode("utf-8")), 100_000)
 
-        law = Law(id="qccs-big", name_fr="Big", name_en="Big", rlrq_cite="Big", source="pdf")
+        law = Law(id="qccs-big", name_fr="Big", name_en="Big", official_cite="Big", source="pdf")
         divs = [Division(law_id="qccs-big", lang="fr", kind="partie", path="ph1:1", heading="H", history=huge_hist, sort_order=1)]
         arts = [Article(
             law_id="qccs-big", lang="fr", number="1", text="Texte court.",
@@ -845,12 +829,9 @@ class TestDiffEtApply(TestCase):
         from pipeline.model import DISPOSITION_SORT_BASE, sort_key
         from pipeline import refresh as R
 
-        # Loi mixte (comme qccs-div-mtl / v-1.1-r.21 / amf-ig-31-103) :
-        # ph1:1 et ph1:2 contiennent un intro-* > DISPOSITION_SORT_BASE, et ps:1 un annexe-* > DISPOSITION_SORT_BASE.
-        # La structure place ph1:1, ph1:2 AVANT ps:1 ; ordered_divs DOIT quand même visiter ps:1 en premier.
         law = Law(
             id="syn-mix", name_fr="Loi mixte", name_en="Mixed law",
-            rlrq_cite="Loi mixte", consol_date_fr="2026-01-01", source="pdf", unit="article",
+            official_cite="Loi mixte", consol_date_fr="2026-01-01", source="pdf", unit="article",
         )
         divs = [
             Division(law_id="syn-mix", lang="fr", kind="partie", path="ph1:1", heading="PARTIE 1", sort_order=1),
@@ -872,10 +853,9 @@ class TestDiffEtApply(TestCase):
             report=validate.validate("syn-mix", "fr", divs, arts),
         )
 
-        # Sous-cas B : loi où seul ps:1 porte un pseudo-article > DISPOSITION_SORT_BASE (ph1:1..ph1:3 n'en ont pas)
         law_only_ann = Law(
             id="syn-ann", name_fr="Loi annexe", name_en="Ann law",
-            rlrq_cite="Loi annexe", consol_date_fr="2026-01-01", source="pdf", unit="article",
+            official_cite="Loi annexe", consol_date_fr="2026-01-01", source="pdf", unit="article",
         )
         divs_only_ann = [
             Division(law_id="syn-ann", lang="fr", kind="partie", path="ph1:1", heading="P1", sort_order=1),
@@ -909,7 +889,7 @@ class TestDiffEtApply(TestCase):
                         {
                             "id": c.law_id,
                             "name_fr": c.law.name_fr,
-                            "official_cite": c.law.rlrq_cite,
+                            "official_cite": c.law.official_cite,
                             "consol_date_fr": c.law.consol_date_fr,
                             "article_count": len(c.articles),
                         }
@@ -943,14 +923,10 @@ class TestDiffEtApply(TestCase):
         with mock.patch("pipeline.refresh.McpReadClient", return_value=client):
             diffs = R.diff_all_mcp([combo, combo_only_ann], "https://legislation.test/mcp", deep_mcp=True)
 
-        # (a) annexe est interrogée EN PREMIER avant les divisions du corps
         self.assertEqual(client.div_calls["syn-mix"][0], "ps:1")
         self.assertEqual(client.div_calls["syn-ann"], ["ps:1"])
-        # (b) la loi mixte partie (intro-*) + annexe (annexe-*) reste "unchanged"
         self.assertEqual([d.status for d in diffs], ["unchanged", "unchanged"])
 
-        # (c) un déplacement d'un pseudo-article > DISPOSITION_SORT_BASE vers une autre division
-        #     reste détecté comme content_changed
         moved_arts = [
             Article(
                 law_id="syn-mix", lang="fr", number=a.number, text=a.text,
@@ -1003,7 +979,7 @@ class TestDiffEtApply(TestCase):
                         {
                             "id": c.law_id,
                             "name_fr": c.law.name_fr,
-                            "official_cite": c.law.rlrq_cite,
+                            "official_cite": c.law.official_cite,
                             "official_cite_en": c.law.official_cite_en,
                             "consol_date_fr": c.law.consol_date_fr,
                             "article_count": len(c.articles),
@@ -1055,7 +1031,6 @@ class TestDiffEtApply(TestCase):
             self.assertEqual(d.status, "unchanged", f"{d.law_id}: {d}")
             first_div = client.div_calls[d.law_id][0]
             self.assertTrue(first_div.startswith("ps:"), f"{d.law_id} premier appel get_division={first_div}")
-
 
 if __name__ == "__main__":
     main()

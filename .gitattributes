@@ -21,5 +21,7 @@
 *.toml text eol=lf
 LICENSE text eol=lf
 NOTICE  text eol=lf
+CODEOWNERS text eol=lf
+*.txt text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf

@@ -1,4 +1,3 @@
-"""Tests unitaires hors ligne pour `pipeline.d1_api` (`WranglerRemoteD1` et `make_client`)."""
 from __future__ import annotations
 
 import os
@@ -8,7 +7,6 @@ import unittest.mock
 from pathlib import Path
 
 from pipeline import d1_api
-
 
 class TestMakeClient(unittest.TestCase):
     def test_make_client_cloud_with_token_returns_CloudD1(self) -> None:
@@ -37,7 +35,6 @@ class TestMakeClient(unittest.TestCase):
         self.assertIsInstance(c, d1_api.LocalD1)
         self.assertEqual(c.name, "local")
         self.assertEqual(c.persist_to, "tmp/d1")
-
 
 class TestWranglerRemoteD1(unittest.TestCase):
     def test_wrangler_remote_run_uses_command_json_y_and_strips_api_token_from_env(self) -> None:
@@ -178,7 +175,6 @@ class TestWranglerRemoteD1(unittest.TestCase):
         self.assertFalse(d1_api._is_write_without_rows("INSERT INTO t VALUES (1) RETURNING id;"))
         self.assertFalse(d1_api._is_write_without_rows("SELECT * FROM laws;"))
         self.assertFalse(d1_api._is_write_without_rows("PRAGMA table_info(laws);"))
-
 
 if __name__ == "__main__":
     unittest.main()

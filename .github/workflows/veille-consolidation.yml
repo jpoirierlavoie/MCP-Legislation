@@ -1,26 +1,13 @@
 name: veille-consolidation
 
-# Détecteur EN LECTURE SEULE (remplace l'ancien job de rafraîchissement, retiré parce
-# qu'il écrivait en production sans faire le rafraîchissement complet — cf. l'historique
-# de .github/workflows/ et CLAUDE.md). Ici : rien n'est écrit en base.
-#
-# Compare, pour chaque loi, la date « À jour au » affichée par son PUBLIEUR OFFICIEL
-# — LégisQuébec pour les 79 textes québécois, Justice Canada pour les 18 fédéraux —
-# à la date consol_date_* chargée en D1 (lue via l'endpoint MCP PUBLIC, sans secret
-# Cloudflare). Si la source a consolidé au-delà de ce qui est chargé, ouvre ou
-# actualise une issue. La bascule reste la procédure manuelle de CLAUDE.md.
-#
-# Le seuil de joignabilité s'applique PAR PUBLIEUR (2026-09-14) : agrégé sur tout le
-# corpus, un blocage TOTAL du fédéral pesait 36/194 = 18,6 %, donc sous les 25 %,
-# donc ce job passait vert pendant que 18 textes sur 97 n'étaient vérifiés par rien.
 on:
   schedule:
-    - cron: "0 12 1 * *" # 1er de chaque mois, 12:00 UTC — lecture seule, sans risque
-  workflow_dispatch: {} # déclenchement manuel à la demande
+    - cron: "0 12 1 * *"
+  workflow_dispatch: {}
 
 permissions:
   contents: read
-  issues: write # seul droit d'écriture : ouvrir/actualiser l'issue de veille
+  issues: write
 
 concurrency:
   group: veille-consolidation
@@ -46,28 +33,9 @@ jobs:
         id: detect
         env:
           MCP_URL: https://legislation.poirierlavoie.ca/mcp
-          # Jeton d'accès de l'endpoint MCP (src/auth.ts). Ce n'est PAS un jeton Cloudflare :
-          # il n'ouvre que la lecture MCP, aucun droit sur le compte ni sur la base.
-          #
-          # LA CI A SON PROPRE JETON depuis le 2026-09-16, et c'est tout l'objet du
-          # découpage : `MCP_TOKEN` vivait ici, dans le fichier local ET dans l'URL du
-          # connecteur claude.ai — trois porteurs, donc plus révocable seul. Révoquer la
-          # veille (`wrangler secret delete MCP_TOKEN_VEILLE`) n'éteint désormais plus le
-          # connecteur, ni l'inverse.
-          #
-          # Le NOM DE LA VARIABLE reste `MCP_TOKEN` : c'est ce que lit `resolveMcpToken()`
-          # (eval/mcp-client.mjs), partagé avec l'usage local. Seule la SOURCE change.
           MCP_TOKEN: ${{ secrets.MCP_TOKEN_VEILLE }}
         run: node scripts/check-consolidation.mjs
 
-      # Deux signaux SÉPARÉS depuis le 2026-07-23 (scripts/check-consolidation.mjs) :
-      #   drift       — dérive corpus actionnable (retard, anomalie, date absente,
-      #                 page illisible, loi sans langue) ;
-      #   unreachable — blocage réseau massif (>= 25 % de pages injoignables).
-      # Le titre de l'issue dit LEQUEL a parlé (le titre unique mentait : « rafraîchissement
-      # dû » alors que seule la joignabilité posait problème). On ne clôt que si les DEUX
-      # sont éteints : une page injoignable est une loi NON VÉRIFIÉE, pas une loi à jour —
-      # clore sur le seul drift=false laisserait un blocage total masquer une vraie dérive.
       - name: Ouvrir ou actualiser l'issue de veille (dérive corpus)
         if: steps.detect.outputs.drift == 'true'
         env:

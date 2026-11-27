@@ -1,7 +1,3 @@
-"""Preuves de la phase A (plan §9 A) : comptes, résolution des division_path, non-destruction.
-
-    python -m pipeline.discovery.verify --target {local|cloud}
-"""
 from __future__ import annotations
 
 import argparse
@@ -9,19 +5,15 @@ import argparse
 from ..d1_api import make_client
 from ..validate import EXPECTED
 
-
 def verify(db, *, allow_witness_drift: bool = False) -> bool:
     ok = True
     print(f"=== Vérification [{db.name}] ===")
 
-    # 1. Comptes
     for tbl in ("subjects", "subject_map", "law_relations"):
         n = db.run(f"SELECT COUNT(*) AS n FROM {tbl}")[0]["n"]
         print(f"  {tbl:14}: {n}")
     print("  laws (métadonnées) :", db.run("SELECT COUNT(*) AS n FROM laws")[0]["n"])
 
-    # 2. Chaque division_path de subject_map résout dans divisions, EN FRANÇAIS (les chemins
-    #    y sont français par construction — invariant 4).
     total_paths = db.run("SELECT COUNT(*) AS n FROM subject_map WHERE division_path != ''")[0]["n"]
     unresolved = db.run(
         "SELECT sm.subject_id, sm.law_id, sm.division_path FROM subject_map sm "
@@ -36,19 +28,6 @@ def verify(db, *, allow_witness_drift: bool = False) -> bool:
     if not unresolved:
         print("   ✓ tous les division_path de subject_map résolvent en français")
 
-    # 2bis. Condition NÉCESSAIRE à l'adressage anglais — et seulement nécessaire.
-    #
-    # En `lang='en'`, `src/lib.ts` traduit chaque chemin français par le pont des numéros
-    # d'articles (`translatePaths`). Si la traduction échoue, `find_relevant` retombe EN
-    # SILENCE sur le chemin FRANÇAIS avec un intitulé nul : la piste est servie à un client
-    # anglais qui ne peut pas l'ouvrir avec `get_division(lang='en')`. Un cul-de-sac présenté
-    # comme une piste.
-    #
-    # ⚠️ Ce contrôle NE VÉRIFIE PAS la traduction. Refaire le pont ici en Python créerait le
-    # miroir dont la divergence est précisément le mode de défaut de ce dépôt (invariants 2
-    # et 4). Il vérifie la condition sans laquelle AUCUN pont ne peut exister : que la loi
-    # porte des divisions anglaises. Une loi qui la remplit peut encore échouer chemin par
-    # chemin — cela se voit à l'éval, par les miroirs anglais de `tests/evals.mjs`.
     sans_en = db.run(
         "SELECT DISTINCT sm.law_id, l.source, "
         "EXISTS (SELECT 1 FROM articles a WHERE a.law_id = sm.law_id AND a.lang = 'en') AS has_en "
@@ -67,7 +46,6 @@ def verify(db, *, allow_witness_drift: bool = False) -> bool:
     if not blocking_sans_en:
         print("   ✓ toute loi bilingue à chemin mappé porte aussi des divisions anglaises")
 
-    # 3. Non-destruction : comptes dérivés de EXPECTED (R10)
     print("\n  Non-destruction (articles) :")
     for law_id in ("ccq", "cpc"):
         for lang in ("fr", "en"):
@@ -85,14 +63,12 @@ def verify(db, *, allow_witness_drift: bool = False) -> bool:
             ok &= good
             print(f"   {mark} {law_id}/{lang} : {n}{note}")
 
-    # 4. Colonnes *_norm remplies pour ccq/cpc
     laws_norm = db.run("SELECT COUNT(*) AS n FROM laws WHERE id IN ('ccq','cpc') AND name_norm IS NOT NULL")[0]["n"]
     div_norm = db.run("SELECT COUNT(*) AS n FROM divisions WHERE law_id IN ('ccq','cpc') AND heading_norm IS NOT NULL")[0]["n"]
     print(f"\n  name_norm rempli (ccq,cpc) : {laws_norm}/2 | heading_norm rempli : {div_norm} divisions")
 
     print(f"\n=== Résultat : {'OK ✅' if ok else 'ÉCHEC ❌'} ===")
     return ok
-
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Preuves de la phase A.")
@@ -104,7 +80,6 @@ def main(argv: list[str] | None = None) -> int:
     ok = verify(make_client(args.target, persist_to=args.persist_to),
                 allow_witness_drift=args.allow_witness_drift)
     return 0 if ok else 1
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
