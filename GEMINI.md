@@ -17,7 +17,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 | 3 | **Schéma** | `data/schema.sql`, `data/schema-decouverte.sql`, `migrations/`, `inputSchema` des outils, forme de `structuredContent` | colonne ajoutée/retirée, champ de sortie ajouté/retiré/renommé |
 | 4 | **README.md** et manifestes | `README.md`, `SECURITY.md`, `LICENSE` (`Apache-2.0`), `NOTICE`, `package.json`, `plugin.json`, `mcp_config.json`, `gemini-extension.json`, `CLAUDE.md`, `GEMINI.md`, `/mcp/server-card` | tout ce qui change ce que le dépôt annonce faire, sa licence, sa confidentialité ou sa connectivité |
 | 5 | **Page publique** (HTML `GET /`) | `data/catalogue.json` + `src/site.ts` (`test/page-client.test.mjs`, `test/catalogue.test.mjs`) | rendu bilingue FR/EN de `GET /`, décomptes lus en D1, constantes de calibration, section `#acces`, licence ou clause de non-conseil |
-| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (`v3.5.0`, manifestes, `skills/`, `verifier.py`, `verifier_tout.py`), `MCP-Socle` (`v0.8.8`), `MCP-Acces`, `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, quotas, page publique `GET /`, confidentialité ou licence |
+| 6 | **Inter-dépôts (Cross-repository)** | `droit-civil-quebecois` (`v3.5.0`, manifestes, `skills/`, `verifier.py`, `verifier_tout.py`), `MCP-Socle` (`v0.8.9`), `MCP-Acces`, `MCP-Jurisprudence` (jumeau HTML/CSS), `MCP-Outils` | tout changement d'outil, schéma, porteur d'authentification, quotas, page publique `GET /`, confidentialité ou licence |
 
 **Procédure obligatoire :**
 1. Énoncer explicitement l'impact vérifié sur chacune des 6 surfaces (« non touchée » vérifié et motivé, jamais passé sous silence).
@@ -45,7 +45,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
          │ (sans clé API CanLII)│ │                     │ │                          │
          └──────────┬───────────┘ └──────────┬──────────┘ └────────────┬─────────────┘
                     └────────────────────────┴─────────────────────────┘
-                                ▼ (`@poirierlavoie/mcp-socle` v0.8.8, zéro runtime dep)
+                                ▼ (`@poirierlavoie/mcp-socle` v0.8.9, zéro runtime dep)
                  ┌──────────────────────────────────────────┐
                  │  MCP-Socle + MCP-Acces (`mcp-identite`)  │
                  │  Jetons individuels, OAuth 2.1 PKCE S256 │
@@ -54,7 +54,7 @@ Propriétaire : Jason Poirier Lavoie (avocat). Lecture seule pour les usagers ; 
 ```
 
 ### Trois morceaux internes
-1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle` `0.8.8`) + 10 outils courts (`list_laws`, `list_subjects`, `related_laws`, `find_relevant`, `get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`), D1 `DB` (`legislation`) + D1 `DB_IDENTITE` (`mcp-identite`), Workers AI (`bge-m3`) + Vectorize (`legislation-articles`). Zéro `dependencies` d'exécution.
+1. **Worker Cloudflare** (`src/`, TypeScript) — Routeur MCP sans état (`@poirierlavoie/mcp-socle` `0.8.9`) + 10 outils courts (`list_laws`, `list_subjects`, `related_laws`, `find_relevant`, `get_article`, `get_articles`, `get_structure`, `get_division`, `search_text`, `resolve_reference`), D1 `DB` (`legislation`) + D1 `DB_IDENTITE` (`mcp-identite`), Workers AI (`bge-m3`) + Vectorize (`legislation-articles`). Zéro `dependencies` d'exécution.
 2. **Pipeline Python** (`pipeline/`, venv `./.venv/Scripts/python.exe`, toujours `PYTHONUTF8=1`) — Ingère les EPUB LégisQuébec, les XML LIMS Justice Canada et les PDF déclaratifs (`pipeline/parser_pdf.py`, `pipeline/pdf_profiles/*.json`) par staging → validation → bascule (`pipeline/ingest.py`, `pipeline/refresh.py`).
 3. **Données versionnées** — `data/laws.config.json`, `pipeline/expected/served.json`, `data/catalogue.json`, `data/taxonomy.json`, `data/relations.json`, `data/tools-list.reference.json`, `data/schema.sql` + `data/schema-decouverte.sql` + `migrations/`. `data/tools-list.reference.json` (capturée le 2026-09-16) fige le contrat `tools/list` historique et alimente la génération de `src/schemas.ts` (`node scripts/engendrer-schemas.mjs`) et les tests (`test/schemas-engendres.test.ts`, `test/routeur.test.ts`). Aucun décompte vivant n'est recopié en prose (R10).
 
