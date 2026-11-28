@@ -18,13 +18,13 @@ Le code source et les scripts d'ingestion sont publiés gratuitement sous licenc
 
 ### Se connecter
 
-- **Via le greffon complet [`droit-civil-quebecois`](https://github.com/jpoirierlavoie/droit-civil-quebecois) (méthode recommandée) :** Claude Code, Claude Desktop, `claude.ai`, ChatGPT Web/Desktop, Google Antigravity, Gemini CLI et Gemini App se connectent automatiquement par navigateur en OAuth 2.1 sur `https://legislation.poirierlavoie.ca/mcp/oauth` via `acces.poirierlavoie.ca`, sans variable secrète à configurer.
+- **Via le greffon complet [`droit-civil-quebecois`](https://github.com/jpoirierlavoie/droit-civil-quebecois) (méthode recommandée) :** Claude Code, Claude Desktop, `claude.ai`, Google Antigravity, Gemini CLI et Gemini App se connectent automatiquement par navigateur en OAuth 2.1 sur `https://legislation.poirierlavoie.ca/mcp/oauth` via `acces.poirierlavoie.ca`, sans variable secrète à configurer.
 - **Via jeton individuel (ligne de commande, scripts, API Gemini Deep Research ou installation autonome de ce dépôt) :** utiliser `https://legislation.poirierlavoie.ca/mcp` avec l'en-tête `Authorization: Bearer <jeton>` créé dans `/moi` (sur `/mcp`, toute requête sans jeton valide reçoit `404` sans corps).
 - **Portées OAuth 2.1 / jeton acceptées :** `"tous"` (portée universelle par défaut sur `acces.poirierlavoie.ca`), `"legislation"` (portée spécifique au service) et `"les_deux"` (portée héritée rétrocompatible). Les métadonnées RFC 9728 de `/mcp/oauth` sont publiées sur `https://legislation.poirierlavoie.ca/.well-known/oauth-protected-resource/mcp/oauth`.
 
 | Client | Mode | Adresse à saisir |
 |---|---|---|
-| Greffon `droit-civil-quebecois` (`claude.ai`, Claude Code/Desktop, ChatGPT, Antigravity, Gemini) | OAuth 2.1 | `https://legislation.poirierlavoie.ca/mcp/oauth` |
+| Greffon `droit-civil-quebecois` (`claude.ai`, Claude Code/Desktop, Antigravity, Gemini) | OAuth 2.1 | `https://legislation.poirierlavoie.ca/mcp/oauth` |
 | Scripts, API, installation autonome avec jeton | En-tête `Authorization: Bearer <jeton>` | `https://legislation.poirierlavoie.ca/mcp` |
 | Formulaire web sans OAuth (`claude.ai` en mode jeton) | Paramètre de requête | `https://legislation.poirierlavoie.ca/mcp?key=<jeton>` |
 

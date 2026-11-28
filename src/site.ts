@@ -377,11 +377,11 @@ function entete(): string {
   </div>
   ${biP(
     [
-      "Connecteur gratuit donnant à votre assistant IA (Claude, ChatGPT, Gemini, Antigravity) l'accès direct au texte officiel mot pour mot des lois et règlements du Québec, des lois fédérales utiles en litige civil et commercial (ainsi que du domaine fédéral isolé « penal » : Code criminel, LRCDAS, LSJPA), des directives de pratique des tribunaux (Cour supérieure, Cour du Québec) et des textes de l'AMF — au lieu de le laisser réciter des articles de mémoire.",
+      "Connecteur gratuit donnant à votre assistant IA (Claude, Gemini, Antigravity) l'accès direct au texte officiel mot pour mot des lois et règlements du Québec, des lois fédérales utiles en litige civil et commercial (ainsi que du domaine fédéral isolé « penal » : Code criminel, LRCDAS, LSJPA), des directives de pratique des tribunaux (Cour supérieure, Cour du Québec) et des textes de l'AMF — au lieu de le laisser réciter des articles de mémoire.",
       "Les dispositions sont chargées sans aucune modification depuis les publications officielles de LégisQuébec, de Justice Canada et des PDF officiels des tribunaux et de l'AMF (certains publiés en français seulement). Vos recherches ne sont jamais journalisées.",
     ],
     [
-      "Free connector giving your AI assistant (Claude, ChatGPT, Gemini, Antigravity) direct, word-for-word access to official consolidated Québec statutes and regulations, key federal civil and commercial litigation statutes (plus the isolated federal 'penal' domain: Criminal Code, CDSA, YCJA), court practice directives (Superior Court, Court of Québec), and AMF texts — instead of letting it cite articles from memory.",
+      "Free connector giving your AI assistant (Claude, Gemini, Antigravity) direct, word-for-word access to official consolidated Québec statutes and regulations, key federal civil and commercial litigation statutes (plus the isolated federal 'penal' domain: Criminal Code, CDSA, YCJA), court practice directives (Superior Court, Court of Québec), and AMF texts — instead of letting it cite articles from memory.",
       "Provisions are loaded unaltered from official LégisQuébec publications, Justice Canada consolidations, and official court and AMF PDFs (some published in French only). Your searches are never logged.",
     ],
   )}
@@ -618,13 +618,13 @@ function acces(): string {
     [
       "Accès gratuit réservé aux membres actifs en règle du Barreau du Québec.",
       `1. Demandez votre accès une seule fois sur https://acces.poirierlavoie.ca/demande avec votre numéro du Barreau (aucune clé API CanLII n'est requise pour Législation ni Outils ; une clé CanLII personnelle, facultative sur /demande et ajoutable dans /moi, n'est exigée que pour Jurisprudence).`,
-      "2. Installez le greffon droit-civil-quebecois dans Claude, ChatGPT, Gemini ou Antigravity — ou ajoutez directement l'adresse https://legislation.poirierlavoie.ca/mcp/oauth dans les réglages de connecteurs — puis autorisez l'accès dans votre navigateur en un clic (aucun secret à copier).",
+      "2. Installez le greffon droit-civil-quebecois dans Claude, Gemini ou Antigravity — ou ajoutez directement l'adresse https://legislation.poirierlavoie.ca/mcp/oauth dans les réglages de connecteurs — puis autorisez l'accès dans votre navigateur en un clic (aucun secret à copier).",
       `Vos recherches ne sont jamais enregistrées. Vous pouvez gérer votre compte ou désactiver la recherche par sens assistée par IA (pour chercher uniquement par mots exacts) à tout moment sur https://acces.poirierlavoie.ca/moi (contact : ${CONTACT}).`,
     ],
     [
       "Free access reserved for active members in good standing of the Barreau du Québec.",
       "1. Apply once at https://acces.poirierlavoie.ca/demande with your Barreau number (no CanLII API key is required for Legislation or Tools; a personal CanLII key, optional on /demande and manageable in /moi, is required only for Case Law).",
-      "2. Install the droit-civil-quebecois plugin in Claude, ChatGPT, Gemini, or Antigravity — or add https://legislation.poirierlavoie.ca/mcp/oauth directly in connector settings — then click Connect and sign in through your browser (no secret keys to copy).",
+      "2. Install the droit-civil-quebecois plugin in Claude, Gemini, or Antigravity — or add https://legislation.poirierlavoie.ca/mcp/oauth directly in connector settings — then click Connect and sign in through your browser (no secret keys to copy).",
       `Your searches are never logged. Manage your account or toggle AI meaning-based search (to search exact words only) anytime at https://acces.poirierlavoie.ca/moi (contact: ${CONTACT}).`,
     ],
   )}
